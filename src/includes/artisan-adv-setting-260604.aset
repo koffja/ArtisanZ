@@ -490,10 +490,10 @@ extraLCDvisibility2=true, true, true, true, true, false, false, false, false, fa
 extradevicecolor1=#4E7180, #8EA9B4, #A68BAC, #C18A6B, #8C7768
 extradevicecolor2=#A76557, #B79A70, #879474, #79958A, #7FA0AE
 extradevices=25, 25, 25, 25, 25
-extramathexpression1="(Y2-B2 if B2 > 0 else 0)", Y2 + R2, Y1-Y2, ((R2 - R2[-5]) / (t - t[-5])) * 60, "(100 * (t-t{FCs}) / (t-t{CHARGE}) if FCs != -1 and t > t{CHARGE} else 0)"
-extramathexpression2="(R2-RB2 if RB2 != -1 else 0)", "(pFCs/60 if pFCs >= 0 else 0)", (((Y1-Y2) - (Y1[-5]-Y2[-5])) / (t-t[-5])) * 60, "(pDRY/60 if pDRY >= 0 else 0)", "((Y2-Y2{FCs})/(dFCs/60) if FCs != -1 and dFCs > 0 else 0)"
-extraname1=BT Δ Target, BT +60s, ET-BT Δ, RoR Accel, Post-FC %
-extraname2=RoR Δ Target, ETA FCs, ΔETBT Slope, ETA Dry, Post-FC Avg RoR
+extramathexpression1="(pDRY*R2/60 if pDRY >= 0 and R2 > 0 else 0)", "(Y2 + R2 if R2 != -1 else 0)", "(Y1-Y2)", "((R2 - R2[-3]) if t > 6 and R2 != -1 else 0)", "(100 * (t-t{FCs}) / (t-t{CHARGE}) if FCs != -1 and CHARGE != -1 and t > t{FCs} and t{FCs} > t{CHARGE} else 0)"
+extramathexpression2="(pFCs*R2/60 if pFCs >= 0 and R2 > 0 else 0)", "(pFCs/60 if pFCs >= 0 else 0)", "(R1-R2 if R1 != -1 and R2 != -1 else 0)", "(pDRY/60 if pDRY >= 0 else 0)", "((Y2-Y2{FCs})/(dFCs/60) if FCs != -1 and dFCs > 0 else 0)"
+extraname1=BT Δ Dry, BT +60s, ET-BT Δ, RoR Accel, Post-FC %
+extraname2=BT Δ FCs, ETA FCs, ΔETBT Slope, ETA Dry, Post-FC Avg RoR
 
 [ExtraEventButtons]
 buttonlistmaxlen=14
