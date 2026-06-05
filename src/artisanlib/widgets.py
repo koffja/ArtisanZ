@@ -441,7 +441,7 @@ def pushButtonColorStyle(
     return f'{class_name}{selector}{state}{{{color}{background}{font_size_str}}}'
 
 class EventPushButton(QPushButton):
-    def __init__(self, text:str, parent:'QWidget|None' = None, background_color:str = '#777777') -> None:
+    def __init__(self, text:str, parent:'QWidget|None' = None, background_color:str = '#90A1A8') -> None:
         super().__init__(text, parent)
         self.default_background_color = background_color
         self.default_style = pushButtonColorStyle('*',
@@ -461,12 +461,12 @@ class EventPushButton(QPushButton):
 
 
 class MajorEventPushButton(EventPushButton): # pylint: disable=too-few-public-methods
-    def __init__(self, text:str, parent:'QWidget|None' = None, background_color:str = '#147bb3') -> None:
+    def __init__(self, text:str, parent:'QWidget|None' = None, background_color:str = '#4E7180') -> None:
         super().__init__(text, parent, background_color)
 
 
 class AnimatedMajorEventPushButton(MajorEventPushButton):
-    def __init__(self, text:str, parent:'QWidget|None' = None, background_color:str = '#147bb3') -> None:
+    def __init__(self, text:str, parent:'QWidget|None' = None, background_color:str = '#4E7180') -> None:
         super().__init__(text, parent, background_color)
 
         # we make the dark animation color slightly darker than the background:
@@ -480,8 +480,8 @@ class AnimatedMajorEventPushButton(MajorEventPushButton):
             anim_light_color.value(),
             anim_light_color.alpha())
 
-        selected_anim_dark_color = QColor('#d4336a').lighter(80)
-        selected_anim_light_color = QColor('#d4336a').lighter(120)
+        selected_anim_dark_color = QColor('#A76557').lighter(80)
+        selected_anim_light_color = QColor('#A76557').lighter(120)
         # we reduce the staturation slightly:
         selected_anim_light_color = QColor.fromHsv(
             selected_anim_light_color.hslHue(),
@@ -546,11 +546,11 @@ class AnimatedMajorEventPushButton(MajorEventPushButton):
     zcolor = pyqtProperty(QColor, getBackColor, setBackColor)
 
 class MinorEventPushButton(EventPushButton): # pylint: disable=too-few-public-methods
-    def __init__(self, text:str, parent:'QWidget|None' = None, background_color:str = '#4c97c3') -> None:
+    def __init__(self, text:str, parent:'QWidget|None' = None, background_color:str = '#90A1A8') -> None:
         super().__init__(text, parent, background_color)
 
 class AuxEventPushButton(EventPushButton): # pylint: disable=too-few-public-methods
-    def __init__(self, text:str, parent:'QWidget|None' = None, background_color:str = '#bdbdbd') -> None:
+    def __init__(self, text:str, parent:'QWidget|None' = None, background_color:str = '#C18A6B') -> None:
         super().__init__(text, parent, background_color)
 
 

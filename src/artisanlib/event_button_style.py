@@ -16,27 +16,27 @@ artisan_event_button_style: str = """
 
             EventPushButton[Selected=true] {{
                 font-size: {selected_font_size}pt;
-                background-color:""" + createGradient('#d4336a') + """ ;
+                background-color:""" + createGradient('#A76557') + """ ;
             }}
             EventPushButton[Selected=true]:flat {{
                 color: darkgrey;
-                background-color: #f9e2ea;
+                background-color: #F2E0D8;
             }}
             EventPushButton[Selected=true]:flat:!pressed:hover {{
                 color: #F5F5F5;
-                background-color: #e687a8;
+                background-color: #D4B8A8;
             }}
             EventPushButton[Selected=true]:flat:pressed {{
                 color: #EEEEEE;
-                background-color: #d4336a;
+                background-color: #A76557;
             }}
             EventPushButton[Selected=true]:!flat:pressed {{
                 color: white;
-                background-color:""" + createGradient('#A61145') + """ ;
+                background-color:""" + createGradient('#865146') + """ ;
             }}
             EventPushButton[Selected=true]:!pressed:hover {{
                 color: white;
-                background-color:""" + createGradient('#cc0f50') + """ ;
+                background-color:""" + createGradient('#A76557') + """ ;
             }}
 
             MajorEventPushButton[Selected=false]:flat {{
@@ -53,10 +53,10 @@ artisan_event_button_style: str = """
             }}
             MajorEventPushButton[Selected=false]:!flat:pressed {{
                 color: #EEEEEE;
-                background-color:""" + createGradient('#116999') + """ ;
+                background-color:""" + createGradient('#3E5A66') + """ ;
             }}
             MajorEventPushButton[Selected=false]:!pressed:hover {{
-                background-color:""" + createGradient('#1985ba') + """ ;
+                background-color:""" + createGradient('#5E889A') + """ ;
             }}
 
             MinorEventPushButton[Selected=false]:flat {{
@@ -73,16 +73,16 @@ artisan_event_button_style: str = """
             }}
             MinorEventPushButton[Selected=false]:!flat:pressed {{
                 color: #EEEEEE;
-                background-color:""" + createGradient('#147bb3') + """ ;
+                background-color:""" + createGradient('#738185') + """ ;
             }}
             MinorEventPushButton[Selected=false]:!pressed:hover {{
-                background-color:""" + createGradient('#43a7cf') + """ ;
+                background-color:""" + createGradient('#A6B5BB') + """ ;
             }}
 
             AuxEventPushButton[Selected=false]:pressed {{
-                background-color:""" + createGradient('#757575') + """ ;
+                background-color:""" + createGradient('#9A6E55') + """ ;
             }}
             AuxEventPushButton[Selected=false]:!pressed:hover {{
-                background-color:""" + createGradient('#9e9e9e') + """ ;
+                background-color:""" + createGradient('#D1A082') + """ ;
             }}
 """

@@ -63,6 +63,7 @@ from artisanlib.util import (
     decodeLocalStrict,
     # Basic utility functions
     encodeLocal,
+    encodeLocalListStrict,
     encodeLocalStrict,
     fill_gaps,
     # Float processing
@@ -338,6 +339,15 @@ def test_encodeLocalStrict_decodeLocalStrict() -> None:
     assert encodeLocalStrict(None, 'default') == 'default'
     assert decodeLocalStrict(None) == ''
     assert decodeLocalStrict(None, 'default') == 'default'
+
+
+def test_encodeLocalListStrict_preserves_unicode_after_profile_decode() -> None:
+    labels = ['温度', 'BT Δ Target', None]
+
+    encoded = encodeLocalListStrict(labels, 'Extra 1')
+    decoded = [decodeLocalStrict(label) for label in encoded]
+
+    assert decoded == ['温度', 'BT Δ Target', 'Extra 1']
 
 
 @pytest.mark.parametrize(

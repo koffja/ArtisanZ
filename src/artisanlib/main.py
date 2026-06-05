@@ -207,7 +207,7 @@ except Exception: # pylint: disable=broad-except
 
 
 from artisanlib.atypes import (ProfileData, ComputedProfileInformation, RecentRoast, CurveSimilarity, ProductionData, ProductionDataStr, Wheel)
-from artisanlib.util import (appFrozen, uchr, decodeLocal, decodeLocalStrict, encodeLocal, encodeLocalStrict, s2a, fill_gaps,
+from artisanlib.util import (appFrozen, uchr, decodeLocal, decodeLocalStrict, encodeLocal, encodeLocalStrict, encodeLocalListStrict, s2a, fill_gaps,
         deltaLabelPrefix, deltaLabelUTF8, deltaLabelBigPrefix, stringfromseconds, stringtoseconds,
         fromFtoCstrict, fromCtoFstrict, RoRfromFtoCstrict, RoRfromCtoFstrict,
         convertRoR, convertRoRstrict, convertTemp, path2url, toInt, toString, toList, toFloat,
@@ -238,8 +238,8 @@ if sys.platform.startswith('darwin'):
 #################### Main Application  ################################################
 #######################################################################################
 
-light_blue: Final[str] = '#4c97c3' # buttons CONTROL & RESET (was #2298c7)
-dark_blue: Final[str] = '#3979ae' # buttons ON & START (was #147bb3)
+light_blue: Final[str] = '#4E7180' # buttons CONTROL & RESET (was #2298c7)
+dark_blue: Final[str] = '#4E7180' # buttons ON & START (was #147bb3)
 
 appGuid:Final[str] = '9068bd2fa8e54945a6be1f1a0a589e92'
 viewerAppGuid:Final[str] = '9068bd2fa8e54945a6be1f1a0a589e93'
@@ -1244,13 +1244,13 @@ class VMToolbar(NavigationToolbar): # pylint: disable=abstract-method
                     percent_used_formatted = f"{percent_used:.0f}% {QApplication.translate('Label','roasted')} ({used} / {rlimit})"
                     # if 90% of quota is used, render usage in red
                     if percent_used >= 90:
-                        style = 'background-color:#cc0f50;color:white;'
+                        style = 'background-color:#A76557;color:white;'
                     else:
                         style = ''
                     reminder_message += f'<blockquote><b><span style="{style}">{percent_used_formatted}</span></b></blockquote>'
                 if remaining_days <31:
                     if remaining_days <= 3:
-                        style = 'background-color:#cc0f50;color:white;'
+                        style = 'background-color:#A76557;color:white;'
                     else:
                         style = ''
                     reminder_message += f'<blockquote><b><span style="{style}">{days}</span></b></blockquote>'
@@ -1888,7 +1888,7 @@ class ApplicationWindow(QMainWindow):
         #lcd1 = time, lcd2 = met, lcd3 = bt, lcd4 = roc et, lcd5 = roc bt, lcd6 = sv (extra devices lcd same as sv settings)
         self.lcdpaletteB:dict[str,str] = {
             'timer':'#F8F8F8',
-            'et':'#cc0f50',
+            'et':'#A76557',
             'bt':'#0A5C90',
             'deltaet':'#EBEBEB',
             'deltabt':'#EBEBEB',
@@ -1900,7 +1900,7 @@ class ApplicationWindow(QMainWindow):
             'timer':'#262626',
             'et':'#ffffff',
             'bt':'#ffffff',
-            'deltaet':'#cc0f50',
+            'deltaet':'#C18A6B',
             'deltabt':'#0A5C90',
             'sv':'#4C4C4C',
             'rstimer':'#187AB3',
@@ -2939,7 +2939,7 @@ class ApplicationWindow(QMainWindow):
                     """ + border_modern + """
                     font-size: """ + self.button_font_size + """;
                     font-weight: bold;
-                    color: #147bb3;
+                    color: #4E7180;
                     background-color: white;
                 }
                 QPushButton:!enabled {
@@ -2947,11 +2947,11 @@ class ApplicationWindow(QMainWindow):
                     background-color: #E0E0E0;
                 }
                 QPushButton:pressed {
-                    color: #116D98;
+                    color: #3E5A66;
                     background-color: #EEEEEE;
                 }
                 QPushButton:hover:!pressed {
-                    color: #1985ba;
+                    color: #5E889A;
                     background-color: #F5F5F5;
                 }
             """,
@@ -2961,7 +2961,7 @@ class ApplicationWindow(QMainWindow):
                     """ + border_modern + """
                     font-size: """ + self.button_font_size + """;
                     font-weight: bold;
-                    color: #cc0f50;
+                    color: #A76557;
                     background-color: white;
 
                 }
@@ -2970,11 +2970,11 @@ class ApplicationWindow(QMainWindow):
                     background-color: #E0E0E0;
                 }
                 QPushButton:pressed {
-                    color: #c70d49;
+                    color: #865146;
                     background-color: #EEEEEE;
                 }
                 QPushButton:hover:!pressed {
-                    color: #d4336a;
+                    color: #BE7D6C;
                     background-color: #F5F5F5;
                 }
             """,
@@ -2984,7 +2984,7 @@ class ApplicationWindow(QMainWindow):
                     """ + border_modern + """
                     font-size: """ + self.button_font_size + """;
                     font-weight: bold;
-                    color: #147bb3;
+                    color: #4E7180;
                     background-color: white;
                 }
                 QPushButton:!enabled {
@@ -2992,11 +2992,11 @@ class ApplicationWindow(QMainWindow):
                     background-color: darkgrey;
                 }
                 QPushButton:pressed {
-                    color: #116999;
+                    color: #3E5A66;
                     background-color: #EEEEEE;
                 }
                 QPushButton:hover:!pressed {
-                    color: #1985ba;
+                    color: #5E889A;
                     background-color: #F5F5F5;
                 }
             """,
@@ -3006,8 +3006,8 @@ class ApplicationWindow(QMainWindow):
                     """ + border_modern + """
                     font-size: """ + self.button_font_size + """;
                     font-weight: bold;
-                    color: yellow;
-                    background-color: #ff3d00;
+                    color: white;
+                    background-color: #A76557;
                 }
                 QPushButton:!enabled {
                     color: darkgrey;
@@ -3015,11 +3015,11 @@ class ApplicationWindow(QMainWindow):
                 }
                 QPushButton:pressed {
                     color: #EEEEEE;
-                    background-color: #116999;
+                    background-color: #865146;
                 }
                 QPushButton:hover:!pressed {
                     color: white;
-                    background-color: red;
+                    background-color: #BE7D6C;
                 }
             """,
         }
@@ -3032,7 +3032,7 @@ class ApplicationWindow(QMainWindow):
                     font-size: """ + self.button_font_size + """;
                     font-weight: bold;
                     color: white;
-                    background-color: #4c97c3;
+                    background-color: #4E7180;
                 }
                 QPushButton:!enabled {
                     color: darkgrey;
@@ -3040,11 +3040,11 @@ class ApplicationWindow(QMainWindow):
                 }
                 QPushButton:pressed {
                     color: #EEEEEE;
-                    background-color: #1985ba;
+                    background-color: #3E5A66;
                 }
                 QPushButton:hover:!pressed {
                     color: white;
-                    background-color: #43a7cf;
+                    background-color: #5E889A;
                 }
             """,
             'OFF':    """
@@ -3054,7 +3054,7 @@ class ApplicationWindow(QMainWindow):
                     font-size: """ + self.button_font_size + """;
                     font-weight: bold;
                     color: white;
-                    background-color: #3979ae;
+                    background-color: #4E7180;
                 }
                 QPushButton:!enabled {
                     color: darkgrey;
@@ -3062,11 +3062,11 @@ class ApplicationWindow(QMainWindow):
                 }
                 QPushButton:pressed {
                     color: #EEEEEE;
-                    background-color: #116D98;
+                    background-color: #3E5A66;
                 }
                 QPushButton:hover:!pressed {
                     color: white;
-                    background-color: #1985ba;
+                    background-color: #5E889A;
                 }
             """,
             'ON':    """
@@ -3076,7 +3076,7 @@ class ApplicationWindow(QMainWindow):
                     font-size: """ + self.button_font_size + """;
                     font-weight: bold;
                     color: white;
-                    background-color: #cc0f50;
+                    background-color: #A76557;
                 }
                 QPushButton:!enabled {
                     color: darkgrey;
@@ -3084,11 +3084,11 @@ class ApplicationWindow(QMainWindow):
                 }
                 QPushButton:pressed {
                     color: #EEEEEE;
-                    background-color: #c70d49;
+                    background-color: #865146;
                 }
                 QPushButton:hover:!pressed {
                     color: white;
-                    background-color: #d4336a;
+                    background-color: #BE7D6C;
                 }
             """,
             'STOP':     """
@@ -3098,7 +3098,7 @@ class ApplicationWindow(QMainWindow):
                     font-size: """ + self.button_font_size + """;
                     font-weight: bold;
                     color: white;
-                    background-color: #3979ae;
+                    background-color: #4E7180;
                 }
                 QPushButton:!enabled {
                     color: darkgrey;
@@ -3106,11 +3106,11 @@ class ApplicationWindow(QMainWindow):
                 }
                 QPushButton:pressed {
                     color: #EEEEEE;
-                    background-color: #116999;
+                    background-color: #865146;
                 }
                 QPushButton:hover:!pressed {
                     color: white;
-                    background-color: #1985ba;
+                    background-color: #5E889A;
                 }
             """,
             'START':    """
@@ -3119,8 +3119,8 @@ class ApplicationWindow(QMainWindow):
                     """ + border_modern + """
                     font-size: """ + self.button_font_size + """;
                     font-weight: bold;
-                    color: yellow;
-                    background-color: #ff3d00;
+                    color: white;
+                    background-color: #A76557;
                 }
                 QPushButton:!enabled {
                     color: darkgrey;
@@ -3128,11 +3128,11 @@ class ApplicationWindow(QMainWindow):
                 }
                 QPushButton:pressed {
                     color: #EEEEEE;
-                    background-color: #116999;
+                    background-color: #865146;
                 }
                 QPushButton:hover:!pressed {
                     color: white;
-                    background-color: red;
+                    background-color: #BE7D6C;
                 }
             """,
             'PID':     """
@@ -3142,7 +3142,7 @@ class ApplicationWindow(QMainWindow):
                     font-size: """ + self.button_font_size + """;
                     font-weight: bold;
                     color: white;
-                    background-color: #4c97c3;
+                    background-color: #4E7180;
                 }
                 QPushButton:!enabled {
                     color: darkgrey;
@@ -3150,11 +3150,11 @@ class ApplicationWindow(QMainWindow):
                 }
                 QPushButton:pressed {
                     color: #EEEEEE;
-                    background-color: #1985ba;
+                    background-color: #3E5A66;
                 }
                 QPushButton:hover:!pressed {
                     color: white;
-                    background-color: #43a7cf;
+                    background-color: #5E889A;
                 }
             """,
             'PIDactive':     """
@@ -3164,7 +3164,7 @@ class ApplicationWindow(QMainWindow):
                     font-size: """ + self.button_font_size + """;
                     font-weight: bold;
                     color: white;
-                    background-color: #cc0f50;
+                    background-color: #A76557;
                 }
                 QPushButton:!enabled {
                     color: darkgrey;
@@ -3172,11 +3172,11 @@ class ApplicationWindow(QMainWindow):
                 }
                 QPushButton:pressed {
                     color: #EEEEEE;
-                    background-color: #c70d49;
+                    background-color: #865146;
                 }
                 QPushButton:hover:!pressed {
                     color: white;
-                    background-color: #d4336a;
+                    background-color: #BE7D6C;
                 }
             """,
             'SV +':     """
@@ -3186,15 +3186,15 @@ class ApplicationWindow(QMainWindow):
                     font-size: """ + self.button_font_size_small + """;
                     font-weight: bold;
                     color: white;
-                    background-color:""" + createGradient('#db5785') + """ ;
+                    background-color:""" + createGradient('#C18A6B') + """ ;
                 }
                 QPushButton:pressed {
                     color: #EEEEEE;
-                    background-color:""" + createGradient('#d4336a') + """ ;
+                    background-color:""" + createGradient('#9A6E55') + """ ;
                 }
                 QPushButton:hover:!pressed {
                     color: white;
-                    background-color:""" + createGradient('#e480a2') + """ ;
+                    background-color:""" + createGradient('#D1A082') + """ ;
                                      }
             """,
             'SV -':     """
@@ -3204,15 +3204,15 @@ class ApplicationWindow(QMainWindow):
                     font-size: """ + self.button_font_size_small + """;
                     font-weight: bold;
                     color: white;
-                    background-color:""" + createGradient('#64b7d8') + """ ;
+                    background-color:""" + createGradient('#90A1A8') + """ ;
                 }
                 QPushButton:pressed {
                     color: #EEEEEE;
-                    background-color:""" + createGradient('#43a7cf') + """ ;
+                    background-color:""" + createGradient('#738185') + """ ;
                 }
                 QPushButton:hover:!pressed {
                     color: white;
-                    background-color:""" + createGradient('#85cae1') + """ ;
+                    background-color:""" + createGradient('#A6B5BB') + """ ;
                 }
             """
             }
@@ -15765,10 +15765,10 @@ class ApplicationWindow(QMainWindow):
                             profile['extratemp1'] = profile['extratemp1'][:l]
                             profile['extratemp2'] = profile['extratemp2'][:l]
                             profile['extradevices'] = self.qmc.extradevices
-                            profile['extraname1'] = self.qmc.extraname1
-                            profile['extraname2'] = self.qmc.extraname2
-                            profile['extramathexpression1'] = self.qmc.extramathexpression1
-                            profile['extramathexpression2'] = self.qmc.extramathexpression2
+                            profile['extraname1'] = encodeLocalListStrict(self.qmc.extraname1, 'Extra 1')
+                            profile['extraname2'] = encodeLocalListStrict(self.qmc.extraname2, 'Extra 2')
+                            profile['extramathexpression1'] = encodeLocalListStrict(self.qmc.extramathexpression1)
+                            profile['extramathexpression2'] = encodeLocalListStrict(self.qmc.extramathexpression2)
                             profile['extradevicecolor1'] = self.qmc.extradevicecolor1
                             profile['extradevicecolor2'] = self.qmc.extradevicecolor2
                             profile['extramarkersizes1'] = [max(self.qmc.markersize_min, ms) for ms in self.qmc.extramarkersizes1]
@@ -27929,6 +27929,14 @@ class ApplicationWindow(QMainWindow):
             self.simulatorAction.setChecked(bool(self.simulator))
 
 
+
+    @pyqtSlot()
+    @pyqtSlot(bool)
+    def showChargeTargetDialog(self, _:bool = False) -> None:
+        dlg = ChargeTempRorDlg(self, self.charge_manager)
+        if dlg.exec():
+            self.qmc.update()
+
 ###########################################################################################################################################
 ###########################################################################################################################################
 
@@ -28336,15 +28344,3 @@ def main() -> None:
 #    del aw
 #    del app
 #    sys.exit(0)
-
-##############################################################################################################################################
-##############################################################################################################################################
-
-    @pyqtSlot()
-    @pyqtSlot(bool)
-    def showChargeTargetDialog(self, _:bool = False) -> None:
-        dlg = ChargeTempRorDlg(self, self.charge_manager)
-        if dlg.exec():
-             # Redraw to show/hide annotations if settings changed
-            self.qmc.update()
-

@@ -135,6 +135,8 @@ def encodeLocalStrict(x:Any|None, default:str = '') -> str:
         return codecs.unicode_escape_encode(str(x))[0].decode('utf8')
     except Exception: # pylint: disable=broad-except
         return default
+def encodeLocalListStrict(xs:Any, default:str = '') -> list[str]:
+    return [encodeLocalStrict(x, default) for x in xs]
 def hex2int(h1:int, h2:int|None = None) -> int:
     if h2 is not None:
         return int(h1*256 + h2)
