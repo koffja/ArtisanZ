@@ -44,6 +44,7 @@ from collections.abc import Callable, Sequence
 from typing import override, Final, Literal, Any, cast, TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from artisanlib.charge_manager import ChargeTargetManager
     from artisanlib.comm import serialport # pylint: disable=unused-import
     from artisanlib.atypes import ProfileData, BTU # pylint: disable=unused-import
     from artisanlib.main import ApplicationWindow # pylint: disable=unused-import
@@ -154,6 +155,8 @@ class AmbientWorker(QObject):
     def __init__(self, aw:'ApplicationWindow') -> None:
         super().__init__()
         self.aw = aw
+        self.charge_manager: 'ChargeTargetManager | None' = None
+        self.charge_target_annotation: Annotation | None = None
 
     def run(self) -> None:
         libtime.sleep(2.5) # wait a moment after ON until all other devices are attached
@@ -301,7 +304,7 @@ class tgraphcanvas(QObject):
         'swapdeltalcds', 'PIDbuttonflag', 'Controlbuttonflag', 'deltaETfilter', 'deltaBTfilter', 'curvefilter', 'deltaETspan', 'deltaBTspan',
         'deltaETsamples', 'deltaBTsamples', 'profile_sampling_interval', 'background_profile_sampling_interval', 'profile_meter', 'optimalSmoothing', 'polyfitRoRcalc',
         'patheffects', 'graphstyle', 'graphfont', 'buttonvisibility', 'buttonactions', 'buttonactionstrings', 'extrabuttonactions', 'extrabuttonactionstrings',
-        'xextrabuttonactions', 'xextrabuttonactionstrings', 'chargeTimerFlag', 'autoChargeFlag', 'autoDropFlag', 'autoChargeMode', 'autoDropMode', 'autoChargeIdx', 'autoDropIdx', 'markTPflag',
+        'xextrabuttonactions', 'xextrabuttonactionstrings', 'charge_manager', 'charge_target_annotation', 'chargeTimerFlag', 'autoChargeFlag', 'autoDropFlag', 'autoChargeMode', 'autoDropMode', 'autoChargeIdx', 'autoDropIdx', 'markTPflag',
         'autoDRYflag', 'autoFCsFlag', 'autoCHARGEenabled', 'autoDRYenabled', 'autoFCsenabled', 'autoDROPenabled', 'projectionconstant',
         'projectionmode', 'transMappingMode', 'weight', 'roasted_defects_weight', 'volume', 'density', 'roasted_defects_mode', 'density_roasted', 'volumeCalcUnit', 'volumeCalcWeightInStr',
         'volumeCalcWeightOutStr', 'container_names', 'container_weights', 'specialevents', 'etypes', 'etypesdefault',
@@ -5794,6 +5797,15 @@ class tgraphcanvas(QObject):
                                             self.update_additional_artists()
                                         except Exception as e: # pylint: disable=broad-except
                                             _log.exception(e)
+
+                                        # CHARGE TARGET REALTIME UPDATE
+                                        try:
+                                            self.draw_charge_target_annotation()
+                                            if self.charge_target_annotation:
+                                                self.ax.draw_artist(self.charge_target_annotation)
+                                        except Exception:
+                                            pass
+
                                         axfig = self.ax.get_figure()
                                         if axfig is not None:
                                             self.fig.canvas.blit(axfig.bbox)
@@ -11539,6 +11551,9 @@ class tgraphcanvas(QObject):
                 ############  ready to plot ############
                 self.updateBackground() # update bitlblit backgrounds
                 #######################################
+
+                # CHARGE TARGET ANNOTATION
+                self.draw_charge_target_annotation()
 
             except Exception as ex: # pylint: disable=broad-except
                 _log.exception(ex)
@@ -18362,6 +18377,162 @@ class tgraphcanvas(QObject):
                             if not self.LCDdecimalplaces:
                                 self.delta_ax.minorticks_off()
 
+
+    def set_charge_manager(self, manager: 'ChargeTargetManager') -> None:
+        self.charge_manager = manager
+
+    def draw_charge_target_annotation(self) -> None:
+        if self.charge_manager is None:
+            return
+
+        # Check for charge event
+        is_charged = False
+        if hasattr(self, 'timeindex') and len(self.timeindex) > 0 and self.timeindex[0] > -1:
+             if self.charge_manager.active:
+                 # Capture Snapshot Data at the exact index of Charge
+                 idx = self.timeindex[0]
+                 c_temp = self.temp2[idx] if idx < len(self.temp2) else 0.0
+                 c_ror = self.delta2[idx] if (hasattr(self, 'delta2') and idx < len(self.delta2)) else 0.0
+                 self.charge_manager.on_charge_event(c_temp, c_ror)
+             is_charged = True
+        else:
+             if not self.charge_manager.active:
+                 self.charge_manager.reset()
+
+        # If disabled, clean up and return
+        if not self.charge_manager.enabled:
+            if self.charge_target_annotation:
+                try:
+                    self.charge_target_annotation.remove()
+                except Exception:
+                    pass
+                self.charge_target_annotation = None
+            return
+
+        # Data preparation
+        if len(self.temp2) > 0:
+            current_temp = self.temp2[-1]
+            current_ror = self.delta2[-1] if (hasattr(self, 'delta2') and len(self.delta2) > 0) else None
+
+            target_temp = self.charge_manager.target_temp
+
+            # Logic for Active vs Charged state
+            if is_charged or not self.charge_manager.active:
+                # --- CHARGED STATE (Fixed position) ---
+                if self.charge_target_annotation:
+                    try:
+                        self.charge_target_annotation.remove()
+                    except Exception:
+                        pass
+
+                # Retrieve captured snapshot values
+                snap_temp = self.charge_manager.charged_temp
+                snap_ror = self.charge_manager.charged_ror
+
+                # Calculate RWTs
+                trwt_val = self.charge_manager.calculate_rwt(self.charge_manager.target_ror)
+                arwt_val = self.charge_manager.calculate_rwt(snap_ror)
+
+                # Format strings
+                trwt_str = f'{trwt_val:.0f}s'
+                arwt_str = f'{arwt_val:.0f}s' if arwt_val > 0 else '---'
+                tror_str = f'{self.charge_manager.target_ror:.1f}'
+                aror_str = f'{snap_ror:.1f}'
+
+                # Compare display
+                lines = [
+                    '【已投豆】',
+                    f'目标: {target_temp:.1f}° | RoR: {tror_str} | RWT: {trwt_str}',
+                    f'实际: {snap_temp:.1f}° | RoR: {aror_str} | RWT: {arwt_str}'
+                ]
+                text = chr(10).join(lines)
+
+                if hasattr(self, 'ax') and self.ax is not None:
+                    try:
+                        self.charge_target_annotation = self.ax.annotate(
+                            text,
+                            xy=(0, 1), xycoords='axes fraction',
+                            xytext=(10, -10), textcoords='offset points',
+                            fontsize=9, color='#555555',
+                            verticalalignment='top', horizontalalignment='left',
+                            bbox=dict(boxstyle='round,pad=0.6', fc='#F8F8F8', ec='#DDDDDD', alpha=0.8),
+                        )
+                    except Exception:
+                        pass
+                return
+
+            # --- ACTIVE STATE (Dynamic) ---
+            pred_time = self.charge_manager.predict(current_temp, current_ror)
+            status_msg, color = self.charge_manager.get_status_message(current_ror, current_temp)
+
+            # Remove old
+            if self.charge_target_annotation:
+                try:
+                    self.charge_target_annotation.remove()
+                except Exception:
+                    pass
+
+            if len(self.timex) > 0:
+                current_time = self.timex[-1]
+                time_str = f'{pred_time:.1f}秒' if pred_time is not None else '---'
+
+                # Arrow logic
+                arrow_target = (current_time, current_temp)
+
+                # Calculate targets
+                current_rwt = self.charge_manager.calculate_rwt(current_ror)
+                target_rwt = self.charge_manager.calculate_rwt(self.charge_manager.target_ror)
+
+                # Format values
+                rwt_str = f'{current_rwt:.0f}s' if current_rwt > 0 else '---'
+                trwt_str = f'{target_rwt:.0f}s'
+                tror_str = f'{self.charge_manager.target_ror:.1f}'
+                ror_val_str = f'{current_ror:.1f}' if current_ror is not None else '-'
+
+                bg_colors = {'red': '#FFEDED', 'blue': '#E6E6FF', 'green': '#E8F5E9', 'gray': '#F5F5F5'}
+                bg_color = bg_colors.get(color, '#FFFFF0')
+
+                lines = [
+                    f'【目标】 温:{target_temp:.1f}° | RoR:{tror_str} | RWT:{trwt_str}',
+                    f'【当前】 温:{current_temp:.1f}° | RoR:{ror_val_str} | RWT:{rwt_str}',
+                    '──────────────────────',
+                    f'预计到达: {time_str}',
+                    f'[{status_msg}]'
+                ]
+                text = chr(10).join(lines)
+
+                if hasattr(self, 'ax') and self.ax is not None:
+                    try:
+                        # Dynamic positioning logic
+                        x_limit = self.ax.get_xlim()[1]
+                        y_limit_top = self.ax.get_ylim()[1]
+
+                        xytext_offset = (100, 50)
+                        halign = 'left'
+                        connection_style = 'arc3,rad=-0.3'
+
+                        if current_time > x_limit * 0.7:
+                            xytext_offset = (-100, 50)
+                            halign = 'right'
+                            connection_style = 'arc3,rad=0.3'
+
+                        if current_temp > y_limit_top * 0.8:
+                            xytext_offset = (xytext_offset[0], -80)
+
+                        self.charge_target_annotation = self.ax.annotate(
+                            text,
+                            xy=arrow_target,
+                            xytext=xytext_offset,
+                            textcoords='offset points',
+                            fontsize=9,
+                            color='#333333',
+                            horizontalalignment=halign,
+                            bbox=dict(boxstyle='round,pad=0.8,rounding_size=0.6',
+                                      fc=bg_color, ec='#AAAAAA', lw=0.5, alpha=0.95),
+                            arrowprops=dict(arrowstyle='-|>', connectionstyle=connection_style,
+                                            color='#666666', lw=1.0))
+                    except Exception:
+                        pass
     #redraws designer
     def redrawdesigner(self, force:bool=False) -> None: #if force is set the bitblit cache is ignored and a full redraw is triggered
         from scipy.interpolate import UnivariateSpline

@@ -1,0 +1,109 @@
+ 手动打包完整流程
+
+  方法一：使用批处理脚本（推荐）
+
+  # 在项目根目录执行
+  build-win-portable.bat
+
+  方法二：手动命令行打包
+
+  步骤1：进入src目录
+
+  cd C:\Users\chengzhe\Desktop\MDCD项目\MDCD烘焙记录\artisan-master\src
+
+  步骤2：清理旧构建（可选但推荐）
+
+  rmdir /s /q dist 2>nul
+  rmdir /s /q dist2 2>nul
+  rmdir /s /q build 2>nul
+
+  步骤3：执行PyInstaller打包
+
+  python -m PyInstaller artisan-win.spec --noconfirm --distpath dist2
+
+  参数说明：
+  - --noconfirm: 自动覆盖，不询问
+  - --distpath dist2: 指定输出目录（避免原有dist目录问题）
+
+  步骤4：手动补充includes目录（如果spec文件copy失败）
+
+  xcopy /E /I /Y includes dist2\artisan\includes
+
+  步骤5：验证打包结果
+
+  cd dist2\artisan
+  dir *.dll          # 检查VC++ DLL
+  dir _internal       # 检查依赖库
+  dir includes        # 检查资源文件
+
+  ---
+  打包输出结构
+
+  dist2/artisan/
+  ├── artisan.exe              # 主程序
+  ├── *.dll                     # VC++运行时（10个）
+  │   ├── msvcp140*.dll
+  │   ├── vcruntime140*.dll
+  │   └── ucrtbase.dll
+  ├── _internal/                # Python依赖
+  │   ├── PyQt6/
+  │   ├── matplotlib/
+  │   ├── numpy/
+  │   └── ...
+  ├── translations/             # 多语言翻译
+  ├── includes/                 # 资源文件
+  │   ├── Machines/
+  │   ├── Themes/
+  │   ├── Icons/
+  │   └── *.ttf, *.otf
+  ├── Wheels/                   # 配置文件
+  ├── README.txt
+  └── LICENSE.txt
+
+  ---
+  跨电脑部署
+
+  复制到目标电脑
+
+  # 整个文件夹复制
+  xcopy /E /I /Y dist2\artisan D:\Artisan\
+
+  # 或手动打包
+  7z a -sfx artisan.7z dist2\artisan\
+
+  在目标电脑运行
+
+  # 无需安装，直接运行
+  D:\Artisan\artisan.exe
+
+  ---
+  故障排除
+
+  如果打包失败
+
+  问题1：dist目录无法删除
+  # 解决方案：使用新目录名
+  python -m PyInstaller artisan-win.spec --distpath dist2
+
+  问题2：VC++ DLLs未复制
+  # 手动复制
+  copy C:\Windows\System32\msvcp140.dll dist2\artisan\
+  copy C:\Windows\System32\vcruntime140.dll dist2\artisan\
+
+  问题3：includes目录缺失
+  # 手动复制
+  xcopy /E /I /Y includes dist2\artisan\includes
+
+  ---
+  与原版打包的对比
+
+  | 项目         | 原版           | 改进版      |
+  |--------------|----------------|-------------|
+  | VC++运行时   | 需要客户端安装 | 自动打包 ✅ |
+  | UCRT支持     | 未包含         | 自动打包 ✅ |
+  | 隐藏导入     | 基础模块       | 扩展覆盖 ✅ |
+  | 部署方式     | 需要安装依赖   | 复制即用 ✅ |
+  | 跨电脑兼容性 | 部分电脑报错   | 完全兼容 ✅ |
+
+  ---
+  核心改进：原版需要客户端预装Microsoft Visual C++ Redistributable，改进版将所有运行时DLL直接打包到程序目录，实现真正的"绿色版"（复制即用）。

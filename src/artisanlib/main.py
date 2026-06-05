@@ -22,6 +22,8 @@ import time as libtime
 startup_time = libtime.process_time()
 
 from artisanlib import __version__, __revision__, __build__, __signature__, __release_sponsor_name__
+from artisanlib.charge_manager import ChargeTargetManager
+from artisanlib.charge_dialog import ChargeTempRorDlg
 
 
 import os
@@ -1752,6 +1754,11 @@ class ApplicationWindow(QMainWindow):
                 pass
 
         self.qmc:tgraphcanvas = tgraphcanvas(self.main_widget, self.dpi, locale, self)
+        
+        # Charge Target Manager
+        self.charge_manager: ChargeTargetManager = ChargeTargetManager()
+        self.qmc.charge_manager = self.charge_manager
+
         self.qmc.canvas.setMinimumHeight(150)
         #self.qmc.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground)
 
@@ -4416,6 +4423,9 @@ class ApplicationWindow(QMainWindow):
         roast_menu.addAction(self.editGraphAction)
         roast_menu.addAction(self.backgroundAction)
         roast_menu.addAction(self.flavorAction)
+        charge_target_action = QAction(QApplication.translate('Menu', '投豆目标...'), self)
+        charge_target_action.triggered.connect(self.showChargeTargetDialog)
+        roast_menu.addAction(charge_target_action)
         if ui_mode in {UI_MODE.EXPERT, UI_MODE.DEFAULT}:
             roast_menu.addSeparator()
             roast_menu.addAction(self.switchAction)
@@ -19625,6 +19635,18 @@ class ApplicationWindow(QMainWindow):
             if settings.contains('lastLoadedBackground'):
                 self.lastLoadedBackground = toString(settings.value('lastLoadedBackground',self.qmc.backgroundpath))
 
+            # Charge Target
+            if settings.contains('TargetChargeTemp'):
+                self.charge_manager.target_temp = toFloat(settings.value('TargetChargeTemp', self.charge_manager.target_temp))
+            if settings.contains('TargetChargeRoR'):
+                self.charge_manager.target_ror = toFloat(settings.value('TargetChargeRoR', self.charge_manager.target_ror))
+            if settings.contains('ChargeTargetTempTol'):
+                self.charge_manager.temp_tolerance = toFloat(settings.value('ChargeTargetTempTol', self.charge_manager.temp_tolerance))
+            if settings.contains('ChargeTargetRoRTol'):
+                self.charge_manager.ror_tolerance = toFloat(settings.value('ChargeTargetRoRTol', self.charge_manager.ror_tolerance))
+            if settings.contains('ChargeTargetEnabled'):
+                self.charge_manager.enabled = toBool(settings.value('ChargeTargetEnabled', self.charge_manager.enabled))
+
             #watermark image
             self.logoimgalpha = toFloat(settings.value('logoimgalpha', self.logoimgalpha))
             self.logoimgflag = toBool(settings.value('logoimgflag', self.logoimgflag))
@@ -20252,6 +20274,13 @@ class ApplicationWindow(QMainWindow):
                 settings.setValue('Mode',self.qmc.mode) # 'Mode' is always stored as it is used to discriminate the ViewerSettings (see _settingsCopied)
 
             if filename is not None and not read_defaults:
+                # Charge Target
+                settings.setValue('TargetChargeTemp', self.charge_manager.target_temp)
+                settings.setValue('TargetChargeRoR', self.charge_manager.target_ror)
+                settings.setValue('ChargeTargetTempTol', self.charge_manager.temp_tolerance)
+                settings.setValue('ChargeTargetRoRTol', self.charge_manager.ror_tolerance)
+                settings.setValue('ChargeTargetEnabled', self.charge_manager.enabled)
+
                 # only add those on exporting settings (those are never read by Artisan)
 #--- BEGIN GROUP System
                 settings.beginGroup('System')
@@ -20479,6 +20508,18 @@ class ApplicationWindow(QMainWindow):
             self.settingsSetValue(settings, default_settings, 'flavorstartangle',self.qmc.flavorstartangle, read_defaults)
             #save roast color system
             self.settingsSetValue(settings, default_settings, 'colorsystem',self.qmc.color_system_idx, read_defaults)
+            # Charge Target
+            if settings.contains('TargetChargeTemp'):
+                self.charge_manager.target_temp = toFloat(settings.value('TargetChargeTemp', self.charge_manager.target_temp))
+            if settings.contains('TargetChargeRoR'):
+                self.charge_manager.target_ror = toFloat(settings.value('TargetChargeRoR', self.charge_manager.target_ror))
+            if settings.contains('ChargeTargetTempTol'):
+                self.charge_manager.temp_tolerance = toFloat(settings.value('ChargeTargetTempTol', self.charge_manager.temp_tolerance))
+            if settings.contains('ChargeTargetRoRTol'):
+                self.charge_manager.ror_tolerance = toFloat(settings.value('ChargeTargetRoRTol', self.charge_manager.ror_tolerance))
+            if settings.contains('ChargeTargetEnabled'):
+                self.charge_manager.enabled = toBool(settings.value('ChargeTargetEnabled', self.charge_manager.enabled))
+
             #watermark image
 
             self.settingsSetValue(settings, default_settings, 'logofilename', self.logofilename, read_defaults)
@@ -28298,3 +28339,12 @@ def main() -> None:
 
 ##############################################################################################################################################
 ##############################################################################################################################################
+
+    @pyqtSlot()
+    @pyqtSlot(bool)
+    def showChargeTargetDialog(self, _:bool = False) -> None:
+        dlg = ChargeTempRorDlg(self, self.charge_manager)
+        if dlg.exec():
+             # Redraw to show/hide annotations if settings changed
+            self.qmc.update()
+
