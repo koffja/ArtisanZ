@@ -41,7 +41,7 @@ from psutil._common import bytes2human # pyright:ignore[reportPrivateImportUsage
 from babel.units import get_unit_name
 
 from collections.abc import Callable, Sequence
-from typing import override, Final, Literal, Any, cast, TYPE_CHECKING
+from typing import override, Final, Literal, Any, Optional, cast, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from artisanlib.charge_manager import ChargeTargetManager
@@ -18381,6 +18381,38 @@ class tgraphcanvas(QObject):
     def set_charge_manager(self, manager: 'ChargeTargetManager') -> None:
         self.charge_manager = manager
 
+    def _charge_window_average_delta(self, window_seconds: float) -> Optional[float]:
+        if not hasattr(self, 'timex') or not hasattr(self, 'delta2'):
+            return None
+        if len(self.timex) < 2 or len(self.delta2) < 2:
+            return None
+
+        latest_time = self.timex[-1]
+        values: list[float] = []
+        for idx in range(len(self.delta2) - 1, -1, -1):
+            if idx >= len(self.timex):
+                continue
+            if latest_time - self.timex[idx] > window_seconds:
+                break
+            value = self.delta2[idx]
+            if value is not None and value > 0:
+                values.append(value)
+
+        if not values:
+            return None
+        return sum(values) / len(values)
+
+    def _charge_et_bt_gap(self) -> Optional[float]:
+        if not hasattr(self, 'temp1') or not hasattr(self, 'temp2'):
+            return None
+        if len(self.temp1) == 0 or len(self.temp2) == 0:
+            return None
+        et = self.temp1[-1]
+        bt = self.temp2[-1]
+        if et is None or bt is None:
+            return None
+        return et - bt
+
     def draw_charge_target_annotation(self) -> None:
         if self.charge_manager is None:
             return
@@ -18462,8 +18494,17 @@ class tgraphcanvas(QObject):
                 return
 
             # --- ACTIVE STATE (Dynamic) ---
-            pred_time = self.charge_manager.predict(current_temp, current_ror)
-            status_msg, color = self.charge_manager.get_status_message(current_ror, current_temp)
+            short_ror = self._charge_window_average_delta(9.0)
+            long_ror = self._charge_window_average_delta(30.0)
+            readiness = self.charge_manager.evaluate_readiness(
+                current_temp=current_temp,
+                current_ror=current_ror,
+                short_ror=short_ror,
+                long_ror=long_ror,
+                et_bt_gap=self._charge_et_bt_gap(),
+            )
+            pred_time = readiness.prediction_seconds
+            color = readiness.color
 
             # Remove old
             if self.charge_target_annotation:
@@ -18479,25 +18520,13 @@ class tgraphcanvas(QObject):
                 # Arrow logic
                 arrow_target = (current_time, current_temp)
 
-                # Calculate targets
-                current_rwt = self.charge_manager.calculate_rwt(current_ror)
-                target_rwt = self.charge_manager.calculate_rwt(self.charge_manager.target_ror)
-
-                # Format values
-                rwt_str = f'{current_rwt:.0f}s' if current_rwt > 0 else '---'
-                trwt_str = f'{target_rwt:.0f}s'
-                tror_str = f'{self.charge_manager.target_ror:.1f}'
-                ror_val_str = f'{current_ror:.1f}' if current_ror is not None else '-'
-
                 bg_colors = {'red': '#FFEDED', 'blue': '#E6E6FF', 'green': '#E8F5E9', 'gray': '#F5F5F5'}
                 bg_color = bg_colors.get(color, '#FFFFF0')
 
                 lines = [
-                    f'【目标】 温:{target_temp:.1f}° | RoR:{tror_str} | RWT:{trwt_str}',
-                    f'【当前】 温:{current_temp:.1f}° | RoR:{ror_val_str} | RWT:{rwt_str}',
-                    '──────────────────────',
-                    f'预计到达: {time_str}',
-                    f'[{status_msg}]'
+                    f'【{readiness.title}】',
+                    f'预计: {time_str}',
+                    f'原因: {readiness.reason}',
                 ]
                 text = chr(10).join(lines)
 
