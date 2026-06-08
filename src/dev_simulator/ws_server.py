@@ -9,7 +9,8 @@ import random
 import time
 from typing import Any
 
-import websockets
+from websockets.asyncio.server import serve
+from websockets.exceptions import ConnectionClosed
 
 from dev_simulator.event_scheduler import EventScheduler
 
@@ -80,7 +81,7 @@ class AsyncServer:
         try:
             async for raw_message in websocket:
                 await self._handle_message(websocket, raw_message)
-        except websockets.ConnectionClosed:
+        except ConnectionClosed:
             _log.info("WebSocket client disconnected")
 
     async def _handle_message(self, websocket: Any, raw_message: str | bytes) -> None:
@@ -168,7 +169,7 @@ class AsyncServer:
     async def run(self) -> None:
         """Run the server until cancelled."""
         _log.info("Server listening on ws://%s:%s/%s", self.host, self.port, self.path)
-        async with websockets.serve(self.handle, self.host, self.port):
+        async with serve(self.handle, self.host, self.port):
             await self._wait_forever()
 
     @staticmethod

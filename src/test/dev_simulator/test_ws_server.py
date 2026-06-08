@@ -8,7 +8,8 @@ from typing import Any
 
 import pytest
 import pytest_asyncio
-import websockets
+from websockets.asyncio.client import connect
+from websockets.asyncio.server import serve
 
 from dev_simulator.event_scheduler import EventScheduler
 from dev_simulator.profile import RoastSpec, generate_profile
@@ -43,14 +44,8 @@ async def running_server(server_port: int):
         noise_model="none",
         noise_std=0.0,
     )
-    task = asyncio.create_task(server.run())
-    await asyncio.sleep(0.05)
-    try:
+    async with serve(server.handle, server.host, server.port):
         yield server, server_port
-    finally:
-        task.cancel()
-        with pytest.raises(asyncio.CancelledError):
-            await task
 
 
 async def _collect_messages(ws: Any, count: int = 3) -> list[dict[str, Any]]:
@@ -90,7 +85,7 @@ class TestAsyncServerIntegration:
     @pytest.mark.asyncio
     async def test_id_echo(self, running_server: tuple[AsyncServer, int]) -> None:
         _, port = running_server
-        async with websockets.connect(f"ws://127.0.0.1:{port}/WebSocket") as ws:
+        async with connect(f"ws://127.0.0.1:{port}/WebSocket") as ws:
             messages = await _send_get_data(ws, request_id=42)
 
         data_messages = [message for message in messages if message.get("id") == 42]
@@ -100,7 +95,7 @@ class TestAsyncServerIntegration:
     @pytest.mark.asyncio
     async def test_event_push_on_first_request(self, running_server: tuple[AsyncServer, int]) -> None:
         _, port = running_server
-        async with websockets.connect(f"ws://127.0.0.1:{port}/WebSocket") as ws:
+        async with connect(f"ws://127.0.0.1:{port}/WebSocket") as ws:
             messages = await _send_get_data(ws, request_id=1)
 
         assert {"pushMessage": "startRoasting"} in messages
@@ -108,7 +103,7 @@ class TestAsyncServerIntegration:
     @pytest.mark.asyncio
     async def test_bt_et_values_at_start(self, running_server: tuple[AsyncServer, int]) -> None:
         _, port = running_server
-        async with websockets.connect(f"ws://127.0.0.1:{port}/WebSocket") as ws:
+        async with connect(f"ws://127.0.0.1:{port}/WebSocket") as ws:
             messages = await _send_get_data(ws, request_id=7)
 
         data_message = next(message for message in messages if message.get("id") == 7)
@@ -118,10 +113,10 @@ class TestAsyncServerIntegration:
     @pytest.mark.asyncio
     async def test_disconnect_reconnect(self, running_server: tuple[AsyncServer, int]) -> None:
         _, port = running_server
-        async with websockets.connect(f"ws://127.0.0.1:{port}/WebSocket") as ws:
+        async with connect(f"ws://127.0.0.1:{port}/WebSocket") as ws:
             await _send_get_data(ws, request_id=1)
 
-        async with websockets.connect(f"ws://127.0.0.1:{port}/WebSocket") as ws:
+        async with connect(f"ws://127.0.0.1:{port}/WebSocket") as ws:
             messages = await _send_get_data(ws, request_id=2)
 
         assert any(message.get("id") == 2 for message in messages)
@@ -129,7 +124,7 @@ class TestAsyncServerIntegration:
     @pytest.mark.asyncio
     async def test_malformed_json_does_not_disconnect(self, running_server: tuple[AsyncServer, int]) -> None:
         _, port = running_server
-        async with websockets.connect(f"ws://127.0.0.1:{port}/WebSocket") as ws:
+        async with connect(f"ws://127.0.0.1:{port}/WebSocket") as ws:
             await ws.send("not json {{{")
             messages = await _send_get_data(ws, request_id=99)
 
@@ -138,7 +133,7 @@ class TestAsyncServerIntegration:
     @pytest.mark.asyncio
     async def test_unknown_command_is_ignored(self, running_server: tuple[AsyncServer, int]) -> None:
         _, port = running_server
-        async with websockets.connect(f"ws://127.0.0.1:{port}/WebSocket") as ws:
+        async with connect(f"ws://127.0.0.1:{port}/WebSocket") as ws:
             await ws.send(json.dumps({"command": "noop", "id": 1}))
             messages = await _collect_messages(ws, count=1)
 
