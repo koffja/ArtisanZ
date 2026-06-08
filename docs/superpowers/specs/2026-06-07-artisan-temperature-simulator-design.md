@@ -359,8 +359,7 @@ src/dev_simulator/
 └── README.md                         # usage + ArtisanZ config + troubleshooting
 
 src/test/dev_simulator/
-├── __init__.py
-├── conftest.py                       # pytest fixtures
+├── conftest.py                       # pytest fixtures; no __init__.py to avoid shadowing src/dev_simulator
 ├── test_profile.py                   # profile generation unit tests
 ├── test_event_scheduler.py           # event scheduling unit tests
 └── test_ws_server.py                 # integration tests (websockets client)
@@ -393,7 +392,7 @@ python3 -m pytest test/dev_simulator/ -q
 
 | Phase | Output | Test | Estimate |
 |:---:|---|---|:---:|
-| 0 | `__init__.py` + directory scaffolding | — | 5 min |
+| 0 | package `__init__.py` + test directory scaffolding (no test package `__init__.py`) | — | 5 min |
 | 1 | `profile.py`: `RoastSpec` + `generate_profile()` | `test_profile.py` | 30 min |
 | 2 | `event_scheduler.py`: `EventScheduler` | `test_event_scheduler.py` | 20 min |
 | 3 | `ws_server.py`: `AsyncServer` with time model | `test_ws_server.py` | 45 min |
