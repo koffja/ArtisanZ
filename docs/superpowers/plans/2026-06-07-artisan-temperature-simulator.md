@@ -4,7 +4,7 @@
 
 **Goal:** Build a standalone WebSocket server that feeds synthetic BT/ET roast curves to ArtisanZ for testing the charge_target feature without physical hardware.
 
-**Architecture:** A standalone Python package (`src/dev-simulator/`) generates a 7-node parameterized roast profile, reuses the existing `Simulator` class for interpolation, and serves temperature data over WebSocket to ArtisanZ. Events (CHARGE, DRY, FCs, FCe, SCs, DROP) are auto-pushed at configured times.
+**Architecture:** A standalone Python package (`src/dev_simulator/`) generates a 7-node parameterized roast profile, reuses the existing `Simulator` class for interpolation, and serves temperature data over WebSocket to ArtisanZ. Events (CHARGE, DRY, FCs, FCe, SCs, DROP) are auto-pushed at configured times.
 
 **Tech Stack:** Python 3.12+, `websockets` (already in project), `numpy` (already in project), `pytest` + `pytest-asyncio` (needs upgrade from 1.3.0 to >=0.23)
 
@@ -15,7 +15,7 @@
 ## File Structure
 
 ```
-src/dev-simulator/
+src/dev_simulator/
 ├── __init__.py
 ├── profile.py
 ├── event_scheduler.py
@@ -45,7 +45,7 @@ The existing `Simulator` at `src/artisanlib/simulator.py`:
 
 **Files:**
 - Modify: `src/requirements-dev.txt`
-- Create: `src/dev-simulator/__init__.py` (empty)
+- Create: `src/dev_simulator/__init__.py` (empty)
 - Create: `src/test/dev_simulator/__init__.py` (empty)
 - Create: `src/test/dev_simulator/conftest.py`
 
@@ -58,8 +58,8 @@ cd src && pip install 'pytest-asyncio>=0.23,<1'
 
 - [ ] **Step 2: Create scaffolding**
 ```bash
-mkdir -p src/dev-simulator src/test/dev_simulator
-touch src/dev-simulator/__init__.py
+mkdir -p src/dev_simulator src/test/dev_simulator
+touch src/dev_simulator/__init__.py
 touch src/test/dev_simulator/__init__.py
 ```
 
@@ -83,7 +83,7 @@ def no_noise_spec() -> RoastSpec:
 
 - [ ] **Step 4: Commit**
 ```bash
-git add src/requirements-dev.txt src/dev-simulator/ src/test/dev_simulator/
+git add src/requirements-dev.txt src/dev_simulator/ src/test/dev_simulator/
 git commit -m "chore: scaffold dev_simulator package and upgrade pytest-asyncio"
 ```
 
@@ -92,7 +92,7 @@ git commit -m "chore: scaffold dev_simulator package and upgrade pytest-asyncio"
 ## Task 1: profile.py — RoastSpec and generate_profile
 
 **Files:**
-- Create: `src/dev-simulator/profile.py`
+- Create: `src/dev_simulator/profile.py`
 - Create: `src/test/dev_simulator/test_profile.py`
 
 **Spec reference:** §5 (Curve Model), §9.5 (RoastSpec API)
@@ -117,7 +117,7 @@ Expected: FAIL (ModuleNotFoundError)
 
 - [ ] **Step 2: Implement profile.py**
 
-Create `src/dev-simulator/profile.py` with:
+Create `src/dev_simulator/profile.py` with:
 1. `RoastSpec` frozen dataclass — 21 fields (7 nodes × 3: t/bt/et) + sample_hz/noise_std/noise_model
    - **IMPORTANT:** Each field on its own line. `a, b, c: float = (x, y, z)` is INVALID Python syntax.
 2. `_cosine_ease(t, t0, t1, v0, v1)` — cosine ease-in-out: `(1 - cos(π·frac))/2`
@@ -134,7 +134,7 @@ Expected: ALL PASS
 
 - [ ] **Step 3: Commit**
 ```bash
-git add src/dev-simulator/profile.py src/test/dev_simulator/test_profile.py
+git add src/dev_simulator/profile.py src/test/dev_simulator/test_profile.py
 git commit -m "feat(dev-simulator): add RoastSpec and generate_profile with cosine interpolation"
 ```
 
@@ -143,7 +143,7 @@ git commit -m "feat(dev-simulator): add RoastSpec and generate_profile with cosi
 ## Task 2: event_scheduler.py — EventScheduler
 
 **Files:**
-- Create: `src/dev-simulator/event_scheduler.py`
+- Create: `src/dev_simulator/event_scheduler.py`
 - Create: `src/test/dev_simulator/test_event_scheduler.py`
 
 **Spec reference:** §5.5 (Event Schedule), §8.1 (Time Model)
@@ -165,7 +165,7 @@ Expected: FAIL (ModuleNotFoundError)
 
 - [ ] **Step 2: Implement event_scheduler.py**
 
-Create `src/dev-simulator/event_scheduler.py` with:
+Create `src/dev_simulator/event_scheduler.py` with:
 1. `EventScheduler(events: list[tuple[float, dict]], start_mode: str = "auto")`
 2. `async fire_due(t: float, send: Callable[[dict], Awaitable[None]]) -> list[dict]`
    - Iterate events sorted by time, fire all with event_t <= t that haven't been fired
@@ -179,7 +179,7 @@ Expected: ALL PASS
 
 - [ ] **Step 3: Commit**
 ```bash
-git add src/dev-simulator/event_scheduler.py src/test/dev_simulator/test_event_scheduler.py
+git add src/dev_simulator/event_scheduler.py src/test/dev_simulator/test_event_scheduler.py
 git commit -m "feat(dev-simulator): add EventScheduler with fire-once and manual mode"
 ```
 
@@ -188,7 +188,7 @@ git commit -m "feat(dev-simulator): add EventScheduler with fire-once and manual
 ## Task 3: ws_server.py — AsyncServer with time model
 
 **Files:**
-- Create: `src/dev-simulator/ws_server.py`
+- Create: `src/dev_simulator/ws_server.py`
 - Create: `src/test/dev_simulator/test_ws_server.py`
 
 **Spec reference:** §6 (WebSocket Protocol), §8 (Error Handling), §8.1 (Time Model)
@@ -211,7 +211,7 @@ Expected: FAIL (ModuleNotFoundError)
 
 - [ ] **Step 2: Implement ws_server.py**
 
-Create `src/dev-simulator/ws_server.py` with three components:
+Create `src/dev_simulator/ws_server.py` with three components:
 
 **ServerState** — time model per spec §8.1:
 ```python
@@ -254,7 +254,7 @@ Expected: ALL PASS
 
 - [ ] **Step 3: Commit**
 ```bash
-git add src/dev-simulator/ws_server.py src/test/dev_simulator/test_ws_server.py
+git add src/dev_simulator/ws_server.py src/test/dev_simulator/test_ws_server.py
 git commit -m "feat(dev-simulator): add AsyncServer with time model and WebSocket protocol"
 ```
 
@@ -263,13 +263,13 @@ git commit -m "feat(dev-simulator): add AsyncServer with time model and WebSocke
 ## Task 4: artisan_simulator.py — CLI entry point
 
 **Files:**
-- Create: `src/dev-simulator/artisan_simulator.py`
+- Create: `src/dev_simulator/artisan_simulator.py`
 
 **Spec reference:** §9.6 (CLI Surface), §8.5 (Logging), §8.6 (Resources & Exit)
 
 - [ ] **Step 1: Implement CLI entry point**
 
-Create `src/dev-simulator/artisan_simulator.py` with:
+Create `src/dev_simulator/artisan_simulator.py` with:
 1. `parse_args(argv) -> Namespace` — argparse with all flags from spec §9.6:
    - `--preset {light,medium,dark,custom}` (default: medium)
    - `--host` (default: 127.0.0.1), `--port` (default: 80), `--path` (default: WebSocket)
@@ -287,7 +287,7 @@ Verify: `cd src && python3 -m dev_simulator.artisan_simulator --help`
 
 - [ ] **Step 2: Commit**
 ```bash
-git add src/dev-simulator/artisan_simulator.py
+git add src/dev_simulator/artisan_simulator.py
 git commit -m "feat(dev-simulator): add CLI entry point with argparse"
 ```
 
@@ -296,13 +296,13 @@ git commit -m "feat(dev-simulator): add CLI entry point with argparse"
 ## Task 5: README.md
 
 **Files:**
-- Create: `src/dev-simulator/README.md`
+- Create: `src/dev_simulator/README.md`
 
 **Spec reference:** §3 (User Scenario), §7 (UI Configuration), §10.3 (Manual E2E Checklist)
 
 - [ ] **Step 1: Write README**
 
-Create `src/dev-simulator/README.md` covering:
+Create `src/dev_simulator/README.md` covering:
 1. What it is — one paragraph
 2. Quick Start — 3 steps: install deps, run simulator, configure ArtisanZ
 3. ArtisanZ WebSocket Configuration — step-by-step per spec §7
@@ -313,7 +313,7 @@ Create `src/dev-simulator/README.md` covering:
 
 - [ ] **Step 2: Commit**
 ```bash
-git add src/dev-simulator/README.md
+git add src/dev_simulator/README.md
 git commit -m "docs(dev-simulator): add usage guide and ArtisanZ configuration instructions"
 ```
 

@@ -350,7 +350,7 @@ logging.basicConfig(
 ### 9.1 File Layout
 
 ```
-src/dev-simulator/
+src/dev_simulator/
 ├── __init__.py                       # empty
 ├── artisan_simulator.py              # CLI entry, asyncio main
 ├── profile.py                        # RoastSpec + generate_profile()
