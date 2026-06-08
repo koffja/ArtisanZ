@@ -23,12 +23,15 @@ src/dev_simulator/
 └── artisan_simulator.py
 
 src/test/dev_simulator/
-├── __init__.py
 ├── conftest.py
 ├── test_profile.py
 ├── test_event_scheduler.py
 └── test_ws_server.py
 ```
+
+> **No `__init__.py` in `src/test/dev_simulator/`.** If present, pytest registers
+> `test/dev_simulator/` as the `dev_simulator` package in `sys.modules`, shadowing
+> `src/dev_simulator/` and causing `ModuleNotFoundError` for all source imports.
 
 ## Critical: Simulator class contract
 
@@ -46,8 +49,9 @@ The existing `Simulator` at `src/artisanlib/simulator.py`:
 **Files:**
 - Modify: `src/requirements-dev.txt`
 - Create: `src/dev_simulator/__init__.py` (empty)
-- Create: `src/test/dev_simulator/__init__.py` (empty)
 - Create: `src/test/dev_simulator/conftest.py`
+
+> Do **not** create `src/test/dev_simulator/__init__.py` — see note in File Structure above.
 
 - [ ] **Step 1: Upgrade pytest-asyncio**
 
@@ -60,7 +64,6 @@ cd src && pip install 'pytest-asyncio>=0.23,<1'
 ```bash
 mkdir -p src/dev_simulator src/test/dev_simulator
 touch src/dev_simulator/__init__.py
-touch src/test/dev_simulator/__init__.py
 ```
 
 - [ ] **Step 3: Create conftest.py**
@@ -83,7 +86,7 @@ def no_noise_spec() -> RoastSpec:
 
 - [ ] **Step 4: Commit**
 ```bash
-git add src/requirements-dev.txt src/dev_simulator/ src/test/dev_simulator/
+git add src/requirements-dev.txt src/dev_simulator/__init__.py src/test/dev_simulator/conftest.py
 git commit -m "chore: scaffold dev_simulator package and upgrade pytest-asyncio"
 ```
 
