@@ -53,20 +53,20 @@ The existing `Simulator` at `src/artisanlib/simulator.py`:
 
 > Do **not** create `src/test/dev_simulator/__init__.py` — see note in File Structure above.
 
-- [ ] **Step 1: Upgrade pytest-asyncio**
+- [x] **Step 1: Upgrade pytest-asyncio**
 
 Change `pytest-asyncio==1.3.0` to `pytest-asyncio>=0.23,<1` in `src/requirements-dev.txt`. Then run:
 ```bash
 cd src && pip install 'pytest-asyncio>=0.23,<1'
 ```
 
-- [ ] **Step 2: Create scaffolding**
+- [x] **Step 2: Create scaffolding**
 ```bash
 mkdir -p src/dev_simulator src/test/dev_simulator
 touch src/dev_simulator/__init__.py
 ```
 
-- [ ] **Step 3: Create conftest.py**
+- [x] **Step 3: Create conftest.py**
 
 Create `src/test/dev_simulator/conftest.py`:
 ```python
@@ -84,7 +84,7 @@ def no_noise_spec() -> RoastSpec:
     return RoastSpec(noise_model="none", noise_std=0.0)
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 ```bash
 git add src/requirements-dev.txt src/dev_simulator/__init__.py src/test/dev_simulator/conftest.py
 git commit -m "chore: scaffold dev_simulator package and upgrade pytest-asyncio"
@@ -100,7 +100,7 @@ git commit -m "chore: scaffold dev_simulator package and upgrade pytest-asyncio"
 
 **Spec reference:** §5 (Curve Model), §9.5 (RoastSpec API)
 
-- [ ] **Step 1: Write failing tests for RoastSpec and generate_profile**
+- [x] **Step 1: Write failing tests for RoastSpec and generate_profile**
 
 Create `src/test/dev_simulator/test_profile.py` with tests from design spec §10.1:
 - `test_default_values` — all 21 fields match spec §5.1 defaults
@@ -118,7 +118,7 @@ Create `src/test/dev_simulator/test_profile.py` with tests from design spec §10
 Run: `cd src && python3 -m pytest test/dev_simulator/test_profile.py -v`
 Expected: FAIL (ModuleNotFoundError)
 
-- [ ] **Step 2: Implement profile.py**
+- [x] **Step 2: Implement profile.py**
 
 Create `src/dev_simulator/profile.py` with:
 1. `RoastSpec` frozen dataclass — 21 fields (7 nodes × 3: t/bt/et) + sample_hz/noise_std/noise_model
@@ -135,7 +135,7 @@ Create `src/dev_simulator/profile.py` with:
 Run: `cd src && python3 -m pytest test/dev_simulator/test_profile.py -v`
 Expected: ALL PASS
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 ```bash
 git add src/dev_simulator/profile.py src/test/dev_simulator/test_profile.py
 git commit -m "feat(dev-simulator): add RoastSpec and generate_profile with cosine interpolation"
@@ -151,7 +151,7 @@ git commit -m "feat(dev-simulator): add RoastSpec and generate_profile with cosi
 
 **Spec reference:** §5.5 (Event Schedule), §8.1 (Time Model)
 
-- [ ] **Step 1: Write failing tests for EventScheduler**
+- [x] **Step 1: Write failing tests for EventScheduler**
 
 Create `src/test/dev_simulator/test_event_scheduler.py` with tests from §10.1:
 - `test_fire_at_exact_time` — t=300 fires CHARGE (t=0) + DRY (t=300)
@@ -166,7 +166,7 @@ Use `asyncio.get_event_loop().run_until_complete()` for sync test wrappers.
 Run: `cd src && python3 -m pytest test/dev_simulator/test_event_scheduler.py -v`
 Expected: FAIL (ModuleNotFoundError)
 
-- [ ] **Step 2: Implement event_scheduler.py**
+- [x] **Step 2: Implement event_scheduler.py**
 
 Create `src/dev_simulator/event_scheduler.py` with:
 1. `EventScheduler(events: list[tuple[float, dict]], start_mode: str = "auto")`
@@ -180,7 +180,7 @@ Create `src/dev_simulator/event_scheduler.py` with:
 Run: `cd src && python3 -m pytest test/dev_simulator/test_event_scheduler.py -v`
 Expected: ALL PASS
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 ```bash
 git add src/dev_simulator/event_scheduler.py src/test/dev_simulator/test_event_scheduler.py
 git commit -m "feat(dev-simulator): add EventScheduler with fire-once and manual mode"
@@ -196,7 +196,7 @@ git commit -m "feat(dev-simulator): add EventScheduler with fire-once and manual
 
 **Spec reference:** §6 (WebSocket Protocol), §8 (Error Handling), §8.1 (Time Model)
 
-- [ ] **Step 1: Write failing tests for AsyncServer**
+- [x] **Step 1: Write failing tests for AsyncServer**
 
 Create `src/test/dev_simulator/test_ws_server.py` with integration tests from §10.2:
 - `test_id_echo` — response id matches request id
@@ -212,7 +212,7 @@ Use `RoastSpec(noise_model="none")` for deterministic values.
 Run: `cd src && python3 -m pytest test/dev_simulator/test_ws_server.py -v`
 Expected: FAIL (ModuleNotFoundError)
 
-- [ ] **Step 2: Implement ws_server.py**
+- [x] **Step 2: Implement ws_server.py**
 
 Create `src/dev_simulator/ws_server.py` with three components:
 
@@ -255,7 +255,7 @@ class ServerState:
 Run: `cd src && python3 -m pytest test/dev_simulator/test_ws_server.py -v`
 Expected: ALL PASS
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 ```bash
 git add src/dev_simulator/ws_server.py src/test/dev_simulator/test_ws_server.py
 git commit -m "feat(dev-simulator): add AsyncServer with time model and WebSocket protocol"
@@ -270,7 +270,7 @@ git commit -m "feat(dev-simulator): add AsyncServer with time model and WebSocke
 
 **Spec reference:** §9.6 (CLI Surface), §8.5 (Logging), §8.6 (Resources & Exit)
 
-- [ ] **Step 1: Implement CLI entry point**
+- [x] **Step 1: Implement CLI entry point**
 
 Create `src/dev_simulator/artisan_simulator.py` with:
 1. `parse_args(argv) -> Namespace` — argparse with all flags from spec §9.6:
@@ -280,7 +280,7 @@ Create `src/dev_simulator/artisan_simulator.py` with:
    - `--noise-std` (default: 0.3), `--noise-model {gaussian,ar1,none}` (default: ar1)
    - `--log-level {debug,info,warning,error}` (default: info)
    - `--charge-bt`, `--turn-bt`, `--dry-bt`, `--fcs-bt`, `--fce-bt`, `--scs-bt`, `--drop-bt`
-   - `--turn-t`, `--dry-t`, `--fcs-t`, `--fce-t`, `--scs-t`, `--drop-t`
+   - `--charge-t`, `--turn-t`, `--dry-t`, `--fcs-t`, `--fce-t`, `--scs-t`, `--drop-t`
 2. `build_spec(args) -> RoastSpec` — merge preset defaults with CLI overrides
 3. `main()` — configure logging per §8.5, build spec, generate profile, create EventScheduler, create AsyncServer, `asyncio.run(server.run())`
 4. Port fallback: if port 80 fails with OSError, try port 8080 with warning
@@ -288,7 +288,7 @@ Create `src/dev_simulator/artisan_simulator.py` with:
 
 Verify: `cd src && python3 -m dev_simulator.artisan_simulator --help`
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 ```bash
 git add src/dev_simulator/artisan_simulator.py
 git commit -m "feat(dev-simulator): add CLI entry point with argparse"
@@ -303,7 +303,7 @@ git commit -m "feat(dev-simulator): add CLI entry point with argparse"
 
 **Spec reference:** §3 (User Scenario), §7 (UI Configuration), §10.3 (Manual E2E Checklist)
 
-- [ ] **Step 1: Write README**
+- [x] **Step 1: Write README**
 
 Create `src/dev_simulator/README.md` covering:
 1. What it is — one paragraph
@@ -320,22 +320,24 @@ git add src/dev_simulator/README.md
 git commit -m "docs(dev-simulator): add usage guide and ArtisanZ configuration instructions"
 ```
 
+Pending explicit user request to commit; `AGENTS.md` forbids committing without an explicit request.
+
 ---
 
 ## Self-Review Checklist
 
 Before marking this plan complete, verify:
 
-- [ ] Spec coverage: Every section in the design spec has a corresponding task
+- [x] Spec coverage: Every section in the design spec has a corresponding task
   - §5 Curve Model → Task 1
   - §5.5 Event Schedule → Task 2
   - §6 WebSocket Protocol → Task 3
   - §8 Error Handling → Task 3 (ws_server) + Task 4 (CLI)
   - §9.4 Phases → Tasks 0-5
   - §10 Testing → Tasks 1-3
-- [ ] No placeholders: No TBD, TODO, "implement later", "similar to above"
-- [ ] Type consistency: RoastSpec fields match between profile.py and artisan_simulator.py
-- [ ] Profile dict format: `timex` in ms, `temp1`=ET, `temp2`=BT, `mode`="C"
-- [ ] Simulator.read() contract: tx in ms, returns (et, bt)
-- [ ] WebSocket channel swap: data keys are "BT" and "ET" (not "temp1"/"temp2")
-- [ ] Event messages match spec §5.5 exactly
+- [x] No placeholders: No TBD, TODO, "implement later", "similar to above"
+- [x] Type consistency: RoastSpec fields match between profile.py and artisan_simulator.py
+- [x] Profile dict format: `timex` in ms, `temp1`=ET, `temp2`=BT, `mode`="C"
+- [x] Simulator.read() contract: tx in ms, returns (et, bt)
+- [x] WebSocket channel swap: data keys are "BT" and "ET" (not "temp1"/"temp2")
+- [x] Event messages match spec §5.5 exactly
