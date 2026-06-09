@@ -350,7 +350,7 @@ logging.basicConfig(
 ### 9.1 File Layout
 
 ```
-src/dev-simulator/
+src/dev_simulator/
 ├── __init__.py                       # empty
 ├── artisan_simulator.py              # CLI entry, asyncio main
 ├── profile.py                        # RoastSpec + generate_profile()
@@ -359,8 +359,7 @@ src/dev-simulator/
 └── README.md                         # usage + ArtisanZ config + troubleshooting
 
 src/test/dev_simulator/
-├── __init__.py
-├── conftest.py                       # pytest fixtures
+├── conftest.py                       # pytest fixtures; no __init__.py to avoid shadowing src/dev_simulator
 ├── test_profile.py                   # profile generation unit tests
 ├── test_event_scheduler.py           # event scheduling unit tests
 └── test_ws_server.py                 # integration tests (websockets client)
@@ -393,7 +392,7 @@ python3 -m pytest test/dev_simulator/ -q
 
 | Phase | Output | Test | Estimate |
 |:---:|---|---|:---:|
-| 0 | `__init__.py` + directory scaffolding | — | 5 min |
+| 0 | package `__init__.py` + test directory scaffolding (no test package `__init__.py`) | — | 5 min |
 | 1 | `profile.py`: `RoastSpec` + `generate_profile()` | `test_profile.py` | 30 min |
 | 2 | `event_scheduler.py`: `EventScheduler` | `test_event_scheduler.py` | 20 min |
 | 3 | `ws_server.py`: `AsyncServer` with time model | `test_ws_server.py` | 45 min |
@@ -465,7 +464,8 @@ python3 -m dev_simulator.artisan_simulator [--preset {light,medium,dark,custom}]
                                             [--start-mode {auto,manual}]
                                             [--noise-std 0.3] [--noise-model {gaussian,ar1,none}]
                                             [--log-level {debug,info,warning,error}]
-                                            [--charge-bt 180] [--turn-bt 95] [--dry-bt 152]
+                                            [--charge-t 0] [--charge-bt 180]
+                                            [--turn-bt 95] [--dry-bt 152]
                                             [--fcs-bt 193] [--fce-bt 202] [--scs-bt 215]
                                             [--drop-bt 218]
                                             [--turn-t 90] [--dry-t 300] [--fcs-t 570]
