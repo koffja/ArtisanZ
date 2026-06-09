@@ -43,12 +43,33 @@ class RoastSpec:
         _validate_finite(self.fce_t, self.fce_bt, self.fce_et)
         _validate_finite(self.scs_t, self.scs_bt, self.scs_et)
         _validate_finite(self.drop_t, self.drop_bt, self.drop_et)
+        _validate_node_times(
+            ("charge_t", self.charge_t),
+            ("turn_t", self.turn_t),
+            ("dry_t", self.dry_t),
+            ("fcs_t", self.fcs_t),
+            ("fce_t", self.fce_t),
+            ("scs_t", self.scs_t),
+            ("drop_t", self.drop_t),
+        )
 
 
 def _validate_finite(*values: float) -> None:
     for v in values:
         if not math.isfinite(v):
             raise ValueError(f"RoastSpec field must be finite, got {v}")
+
+
+def _validate_node_times(*nodes: tuple[str, float]) -> None:
+    previous_name, previous_t = nodes[0]
+    if previous_t < 0.0:
+        raise ValueError(f"{previous_name} must be non-negative: {previous_t}")
+    for name, t in nodes[1:]:
+        if t <= previous_t:
+            raise ValueError(
+                f"{name} must be later than {previous_name}: {t} <= {previous_t}"
+            )
+        previous_name, previous_t = name, t
 
 
 def _cosine_ease(t: float, t0: float, t1: float, v0: float, v1: float) -> float:

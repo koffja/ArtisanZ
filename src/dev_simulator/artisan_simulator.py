@@ -40,6 +40,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--log-level", choices=("debug", "info", "warning", "error"), default="info")
 
     parser.add_argument("--charge-bt", type=float)
+    parser.add_argument("--charge-t", type=float)
     parser.add_argument("--turn-bt", type=float)
     parser.add_argument("--dry-bt", type=float)
     parser.add_argument("--fcs-bt", type=float)
@@ -61,6 +62,7 @@ def build_spec(args: argparse.Namespace) -> RoastSpec:
     spec = _preset_spec(args.preset)
     overrides = {
         "charge_bt": args.charge_bt,
+        "charge_t": args.charge_t,
         "turn_bt": args.turn_bt,
         "dry_bt": args.dry_bt,
         "fcs_bt": args.fcs_bt,
@@ -137,13 +139,14 @@ def build_server(args: argparse.Namespace) -> AsyncServer:
     spec = build_spec(args)
     profile = generate_profile(spec)
     scheduler = EventScheduler(default_events(), start_mode=args.start_mode)
+    path = args.path.strip("/") or "WebSocket"
     _log.info(
         "Generated %s preset profile: %d points, %.0fs duration",
         args.preset,
         len(profile["timex"]),
         spec.drop_t,
     )
-    _log.info("ArtisanZ endpoint: ws://%s:%d/%s", args.host, args.port, args.path)
+    _log.info("ArtisanZ endpoint: ws://%s:%d/%s", args.host, args.port, path)
     _log.info("Noise: model=%s, std=%.2f°C", args.noise_model, args.noise_std)
     _log.info("Start mode: %s", args.start_mode)
     return AsyncServer(
@@ -151,7 +154,7 @@ def build_server(args: argparse.Namespace) -> AsyncServer:
         scheduler=scheduler,
         host=args.host,
         port=args.port,
-        path=args.path,
+        path=path,
         noise_model=args.noise_model,
         noise_std=args.noise_std,
     )

@@ -62,6 +62,18 @@ class TestRoastSpecValidation:
         with pytest.raises(ValueError):
             RoastSpec(dry_t=float("-inf"))
 
+    def test_negative_charge_time_rejected(self):
+        with pytest.raises(ValueError, match="charge_t"):
+            RoastSpec(charge_t=-1.0)
+
+    def test_out_of_order_node_time_rejected(self):
+        with pytest.raises(ValueError, match="dry_t"):
+            RoastSpec(dry_t=80.0)
+
+    def test_duplicate_node_time_rejected(self):
+        with pytest.raises(ValueError, match="dry_t"):
+            RoastSpec(dry_t=90.0)
+
 
 # ---------------------------------------------------------------------------
 # generate_profile
