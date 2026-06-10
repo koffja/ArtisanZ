@@ -484,21 +484,21 @@ extratimeout=0.5, 0.5, 0.5, 0.5, 0.5
 
 [ExtraDev]
 devicetablecolumnwidths=230, 80, 80, 80, 80, 198, 154, 45, 47, 42, 43, 68, 70, 63, 63
-extraCurveVisibility1=true, true, true, true, false, true, true, true, true, true
-extraCurveVisibility2=true, false, true, false, false, true, true, true, true, true
+extraCurveVisibility1=false, false, true, true, false, true, true, true, true, true
+extraCurveVisibility2=false, false, true, false, false, true, true, true, true, true
 extraDelta1=true, false, false, true, false, false, false, false, false, false
 extraDelta2=true, false, true, false, true, false, false, false, false, false
 extraFill1=0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 extraFill2=0, 0, 0, 0, 0, 0, 0, 0, 0, 0
-extraLCDvisibility1=true, false, true, false, false, false, false, false, false, false
-extraLCDvisibility2=false, true, false, false, false, false, false, false, false, false
+extraLCDvisibility1=true, true, false, false, true, false, false, false, false, false
+extraLCDvisibility2=true, true, false, false, true, false, false, false, false, false
 extradevicecolor1=#4E7180, #8EA9B4, #A68BAC, #C18A6B, #8C7768
 extradevicecolor2=#A76557, #B79A70, #879474, #79958A, #7FA0AE
 extradevices=25, 25, 25, 25, 25
 extramathexpression1="(pDRY*R2/60 if pDRY >= 0 and R2 > 0 else 0)", "(Y2 + R2 if R2 != -1 else 0)", "(Y1-Y2)", "((R2 - R2[-3]) if t > 6 and R2 != -1 else 0)", "(100 * (t-t{FCs}) / (t-t{CHARGE}) if FCs != -1 and CHARGE != -1 and t > t{FCs} and t{FCs} > t{CHARGE} else 0)"
 extramathexpression2="(pFCs*R2/60 if pFCs >= 0 and R2 > 0 else 0)", "(pFCs/60 if pFCs >= 0 else 0)", "(R1-R2 if R1 != -1 and R2 != -1 else 0)", "(pDRY/60 if pDRY >= 0 else 0)", "((Y2-Y2{FCs})/(dFCs/60) if FCs != -1 and dFCs > 0 else 0)"
-extraname1=BT Δ Dry, BT +60s, ET-BT Δ, RoR Accel, Post-FC %
-extraname2=BT Δ FCs, ETA FCs, ΔETBT Slope, ETA Dry, Post-FC Avg RoR
+extraname1=转黄升幅, 一分钟豆温, 炉豆温差, 升温加速, 发展占比
+extraname2=一爆升幅, 一爆倒数, 温差趋势, 转黄倒数, 发展均升
 
 [ExtraEventButtons]
 buttonlistmaxlen=14
