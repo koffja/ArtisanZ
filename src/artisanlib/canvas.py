@@ -155,8 +155,6 @@ class AmbientWorker(QObject):
     def __init__(self, aw:'ApplicationWindow') -> None:
         super().__init__()
         self.aw = aw
-        self.charge_manager: 'ChargeTargetManager | None' = None
-        self.charge_target_annotation: Annotation | None = None
 
     def run(self) -> None:
         libtime.sleep(2.5) # wait a moment after ON until all other devices are attached
@@ -394,6 +392,8 @@ class tgraphcanvas(QObject):
 
         self.aw = aw
         self.canvas = MplCanvas(parent, dpi, self.tight_layout_params, aw)
+        self.charge_manager: 'ChargeTargetManager | None' = None
+        self.charge_target_annotation: Annotation | None = None
 
         #default palette of colors
         self.locale_str:str = locale
@@ -18414,8 +18414,10 @@ class tgraphcanvas(QObject):
         return et - bt
 
     def draw_charge_target_annotation(self) -> None:
-        if self.charge_manager is None:
+        if not hasattr(self, 'charge_manager') or self.charge_manager is None:
             return
+        if not hasattr(self, 'charge_target_annotation'):
+            self.charge_target_annotation = None
 
         # Check for charge event
         is_charged = False

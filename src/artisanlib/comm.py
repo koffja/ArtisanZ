@@ -1902,9 +1902,18 @@ class serialport:
         return self.aw.qmc.extraArduinoTX,t,t
 
     def WSextractData(self, channel:int, data:dict[str, Any]) -> float:
-        if self.aw.ws.channel_nodes[channel] != '' and self.aw.ws.channel_nodes[channel] in data:
+        data_key = ''
+        channel_node = self.aw.ws.channel_nodes[channel]
+        if channel_node != '' and channel_node in data:
+            data_key = channel_node
+        elif self.aw.ws.request_data_command != '':
+            channel_request = self.aw.ws.channel_requests[channel]
+            if channel_request != '' and channel_request in data:
+                data_key = channel_request
+
+        if data_key != '':
             # channel active and data available
-            res:float = float(data[self.aw.ws.channel_nodes[channel]])
+            res:float = float(data[data_key])
             # convert temperature scale
             m = self.aw.ws.channel_modes[channel]
             if m == 1 and self.aw.qmc.mode == 'F':

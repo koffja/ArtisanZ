@@ -438,6 +438,22 @@ class TestCommModuleIntegration:
 class TestSerialportClass:
     """Test serialport class functionality."""
 
+    def test_websocket_extract_data_falls_back_to_channel_request_key(self) -> None:
+        """Use request labels as data keys when full WebSocket reads return named data."""
+        from artisanlib.comm import serialport
+
+        ser = serialport.__new__(serialport)
+        ser.aw = Mock()
+        ser.aw.ws = Mock()
+        ser.aw.ws.channel_nodes = ['1', '2']
+        ser.aw.ws.channel_requests = ['BT', 'ET']
+        ser.aw.ws.channel_modes = [1, 1]
+        ser.aw.ws.request_data_command = 'getData'
+        ser.aw.qmc = Mock()
+        ser.aw.qmc.mode = 'C'
+
+        assert ser.WSextractData(0, {'BT': 114.39, 'ET': 176.8}) == 114.39
+
     def test_serialport_initialization(self) -> None:
         """Test serialport class initialization."""
         # Arrange

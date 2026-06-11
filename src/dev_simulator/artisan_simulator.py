@@ -32,7 +32,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="ArtisanZ synthetic BT/ET WebSocket simulator")
     parser.add_argument("--preset", choices=("light", "medium", "dark", "custom"), default="medium")
     parser.add_argument("--host", default="127.0.0.1")
-    parser.add_argument("--port", type=int, default=80)
+    parser.add_argument("--port", type=int, default=9090)
     parser.add_argument("--path", default="WebSocket")
     parser.add_argument("--start-mode", choices=("auto", "manual"), default="auto")
     parser.add_argument("--noise-std", type=float, default=0.3)
@@ -161,15 +161,15 @@ def build_server(args: argparse.Namespace) -> AsyncServer:
 
 
 async def run_with_fallback(args: argparse.Namespace) -> None:
-    """Run the server, falling back from port 80 to 8080 on bind errors."""
+    """Run the server, falling back to next available port on bind errors."""
     server = build_server(args)
     try:
         await server.run()
     except OSError as exc:
-        if args.port != 80:
+        if args.port != 9090:
             raise
         fallback_port = 8080
-        _log.warning("Could not bind to port 80 (%s); falling back to port %d", exc, fallback_port)
+        _log.warning("Could not bind to port %d (%s); falling back to port %d", args.port, exc, fallback_port)
         fallback_args = argparse.Namespace(**vars(args))
         fallback_args.port = fallback_port
         await build_server(fallback_args).run()

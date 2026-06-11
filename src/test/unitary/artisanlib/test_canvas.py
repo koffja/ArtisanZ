@@ -312,9 +312,37 @@ with patch('artisanlib.util.getDirectory') as mock_get_dir, patch(
         MockQApplication._mock_instance = app
 
     from artisanlib.canvas import tgraphcanvas
+    from artisanlib.charge_manager import ChargeTargetManager
 
 
 # Modules are now imported
+
+
+def test_draw_charge_target_annotation_handles_fresh_canvas_slot() -> None:
+    """Charge target drawing should not fail before the annotation slot is set."""
+    class MinimalChargeCanvas:
+        pass
+
+    canvas = MinimalChargeCanvas()
+    manager = ChargeTargetManager()
+    manager.update_settings(160.0, 60.0, True, temp_tolerance=1.0, ror_tolerance=6.0)
+    canvas.charge_manager = manager
+    canvas.temp1 = [176.8]
+    canvas.temp2 = [114.39]
+    canvas.delta2 = [60.0]
+    canvas.timex = [0.0]
+    canvas.timeindex = []
+    canvas.ax = Mock()
+    canvas.ax.get_xlim.return_value = (0.0, 300.0)
+    canvas.ax.get_ylim.return_value = (0.0, 250.0)
+    canvas._charge_window_average_delta = tgraphcanvas._charge_window_average_delta.__get__(
+        canvas, MinimalChargeCanvas
+    )
+    canvas._charge_et_bt_gap = tgraphcanvas._charge_et_bt_gap.__get__(canvas, MinimalChargeCanvas)
+
+    tgraphcanvas.draw_charge_target_annotation(canvas)
+
+    assert canvas.charge_target_annotation is not None
 
 
 @pytest.fixture(scope='session', autouse=True)

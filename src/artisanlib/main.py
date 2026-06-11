@@ -27935,7 +27935,7 @@ class ApplicationWindow(QMainWindow):
     def showChargeTargetDialog(self, _:bool = False) -> None:
         dlg = ChargeTempRorDlg(self, self.charge_manager)
         if dlg.exec():
-            self.qmc.update()
+            self.qmc.redraw(recomputeAllDeltas=False)
 
 ###########################################################################################################################################
 ###########################################################################################################################################

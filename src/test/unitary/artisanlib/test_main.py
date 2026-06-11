@@ -314,6 +314,22 @@ def sample_profile_data() -> dict[str, Any]:
 class TestLoadFile:
     """Test the loadFile functionality of ApplicationWindow."""
 
+    def test_show_charge_target_dialog_redraws_canvas_after_save(
+        self, mock_application_window: Mock
+    ) -> None:
+        """Test saving charge target settings redraws the graph canvas."""
+        aw = ApplicationWindow.__new__(ApplicationWindow)
+        aw.qmc = mock_application_window.qmc
+        aw.charge_manager = Mock()
+
+        mock_dialog = Mock()
+        mock_dialog.exec.return_value = True
+
+        with patch('artisanlib.main.ChargeTempRorDlg', return_value=mock_dialog):
+            aw.showChargeTargetDialog()
+
+        mock_application_window.qmc.redraw.assert_called_once_with(recomputeAllDeltas=False)
+
     def test_load_file_success(self, mock_application_window: Mock) -> None:
         """Test successful loading of a valid profile file."""
         # Arrange
