@@ -44,6 +44,10 @@ class designerconfigDlg(ArtisanDialog):
         charge = QLabel(QApplication.translate('Label', 'CHARGE'))
         charge.setAlignment(Qt.AlignmentFlag.AlignRight)
         charge.setStyleSheet('background-color: #f07800')
+        self.tp = QCheckBox(QApplication.translate('Label', 'TP'))
+        self.tp.setStyleSheet('background-color: orange')
+        self.tp.setChecked(self.aw.qmc.designer_tp_enabled)
+        self.tp.clicked.connect(self.changetp)
         self.dryend = QCheckBox(QApplication.translate('Label','DRY END'))
         self.dryend.setStyleSheet('background-color: orange')
         self.fcs = QCheckBox(QApplication.translate('Label','FC START'))
@@ -191,6 +195,16 @@ class designerconfigDlg(ArtisanDialog):
         self.Edit4etcopy = self.Edit4et.text()
         self.Edit5etcopy = self.Edit5et.text()
         self.Edit6etcopy = self.Edit6et.text()
+        self.EditTP = QLineEdit(stringfromseconds(self.aw.qmc.designer_tp_time))
+        self.EditTP.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self.EditTP.setMaximumWidth(maxwidth)
+        self.EditTP.setValidator(QRegularExpressionValidator(regextime, self))
+        self.EditTPbt = QLineEdit(f'{self.aw.qmc.designer_tp_bt:.1f}')
+        self.EditTPbt.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self.EditTPbt.setMaximumWidth(maxwidth)
+        self.EditTPbt.setValidator(QRegularExpressionValidator(regextemp, self))
+        self.EditTPcopy = self.EditTP.text()
+        self.EditTPbtcopy = self.EditTPbt.text()
         regextime = QRegularExpression(r'^-?[0-9]?[0-9]?[0-9][:,h][0-5][0-9]$')
         self.Edit0.setValidator(QRegularExpressionValidator(regextime,self))
         self.Edit1.setValidator(QRegularExpressionValidator(regextime,self))
@@ -258,30 +272,33 @@ class designerconfigDlg(ArtisanDialog):
         marksLayout.addWidget(self.Edit0,1,1)
         marksLayout.addWidget(self.Edit0bt,1,2)
         marksLayout.addWidget(self.Edit0et,1,3)
-        marksLayout.addWidget(self.dryend,2,0)
-        marksLayout.addWidget(self.Edit1,2,1)
-        marksLayout.addWidget(self.Edit1bt,2,2)
-        marksLayout.addWidget(self.Edit1et,2,3)
-        marksLayout.addWidget(self.fcs,3,0)
-        marksLayout.addWidget(self.Edit2,3,1)
-        marksLayout.addWidget(self.Edit2bt,3,2)
-        marksLayout.addWidget(self.Edit2et,3,3)
-        marksLayout.addWidget(self.fce,4,0)
-        marksLayout.addWidget(self.Edit3,4,1)
-        marksLayout.addWidget(self.Edit3bt,4,2)
-        marksLayout.addWidget(self.Edit3et,4,3)
-        marksLayout.addWidget(self.scs,5,0)
-        marksLayout.addWidget(self.Edit4,5,1)
-        marksLayout.addWidget(self.Edit4bt,5,2)
-        marksLayout.addWidget(self.Edit4et,5,3)
-        marksLayout.addWidget(self.sce,6,0)
-        marksLayout.addWidget(self.Edit5,6,1)
-        marksLayout.addWidget(self.Edit5bt,6,2)
-        marksLayout.addWidget(self.Edit5et,6,3)
-        marksLayout.addWidget(drop,7,0)
-        marksLayout.addWidget(self.Edit6,7,1)
-        marksLayout.addWidget(self.Edit6bt,7,2)
-        marksLayout.addWidget(self.Edit6et,7,3)
+        marksLayout.addWidget(self.tp,2,0)
+        marksLayout.addWidget(self.EditTP,2,1)
+        marksLayout.addWidget(self.EditTPbt,2,2)
+        marksLayout.addWidget(self.dryend,3,0)
+        marksLayout.addWidget(self.Edit1,3,1)
+        marksLayout.addWidget(self.Edit1bt,3,2)
+        marksLayout.addWidget(self.Edit1et,3,3)
+        marksLayout.addWidget(self.fcs,4,0)
+        marksLayout.addWidget(self.Edit2,4,1)
+        marksLayout.addWidget(self.Edit2bt,4,2)
+        marksLayout.addWidget(self.Edit2et,4,3)
+        marksLayout.addWidget(self.fce,5,0)
+        marksLayout.addWidget(self.Edit3,5,1)
+        marksLayout.addWidget(self.Edit3bt,5,2)
+        marksLayout.addWidget(self.Edit3et,5,3)
+        marksLayout.addWidget(self.scs,6,0)
+        marksLayout.addWidget(self.Edit4,6,1)
+        marksLayout.addWidget(self.Edit4bt,6,2)
+        marksLayout.addWidget(self.Edit4et,6,3)
+        marksLayout.addWidget(self.sce,7,0)
+        marksLayout.addWidget(self.Edit5,7,1)
+        marksLayout.addWidget(self.Edit5bt,7,2)
+        marksLayout.addWidget(self.Edit5et,7,3)
+        marksLayout.addWidget(drop,8,0)
+        marksLayout.addWidget(self.Edit6,8,1)
+        marksLayout.addWidget(self.Edit6bt,8,2)
+        marksLayout.addWidget(self.Edit6et,8,3)
         settingsLayout = QVBoxLayout()
         settingsLayout.addLayout(marksLayout)
         curvinessLayout = QHBoxLayout()
@@ -367,6 +384,20 @@ class designerconfigDlg(ArtisanDialog):
                 self.Edit0etcopy = self.Edit0et.text()
             except Exception: # pylint: disable=broad-except
                 self.Edit0et.setText(self.Edit0etcopy)
+        if self.tp.isChecked():
+            if self.EditTP.text() != self.EditTPcopy:
+                try:
+                    self.aw.qmc.designer_tp_time = stringtoseconds(str(self.EditTP.text()))
+                    self.EditTPcopy = self.EditTP.text()
+                except Exception:
+                    self.EditTP.setText(self.EditTPcopy)
+            if self.EditTPbt.text() != self.EditTPbtcopy:
+                try:
+                    self.aw.qmc.designer_tp_bt = float(self.EditTPbt.text())
+                    self.EditTPbtcopy = self.EditTPbt.text()
+                except Exception:
+                    self.EditTPbt.setText(self.EditTPbtcopy)
+        self.aw.qmc.designer_tp_enabled = self.tp.isChecked()
         if self.dryend.isChecked():
             if self.Edit1.text() != self.Edit1copy:
                 try:
@@ -567,6 +598,9 @@ class designerconfigDlg(ArtisanDialog):
         #reset designer
         self.aw.qmc.reset_designer()
         #update editboxes
+        self.tp.setChecked(True)
+        self.EditTP.setText(stringfromseconds(self.aw.qmc.designer_tp_time))
+        self.EditTPbt.setText(f'{self.aw.qmc.designer_tp_bt:.1f}')
         self.Edit0.setText(stringfromseconds(0))
         self.Edit1.setText(stringfromseconds(self.aw.qmc.designertimeinit[1]))
         self.Edit2.setText(stringfromseconds(self.aw.qmc.designertimeinit[2]))
@@ -596,6 +630,44 @@ class designerconfigDlg(ArtisanDialog):
         self.fce.setChecked(bool(self.aw.qmc.timeindex[3]))
         self.scs.setChecked(bool(self.aw.qmc.timeindex[4]))
         self.sce.setChecked(bool(self.aw.qmc.timeindex[5]))
+
+    @pyqtSlot(bool)
+    def changetp(self, _: bool = False) -> None:
+        if self.tp.isChecked():
+            try:
+                tp_time = stringtoseconds(self.EditTP.text())
+                if tp_time <= 0:
+                    self.tp.setChecked(False)
+                    return
+            except Exception:
+                self.tp.setChecked(False)
+                return
+            timez = stringtoseconds(self.EditTP.text()) + self.aw.qmc.timex[self.aw.qmc.timeindex[0]]
+            bt = float(self.EditTPbt.text())
+            self.aw.qmc.currentx = timez
+            self.aw.qmc.currenty = bt
+            newindex = self.aw.qmc.addpoint(manual=False)
+            if newindex is not None:
+                self.aw.qmc.temp2[newindex] = bt
+                self.aw.qmc.xaxistosm(redraw=False)
+                self.aw.qmc.redrawdesigner()
+        else:
+            tp_time = stringtoseconds(self.EditTP.text()) + self.aw.qmc.timex[self.aw.qmc.timeindex[0]]
+            closest_idx = None
+            min_diff = float('inf')
+            for i, t in enumerate(self.aw.qmc.timex):
+                if i in self.aw.qmc.timeindex:
+                    continue
+                diff = abs(t - tp_time)
+                if diff < min_diff:
+                    min_diff = diff
+                    closest_idx = i
+            if closest_idx is not None and min_diff < 10.0:
+                self.aw.qmc.currentx = self.aw.qmc.timex[closest_idx]
+                self.aw.qmc.currenty = self.aw.qmc.temp2[closest_idx]
+                self.aw.qmc.removepoint()
+                self.aw.qmc.xaxistosm(redraw=False)
+                self.aw.qmc.redrawdesigner()
 
     #adds deletes landmarks
     @pyqtSlot(bool)

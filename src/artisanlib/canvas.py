@@ -2173,6 +2173,10 @@ class tgraphcanvas(QObject):
         self.currentx:float = 0               #used to add point when right click
         self.currenty:float = 0               #used to add point when right click
         self.designertimeinit:list[float] = [50,300,540,560,660,700,800,900]
+        # TP (Turning Point) settings for Designer — independent of timeindex
+        self.designer_tp_enabled:bool = True
+        self.designer_tp_time:float = 90.0       # seconds from CHARGE
+        self.designer_tp_bt:float = 110.0         # BT in current mode (C/F)
         self.BTsplinedegree:Literal[1,2,3,4,5] = 3
         self.ETsplinedegree:Literal[1,2,3,4,5] = 3
         self.reproducedesigner:int = 0      #flag to add events to help reproduce (replay) the profile: 0 = none; 1 = sv; 2 = ramp
@@ -18135,6 +18139,11 @@ class tgraphcanvas(QObject):
             self.adderror((QApplication.translate('Error Message','Exception:') + ' loadpoints() {0}').format(str(e)),getattr(exc_tb, 'tb_lineno', '?'))
 
 
+    def _validate_tp_time(self, tp_time: float) -> bool:
+        """Validate that TP time is positive and reasonable."""
+        return tp_time > 0.0
+
+
     #used to start designer from scratch (not from a loaded profile)
     def designerinit(self) -> None:
         #init start vars        #CH, DE,      FCs,      FCe,       SCs,         SCe,         Drop,      COOL
@@ -18156,23 +18165,32 @@ class tgraphcanvas(QObject):
                 self.temp2.append(self.designertemp2init[i])
                 self.timeindex[i] = idx
                 idx += 1
-        # add TP
-        if self.mode == 'C':
-            self.timex.insert(1,1.5*60)
-            self.temp1.insert(1,230)
-            self.temp2.insert(1,110)
-            # add one intermediate point between DRY and FCs
-            self.timex.insert(3,6*60)
-            self.temp1.insert(3,230)
-            self.temp2.insert(3,174)
+        # add TP (Turning Point) — uses configurable attributes
+        if self.designer_tp_enabled:
+            tp_time = self.designer_tp_time
+            tp_bt = self.designer_tp_bt
+        elif self.mode == 'C':
+            tp_time = 1.5 * 60
+            tp_bt = 110.0
         elif self.mode == 'F':
-            self.timex.insert(1,1.5*60)
-            self.temp1.insert(1,446)
-            self.temp2.insert(1,230)
+            tp_time = 1.5 * 60
+            tp_bt = 230.0
+        else:
+            tp_time = None
+
+        if tp_time is not None:
+            self.timex.insert(1, tp_time)
+            self.temp1.insert(1, self.temp1[0])  # ET stays same as CHARGE
+            self.temp2.insert(1, tp_bt)
             # add one intermediate point between DRY and FCs
-            self.timex.insert(3,6*60)
-            self.temp1.insert(3,446)
-            self.temp2.insert(3,345)
+            if self.mode == 'C':
+                self.timex.insert(3, 6 * 60)
+                self.temp1.insert(3, 230)
+                self.temp2.insert(3, 174)
+            elif self.mode == 'F':
+                self.timex.insert(3, 6 * 60)
+                self.temp1.insert(3, 446)
+                self.temp2.insert(3, 345)
         for x,_ in enumerate(self.timeindex):
             if self.timeindex[x] >= 2:
                 self.timeindex[x] += 2
@@ -18296,9 +18314,15 @@ class tgraphcanvas(QObject):
                 self.currentx = lptime
                 self.currenty = lptemp2
                 self.addpoint(manual=False)
+                # Populate TP attributes for Designer dialog
+                self.designer_tp_enabled = True
+                self.designer_tp_time = lptime - self.timex[self.timeindex[0]]  # relative to CHARGE
+                self.designer_tp_bt = lptemp2
                 # reset cursor coordinates
                 self.currentx = 0
                 self.currenty = 0
+            else:
+                self.designer_tp_enabled = False
 
         self.timealign(redraw=False)
 
