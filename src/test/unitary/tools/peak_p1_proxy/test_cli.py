@@ -1,3 +1,4 @@
+import serial
 import tools.peak_p1_proxy.cli as cli
 from tools.peak_p1_proxy.cli import build_parser, main
 
@@ -69,6 +70,32 @@ def test_dry_run_can_open_pyserial_loop_urls(capsys) -> None:
 
     assert exit_code == 0
     assert "dry run ok" in capsys.readouterr().out
+
+
+def test_dry_run_reports_visible_ports_on_open_failure(monkeypatch, capsys) -> None:
+    def fail_open(port: str, baudrate: int, timeout: float) -> None:
+        raise serial.SerialException(f"could not open {port}")
+
+    monkeypatch.setattr("tools.peak_p1_proxy.cli.check_serial_port", fail_open)
+    monkeypatch.setattr("tools.peak_p1_proxy.cli.iter_port_descriptions", lambda: ["COM5 FT232R"])
+
+    exit_code = main(
+        [
+            "--real-port",
+            "missing-port",
+            "--artisan-port",
+            "loop://",
+            "--cropster-port",
+            "loop://",
+            "--dry-run",
+        ]
+    )
+
+    output = capsys.readouterr().out
+    assert exit_code == 2
+    assert "dry run failed" in output
+    assert "missing-port" in output
+    assert "COM5 FT232R" in output
 
 
 def test_main_passes_cropster_mapping_options_to_runtime(monkeypatch) -> None:

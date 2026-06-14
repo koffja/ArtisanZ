@@ -79,9 +79,16 @@ def main(argv: list[str] | None = None) -> int:
     _require_ports(args, parser)
 
     if args.dry_run:
-        check_serial_port(args.real_port, args.real_baud, 0.4)
-        check_serial_port(args.artisan_port, 115200, 0.4)
-        check_serial_port(args.cropster_port, 115200, 0.4)
+        try:
+            check_serial_port(args.real_port, args.real_baud, 0.4)
+            check_serial_port(args.artisan_port, 115200, 0.4)
+            check_serial_port(args.cropster_port, 115200, 0.4)
+        except serial.SerialException as exc:
+            print(f"dry run failed: {exc}")
+            print("visible ports:")
+            for description in iter_port_descriptions():
+                print(description)
+            return 2
         print("dry run ok")
         return 0
 
