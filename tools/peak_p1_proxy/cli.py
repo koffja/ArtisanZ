@@ -3,12 +3,22 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
+from typing import Final
 
 import serial
 import serial.tools.list_ports
 
 from .model import SerialSettings
 from .runtime import ProxyRuntime
+
+try:
+    import termios
+except ImportError:  # pragma: no cover - exercised on Windows
+    TERMIOS_ERROR_TYPES: Final[tuple[type[BaseException], ...]] = ()
+else:
+    TERMIOS_ERROR_TYPES = (termios.error,)
+
+SERIAL_OPEN_ERRORS = (serial.SerialException, OSError, *TERMIOS_ERROR_TYPES)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -27,6 +37,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--cropster-register-bt", type=int, default=0)
     parser.add_argument("--cropster-register-exhaust", type=int, default=3)
     parser.add_argument("--cropster-register-3-source", choices=["exhaust", "et"], default="exhaust")
+    parser.add_argument("--no-auto-reconnect", dest="auto_reconnect", action="store_false")
+    parser.set_defaults(auto_reconnect=True)
+    parser.add_argument("--reconnect-after-failures", type=int, default=3)
+    parser.add_argument("--reconnect-delay", type=float, default=2.0)
     parser.add_argument("--list-ports", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--verbose", action="store_true")
@@ -52,6 +66,23 @@ def check_serial_port(port: str, baudrate: int, timeout: float) -> None:
         timeout=timeout,
     ):
         return None
+
+
+def _looks_like_driver_config_error(exc: BaseException) -> bool:
+    return getattr(exc, "errno", None) == 22 or "Invalid argument" in str(exc)
+
+
+def print_serial_error(prefix: str, exc: BaseException) -> None:
+    print(f"{prefix}: {exc}")
+    print("visible ports:")
+    for description in iter_port_descriptions():
+        print(description)
+    if _looks_like_driver_config_error(exc):
+        print(
+            "hint: macOS reported a USB serial driver configuration error. "
+            "Close Artisan/Cropster/proxy processes, unplug the Peak P1 USB cable, "
+            "wait a few seconds, then plug it back in."
+        )
 
 
 def _require_ports(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
@@ -88,11 +119,8 @@ def main(argv: list[str] | None = None) -> int:
             check_serial_port(args.real_port, args.real_baud, 0.4)
             check_serial_port(args.artisan_port, 115200, 0.4)
             check_serial_port(args.cropster_port, 115200, 0.4)
-        except serial.SerialException as exc:
-            print(f"dry run failed: {exc}")
-            print("visible ports:")
-            for description in iter_port_descriptions():
-                print(description)
+        except SERIAL_OPEN_ERRORS as exc:
+            print_serial_error("dry run failed", exc)
             return 2
         print("dry run ok")
         return 0
@@ -112,12 +140,19 @@ def main(argv: list[str] | None = None) -> int:
         cropster_bt_register=args.cropster_register_bt,
         cropster_exhaust_register=args.cropster_register_exhaust,
         cropster_register_3_source=args.cropster_register_3_source,
+        auto_reconnect=args.auto_reconnect,
+        reconnect_after_failures=args.reconnect_after_failures,
+        reconnect_delay=args.reconnect_delay,
     )
     try:
         runtime.run()
     except KeyboardInterrupt:
         runtime.stop()
         return 0
+    except SERIAL_OPEN_ERRORS as exc:
+        runtime.stop()
+        print_serial_error("proxy startup failed", exc)
+        return 2
     return 0
 
 

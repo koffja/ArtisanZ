@@ -1,12 +1,13 @@
 from tools.peak_p1_proxy.cache import TemperatureCache
 from tools.peak_p1_proxy.modbus_rtu import parse_request
-from tools.peak_p1_proxy.model import TemperatureSample
+from tools.peak_p1_proxy.model import SerialSettings, TemperatureSample
 from tools.peak_p1_proxy.runtime import (
     ArtisanTc4Responder,
     CropsterModbusResponder,
     CropsterSerialServer,
     P1ModbusPoller,
     P1Poller,
+    ReconnectingP1Runner,
 )
 
 
@@ -40,6 +41,30 @@ class FakeByteSerial(FakeSerial):
         if rest:
             self.chunks.insert(0, rest)
         return data
+
+
+class ClosableFakeSerial:
+    def __init__(self, should_fail: bool) -> None:
+        self.should_fail = should_fail
+        self.closed = False
+
+    def close(self) -> None:
+        self.closed = True
+
+
+class FakePoller:
+    def __init__(self, serial_port, cache, clock=None, frame_logger=None, **kwargs) -> None:
+        self.serial_port = serial_port
+        self.cache = cache
+        self.calls = 0
+
+    def poll_once(self):
+        self.calls += 1
+        if self.serial_port.should_fail:
+            raise RuntimeError("short Modbus response: expected 3, got 0")
+        current = sample(timestamp=10.0 + self.calls)
+        self.cache.update(current)
+        return current
 
 
 def sample(timestamp: float = 10.0) -> TemperatureSample:
@@ -88,6 +113,35 @@ def test_modbus_poller_reads_register_block_and_updates_cache() -> None:
     assert current.exhaust == 171.2
     assert current.inlet == 168.2
     assert current.at == 171.2
+    assert cache.get() == current
+
+
+def test_reconnecting_runner_reopens_real_port_after_repeated_poll_failures() -> None:
+    cache = TemperatureCache(stale_after=5.0, clock=lambda: 20.0)
+    opened = [ClosableFakeSerial(True), ClosableFakeSerial(True), ClosableFakeSerial(False)]
+    sleeps: list[float] = []
+
+    def opener(settings: SerialSettings):
+        return opened.pop(0)
+
+    runner = ReconnectingP1Runner(
+        real_settings=SerialSettings("COM5"),
+        cache=cache,
+        poller_factory=FakePoller,
+        open_serial_fn=opener,
+        poll_interval=0.0,
+        reconnect_after_failures=1,
+        reconnect_delay=0.25,
+        sleep_fn=sleeps.append,
+    )
+
+    runner.run_once()
+    runner.run_once()
+    current = runner.run_once()
+
+    assert current is not None
+    assert current.bt == 159.8
+    assert sleeps == [0.25, 0.25]
     assert cache.get() == current
 
 

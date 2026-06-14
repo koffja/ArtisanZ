@@ -1,4 +1,5 @@
 import serial
+import pytest
 import tools.peak_p1_proxy.cli as cli
 from tools.peak_p1_proxy.cli import build_parser, main
 
@@ -99,6 +100,95 @@ def test_dry_run_reports_visible_ports_on_open_failure(monkeypatch, capsys) -> N
     assert "COM5 FT232R" in output
 
 
+def test_dry_run_reports_termios_errors_without_traceback(monkeypatch, capsys) -> None:
+    def fail_open(port: str, baudrate: int, timeout: float) -> None:
+        raise OSError(22, "Invalid argument")
+
+    monkeypatch.setattr("tools.peak_p1_proxy.cli.check_serial_port", fail_open)
+    monkeypatch.setattr("tools.peak_p1_proxy.cli.iter_port_descriptions", lambda: ["COM5 FT232R"])
+
+    exit_code = main(
+        [
+            "--real-port",
+            "/dev/cu.usbserial-AV0LY3SU",
+            "--artisan-port",
+            "loop://",
+            "--cropster-port",
+            "loop://",
+            "--dry-run",
+        ]
+    )
+
+    output = capsys.readouterr().out
+    assert exit_code == 2
+    assert "dry run failed" in output
+    assert "Invalid argument" in output
+    assert "visible ports:" in output
+    assert "COM5 FT232R" in output
+    assert "USB serial driver" in output
+
+
+def test_dry_run_reports_platform_termios_errors_without_traceback(monkeypatch, capsys) -> None:
+    termios = pytest.importorskip("termios")
+
+    def fail_open(port: str, baudrate: int, timeout: float) -> None:
+        raise termios.error(22, "Invalid argument")
+
+    monkeypatch.setattr("tools.peak_p1_proxy.cli.check_serial_port", fail_open)
+    monkeypatch.setattr("tools.peak_p1_proxy.cli.iter_port_descriptions", lambda: ["COM5 FT232R"])
+
+    exit_code = main(
+        [
+            "--real-port",
+            "/dev/cu.usbserial-AV0LY3SU",
+            "--artisan-port",
+            "loop://",
+            "--cropster-port",
+            "loop://",
+            "--dry-run",
+        ]
+    )
+
+    output = capsys.readouterr().out
+    assert exit_code == 2
+    assert "dry run failed" in output
+    assert "Invalid argument" in output
+    assert "COM5 FT232R" in output
+
+
+def test_runtime_reports_serial_startup_errors_without_traceback(monkeypatch, capsys) -> None:
+    class FakeRuntime:
+        def __init__(self, **kwargs) -> None:
+            return None
+
+        def run(self) -> None:
+            raise OSError(22, "Invalid argument")
+
+        def stop(self) -> None:
+            return None
+
+    monkeypatch.setattr(cli, "ProxyRuntime", FakeRuntime)
+    monkeypatch.setattr("tools.peak_p1_proxy.cli.iter_port_descriptions", lambda: ["COM5 FT232R"])
+
+    exit_code = main(
+        [
+            "--real-port",
+            "/dev/cu.usbserial-AV0LY3SU",
+            "--artisan-port",
+            "loop://",
+            "--cropster-port",
+            "loop://",
+            "--no-auto-reconnect",
+        ]
+    )
+
+    output = capsys.readouterr().out
+    assert exit_code == 2
+    assert "proxy startup failed" in output
+    assert "Invalid argument" in output
+    assert "COM5 FT232R" in output
+
+
 def test_main_passes_cropster_mapping_options_to_runtime(monkeypatch) -> None:
     captured: dict[str, object] = {}
 
@@ -130,6 +220,11 @@ def test_main_passes_cropster_mapping_options_to_runtime(monkeypatch) -> None:
             "et",
             "--real-protocol",
             "tc4",
+            "--no-auto-reconnect",
+            "--reconnect-after-failures",
+            "5",
+            "--reconnect-delay",
+            "0.75",
         ]
     )
 
@@ -138,4 +233,7 @@ def test_main_passes_cropster_mapping_options_to_runtime(monkeypatch) -> None:
     assert captured["cropster_bt_register"] == 2
     assert captured["cropster_exhaust_register"] == 5
     assert captured["cropster_register_3_source"] == "et"
+    assert captured["auto_reconnect"] is False
+    assert captured["reconnect_after_failures"] == 5
+    assert captured["reconnect_delay"] == 0.75
     assert captured["ran"] is True
