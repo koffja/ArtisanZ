@@ -20,6 +20,7 @@ def test_parser_accepts_required_ports() -> None:
     assert args.real_port == "COM5"
     assert args.artisan_port == "COM10"
     assert args.cropster_port == "COM12"
+    assert args.real_protocol == "modbus"
 
 
 def test_list_ports_returns_zero_without_required_ports(monkeypatch, capsys) -> None:
@@ -127,10 +128,13 @@ def test_main_passes_cropster_mapping_options_to_runtime(monkeypatch) -> None:
             "5",
             "--cropster-register-3-source",
             "et",
+            "--real-protocol",
+            "tc4",
         ]
     )
 
     assert exit_code == 0
+    assert captured["real_protocol"] == "tc4"
     assert captured["cropster_bt_register"] == 2
     assert captured["cropster_exhaust_register"] == 5
     assert captured["cropster_register_3_source"] == "et"

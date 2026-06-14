@@ -16,7 +16,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--real-port")
     parser.add_argument("--artisan-port")
     parser.add_argument("--cropster-port")
+    parser.add_argument("--real-protocol", choices=["modbus", "tc4"], default="modbus")
     parser.add_argument("--real-baud", type=int, default=115200)
+    parser.add_argument("--real-modbus-bt-register", type=int, default=0)
+    parser.add_argument("--real-modbus-et-register", type=int, default=3)
+    parser.add_argument("--real-modbus-exhaust-register", type=int, default=3)
+    parser.add_argument("--real-modbus-inlet-register", type=int, default=1)
     parser.add_argument("--poll-interval", type=float, default=1.0)
     parser.add_argument("--stale-after", type=float, default=5.0)
     parser.add_argument("--cropster-register-bt", type=int, default=0)
@@ -99,6 +104,11 @@ def main(argv: list[str] | None = None) -> int:
         poll_interval=args.poll_interval,
         stale_after=args.stale_after,
         frame_log_path=args.log_frames,
+        real_protocol=args.real_protocol,
+        real_modbus_bt_register=args.real_modbus_bt_register,
+        real_modbus_et_register=args.real_modbus_et_register,
+        real_modbus_exhaust_register=args.real_modbus_exhaust_register,
+        real_modbus_inlet_register=args.real_modbus_inlet_register,
         cropster_bt_register=args.cropster_register_bt,
         cropster_exhaust_register=args.cropster_register_exhaust,
         cropster_register_3_source=args.cropster_register_3_source,

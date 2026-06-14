@@ -31,6 +31,13 @@ def append_crc(body: bytes) -> bytes:
     return body + crc16(body).to_bytes(2, "little")
 
 
+def build_read_input_registers_request(slave_id: int, start_register: int, count: int) -> bytes:
+    body = bytes([slave_id, 4])
+    body += start_register.to_bytes(2, "big")
+    body += count.to_bytes(2, "big")
+    return append_crc(body)
+
+
 def parse_request(frame: bytes) -> ModbusRequest:
     if len(frame) != 8:
         raise ModbusRtuError(f"expected 8-byte Modbus request, got {len(frame)} bytes")
@@ -47,6 +54,29 @@ def parse_request(frame: bytes) -> ModbusRequest:
         start_register=int.from_bytes(body[2:4], "big"),
         count=int.from_bytes(body[4:6], "big"),
     )
+
+
+def parse_read_input_registers_response(frame: bytes) -> list[int]:
+    if len(frame) < 5:
+        raise ModbusRtuError(f"Modbus response too short: {len(frame)} bytes")
+
+    body = frame[:-2]
+    expected = crc16(body)
+    actual = int.from_bytes(frame[-2:], "little")
+    if actual != expected:
+        raise ModbusRtuError(f"CRC mismatch: expected 0x{expected:04x}, got 0x{actual:04x}")
+    if body[1] & 0x80:
+        raise ModbusRtuError(f"Modbus exception response: function=0x{body[1]:02x}, code={body[2]}")
+    if body[1] != 4:
+        raise ModbusRtuError(f"unexpected Modbus function: {body[1]}")
+
+    byte_count = body[2]
+    payload = body[3:]
+    if byte_count != len(payload) or byte_count % 2:
+        raise ModbusRtuError(
+            f"invalid Modbus byte count: declared {byte_count}, actual {len(payload)}"
+        )
+    return [int.from_bytes(payload[index : index + 2], "big") for index in range(0, byte_count, 2)]
 
 
 def _scale_register(value: float) -> int:

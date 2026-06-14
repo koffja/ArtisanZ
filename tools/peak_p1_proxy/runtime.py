@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import contextlib
 import threading
 import time
 from collections.abc import Callable
@@ -13,7 +14,9 @@ from .cache import TemperatureCache
 from .modbus_rtu import (
     ModbusRtuError,
     build_exception_response,
+    build_read_input_registers_request,
     build_read_input_registers_response,
+    parse_read_input_registers_response,
     parse_request,
 )
 from .model import SerialSettings, TemperatureSample
@@ -115,6 +118,89 @@ class P1Poller:
             stop_event.wait(poll_interval)
 
 
+class P1ModbusPoller:
+    def __init__(
+        self,
+        serial_port: ByteSerialLike,
+        cache: TemperatureCache,
+        clock: Callable[[], float] | None = None,
+        frame_logger: FrameLogger | None = None,
+        slave_id: int = 1,
+        bt_register: int = 0,
+        et_register: int = 3,
+        exhaust_register: int = 3,
+        inlet_register: int = 1,
+    ) -> None:
+        self._serial = serial_port
+        self._cache = cache
+        self._clock = clock or time.monotonic
+        self._frame_logger = frame_logger or FrameLogger(None)
+        self._slave_id = slave_id
+        self._bt_register = bt_register
+        self._et_register = et_register
+        self._exhaust_register = exhaust_register
+        self._inlet_register = inlet_register
+
+    def _read_exact(self, size: int) -> bytes:
+        chunks = bytearray()
+        while len(chunks) < size:
+            chunk = self._serial.read(size - len(chunks))
+            if not chunk:
+                raise RuntimeError(f"short Modbus response: expected {size}, got {len(chunks)}")
+            chunks.extend(chunk)
+        return bytes(chunks)
+
+    def _read_registers(self) -> list[int]:
+        count = max(
+            self._bt_register,
+            self._et_register,
+            self._exhaust_register,
+            self._inlet_register,
+        ) + 1
+        request = build_read_input_registers_request(self._slave_id, 0, count)
+        self._frame_logger.log("p1", "tx", request)
+        self._serial.write(request)
+        self._serial.flush()
+        header = self._read_exact(3)
+        rest = self._read_exact(header[2] + 2)
+        response = header + rest
+        self._frame_logger.log("p1", "rx", response)
+        return parse_read_input_registers_response(response)
+
+    @staticmethod
+    def _scaled(registers: list[int], index: int) -> float:
+        return registers[index] / 10.0
+
+    def poll_once(self) -> TemperatureSample:
+        registers = self._read_registers()
+        et = self._scaled(registers, self._et_register)
+        sample = TemperatureSample(
+            bt=self._scaled(registers, self._bt_register),
+            et=et,
+            exhaust=self._scaled(registers, self._exhaust_register),
+            inlet=self._scaled(registers, self._inlet_register),
+            at=et,
+            timestamp=self._clock(),
+        )
+        self._cache.update(sample)
+        return sample
+
+    def run(self, stop_event: threading.Event, poll_interval: float) -> None:
+        while not stop_event.is_set():
+            try:
+                sample = self.poll_once()
+                _log.info(
+                    "P1 BT %.2f ET %.2f Exhaust %.2f Inlet %.2f",
+                    sample.bt,
+                    sample.et,
+                    sample.exhaust,
+                    sample.inlet,
+                )
+            except Exception as exc:  # pylint: disable=broad-except
+                _log.warning("Peak P1 Modbus poll failed: %s", exc)
+            stop_event.wait(poll_interval)
+
+
 class ArtisanTc4Responder:
     def __init__(self, cache: TemperatureCache) -> None:
         self._cache = cache
@@ -193,15 +279,25 @@ class ArtisanSerialServer:
 
     def run(self, stop_event: threading.Event) -> None:
         while not stop_event.is_set():
-            line = self._serial.readline()
+            try:
+                line = self._serial.readline()
+            except serial.SerialException:
+                if stop_event.is_set():
+                    return
+                raise
             if not line:
                 continue
             self._frame_logger.log("artisan", "rx", line)
             response = self._responder.handle_line(line.decode("utf-8", "ignore"))
             if response:
                 self._frame_logger.log("artisan", "tx", response)
-                self._serial.write(response)
-                self._serial.flush()
+                try:
+                    self._serial.write(response)
+                    self._serial.flush()
+                except serial.SerialException:
+                    if stop_event.is_set():
+                        return
+                    raise
 
 
 class CropsterSerialServer:
@@ -239,7 +335,12 @@ class CropsterSerialServer:
 
     def run(self, stop_event: threading.Event) -> None:
         while not stop_event.is_set():
-            self.run_once()
+            try:
+                self.run_once()
+            except serial.SerialException:
+                if stop_event.is_set():
+                    return
+                raise
 
 
 def open_serial(settings: SerialSettings):
@@ -262,6 +363,11 @@ class ProxyRuntime:
         poll_interval: float,
         stale_after: float,
         frame_log_path: str | None = None,
+        real_protocol: str = "modbus",
+        real_modbus_bt_register: int = 0,
+        real_modbus_et_register: int = 3,
+        real_modbus_exhaust_register: int = 3,
+        real_modbus_inlet_register: int = 1,
         cropster_bt_register: int = 0,
         cropster_exhaust_register: int = 3,
         cropster_register_3_source: str = "exhaust",
@@ -272,6 +378,11 @@ class ProxyRuntime:
         self._poll_interval = poll_interval
         self._stale_after = stale_after
         self._frame_log_path = frame_log_path
+        self._real_protocol = real_protocol
+        self._real_modbus_bt_register = real_modbus_bt_register
+        self._real_modbus_et_register = real_modbus_et_register
+        self._real_modbus_exhaust_register = real_modbus_exhaust_register
+        self._real_modbus_inlet_register = real_modbus_inlet_register
         self._cropster_bt_register = cropster_bt_register
         self._cropster_exhaust_register = cropster_exhaust_register
         self._cropster_register_3_source = cropster_register_3_source
@@ -287,7 +398,18 @@ class ProxyRuntime:
         with open_serial(self._real_settings) as real_port, open_serial(
             self._artisan_settings
         ) as artisan_port, open_serial(self._cropster_settings) as cropster_port:
-            poller = P1Poller(real_port, cache, frame_logger=frame_logger)
+            if self._real_protocol == "tc4":
+                poller = P1Poller(real_port, cache, frame_logger=frame_logger)
+            else:
+                poller = P1ModbusPoller(
+                    real_port,
+                    cache,
+                    frame_logger=frame_logger,
+                    bt_register=self._real_modbus_bt_register,
+                    et_register=self._real_modbus_et_register,
+                    exhaust_register=self._real_modbus_exhaust_register,
+                    inlet_register=self._real_modbus_inlet_register,
+                )
             artisan = ArtisanSerialServer(
                 artisan_port,
                 ArtisanTc4Responder(cache),
@@ -310,5 +432,12 @@ class ProxyRuntime:
             ]
             for thread in self._threads:
                 thread.start()
-            while not self._stop_event.is_set():
-                self._stop_event.wait(0.5)
+            try:
+                while not self._stop_event.is_set():
+                    self._stop_event.wait(0.5)
+            except KeyboardInterrupt:
+                self._stop_event.set()
+            finally:
+                for thread in self._threads:
+                    with contextlib.suppress(RuntimeError):
+                        thread.join(timeout=1.0)

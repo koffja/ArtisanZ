@@ -5,6 +5,7 @@ from tools.peak_p1_proxy.runtime import (
     ArtisanTc4Responder,
     CropsterModbusResponder,
     CropsterSerialServer,
+    P1ModbusPoller,
     P1Poller,
 )
 
@@ -34,7 +35,11 @@ class FakeByteSerial(FakeSerial):
         if not self.chunks:
             return b""
         chunk = self.chunks.pop(0)
-        return chunk[:size]
+        data = chunk[:size]
+        rest = chunk[size:]
+        if rest:
+            self.chunks.insert(0, rest)
+        return data
 
 
 def sample(timestamp: float = 10.0) -> TemperatureSample:
@@ -67,6 +72,22 @@ def test_poller_reads_both_groups_and_updates_cache() -> None:
     assert current.et == 171.51
     assert current.exhaust == 176.10
     assert current.inlet == 166.09
+    assert cache.get() == current
+
+
+def test_modbus_poller_reads_register_block_and_updates_cache() -> None:
+    cache = TemperatureCache(stale_after=5.0, clock=lambda: 20.0)
+    serial_port = FakeByteSerial([bytes.fromhex("010408063c0692064c06b022d4")])
+    poller = P1ModbusPoller(serial_port=serial_port, cache=cache, clock=lambda: 10.0)
+
+    current = poller.poll_once()
+
+    assert serial_port.writes == [bytes.fromhex("010400000004f1c9")]
+    assert current.bt == 159.6
+    assert current.et == 171.2
+    assert current.exhaust == 171.2
+    assert current.inlet == 168.2
+    assert current.at == 171.2
     assert cache.get() == current
 
 

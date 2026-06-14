@@ -4,8 +4,10 @@ from tools.peak_p1_proxy.modbus_rtu import (
     ModbusRequest,
     ModbusRtuError,
     build_exception_response,
+    build_read_input_registers_request,
     build_read_input_registers_response,
     crc16,
+    parse_read_input_registers_response,
     parse_request,
 )
 
@@ -21,6 +23,16 @@ def test_parse_function_4_request() -> None:
     request = parse_request(bytes.fromhex("010400030001c1ca"))
 
     assert request == ModbusRequest(slave_id=1, function=4, start_register=3, count=1)
+
+
+def test_build_read_input_registers_request() -> None:
+    assert build_read_input_registers_request(1, 0, 4) == bytes.fromhex("010400000004f1c9")
+
+
+def test_parse_read_input_registers_response() -> None:
+    registers = parse_read_input_registers_response(bytes.fromhex("010408063c0692064c06b022d4"))
+
+    assert registers == [1596, 1682, 1612, 1712]
 
 
 def test_parse_rejects_bad_crc() -> None:
