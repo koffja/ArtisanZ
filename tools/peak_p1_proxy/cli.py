@@ -37,10 +37,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--cropster-register-bt", type=int, default=0)
     parser.add_argument("--cropster-register-exhaust", type=int, default=3)
     parser.add_argument("--cropster-register-3-source", choices=["exhaust", "et"], default="exhaust")
+    parser.add_argument("--cropster-hold-last-for", type=float, default=60.0)
     parser.add_argument("--no-auto-reconnect", dest="auto_reconnect", action="store_false")
     parser.set_defaults(auto_reconnect=True)
     parser.add_argument("--reconnect-after-failures", type=int, default=3)
     parser.add_argument("--reconnect-delay", type=float, default=2.0)
+    parser.add_argument("--virtual-reconnect-delay", type=float, default=2.0)
     parser.add_argument("--list-ports", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--verbose", action="store_true")
@@ -140,9 +142,11 @@ def main(argv: list[str] | None = None) -> int:
         cropster_bt_register=args.cropster_register_bt,
         cropster_exhaust_register=args.cropster_register_exhaust,
         cropster_register_3_source=args.cropster_register_3_source,
+        cropster_hold_last_for=args.cropster_hold_last_for,
         auto_reconnect=args.auto_reconnect,
         reconnect_after_failures=args.reconnect_after_failures,
         reconnect_delay=args.reconnect_delay,
+        virtual_reconnect_delay=args.virtual_reconnect_delay,
     )
     try:
         runtime.run()

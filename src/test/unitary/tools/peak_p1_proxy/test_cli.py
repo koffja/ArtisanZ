@@ -218,6 +218,8 @@ def test_main_passes_cropster_mapping_options_to_runtime(monkeypatch) -> None:
             "5",
             "--cropster-register-3-source",
             "et",
+            "--cropster-hold-last-for",
+            "30",
             "--real-protocol",
             "tc4",
             "--no-auto-reconnect",
@@ -225,6 +227,8 @@ def test_main_passes_cropster_mapping_options_to_runtime(monkeypatch) -> None:
             "5",
             "--reconnect-delay",
             "0.75",
+            "--virtual-reconnect-delay",
+            "0.5",
         ]
     )
 
@@ -233,7 +237,9 @@ def test_main_passes_cropster_mapping_options_to_runtime(monkeypatch) -> None:
     assert captured["cropster_bt_register"] == 2
     assert captured["cropster_exhaust_register"] == 5
     assert captured["cropster_register_3_source"] == "et"
+    assert captured["cropster_hold_last_for"] == 30.0
     assert captured["auto_reconnect"] is False
     assert captured["reconnect_after_failures"] == 5
     assert captured["reconnect_delay"] == 0.75
+    assert captured["virtual_reconnect_delay"] == 0.5
     assert captured["ran"] is True

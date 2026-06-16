@@ -1,3 +1,8 @@
+import threading
+
+import pytest
+import serial
+
 from tools.peak_p1_proxy.cache import TemperatureCache
 from tools.peak_p1_proxy.modbus_rtu import parse_request
 from tools.peak_p1_proxy.model import SerialSettings, TemperatureSample
@@ -31,6 +36,10 @@ class FakeByteSerial(FakeSerial):
     def __init__(self, chunks: list[bytes]) -> None:
         super().__init__([])
         self.chunks = list(chunks)
+        self.reset_input_buffer_calls = 0
+
+    def reset_input_buffer(self) -> None:
+        self.reset_input_buffer_calls += 1
 
     def read(self, size: int = 1) -> bytes:
         if not self.chunks:
@@ -116,6 +125,30 @@ def test_modbus_poller_reads_register_block_and_updates_cache() -> None:
     assert cache.get() == current
 
 
+def test_modbus_poller_rejects_short_register_response_before_indexing() -> None:
+    cache = TemperatureCache(stale_after=5.0, clock=lambda: 20.0)
+    serial_port = FakeByteSerial([bytes.fromhex("01040204abfa4f")])
+    poller = P1ModbusPoller(serial_port=serial_port, cache=cache, clock=lambda: 10.0)
+
+    with pytest.raises(
+        RuntimeError,
+        match="short Modbus register response: expected at least 4 registers, got 1",
+    ):
+        poller.poll_once()
+
+    assert cache.get() is None
+
+
+def test_modbus_poller_clears_input_buffer_before_request_when_supported() -> None:
+    cache = TemperatureCache(stale_after=5.0, clock=lambda: 20.0)
+    serial_port = FakeByteSerial([bytes.fromhex("010408063c0692064c06b022d4")])
+    poller = P1ModbusPoller(serial_port=serial_port, cache=cache, clock=lambda: 10.0)
+
+    poller.poll_once()
+
+    assert serial_port.reset_input_buffer_calls == 1
+
+
 def test_reconnecting_runner_reopens_real_port_after_repeated_poll_failures() -> None:
     cache = TemperatureCache(stale_after=5.0, clock=lambda: 20.0)
     opened = [ClosableFakeSerial(True), ClosableFakeSerial(True), ClosableFakeSerial(False)]
@@ -176,6 +209,24 @@ def test_cropster_responder_returns_modbus_registers_from_cache() -> None:
     assert response == bytes.fromhex("010408063e0000000006e1b80c")
 
 
+def test_cropster_responder_returns_held_sample_when_cache_is_stale_within_hold_window() -> None:
+    cache = TemperatureCache(stale_after=5.0, clock=lambda: 20.0)
+    cache.update(sample(timestamp=10.0))
+    responder = CropsterModbusResponder(cache, hold_last_for=60.0)
+
+    response = responder.handle_frame(bytes.fromhex("010400000004f1c9"))
+
+    assert response == bytes.fromhex("010408063e0000000006e1b80c")
+
+
+def test_cropster_responder_returns_exception_when_held_sample_expired() -> None:
+    cache = TemperatureCache(stale_after=5.0, clock=lambda: 80.0)
+    cache.update(sample(timestamp=10.0))
+    responder = CropsterModbusResponder(cache, hold_last_for=60.0)
+
+    assert responder.handle_frame(bytes.fromhex("01040000000131ca")) == bytes.fromhex("01840442c3")
+
+
 def test_cropster_responder_uses_custom_registers_and_et_mapping() -> None:
     cache = TemperatureCache(stale_after=5.0, clock=lambda: 11.0)
     cache.update(sample(timestamp=10.0))
@@ -194,7 +245,7 @@ def test_cropster_responder_uses_custom_registers_and_et_mapping() -> None:
 def test_cropster_responder_returns_exception_when_cache_is_stale() -> None:
     cache = TemperatureCache(stale_after=5.0, clock=lambda: 20.0)
     cache.update(sample(timestamp=10.0))
-    responder = CropsterModbusResponder(cache)
+    responder = CropsterModbusResponder(cache, hold_last_for=0)
 
     assert responder.handle_frame(bytes.fromhex("01040000000131ca")) == bytes.fromhex("01840442c3")
 
@@ -224,3 +275,38 @@ def test_cropster_serial_server_buffers_partial_modbus_frame() -> None:
     server.run_once()
 
     assert serial_port.writes == [bytes.fromhex("010408063e0000000006e1b80c")]
+
+
+def test_reconnecting_serial_server_runner_reopens_output_port_after_failure() -> None:
+    from tools.peak_p1_proxy.runtime import ReconnectingSerialServerRunner
+
+    opened = [ClosableFakeSerial(False), ClosableFakeSerial(False)]
+    sleeps: list[float] = []
+    runs: list[object] = []
+
+    class FailingServer:
+        def __init__(self, serial_port) -> None:
+            self.serial_port = serial_port
+
+        def run(self, stop_event) -> None:
+            runs.append(self.serial_port)
+            raise serial.SerialException("output disconnected")
+
+    def opener(settings: SerialSettings):
+        return opened.pop(0)
+
+    runner = ReconnectingSerialServerRunner(
+        name="cropster",
+        serial_settings=SerialSettings("COM12"),
+        server_factory=FailingServer,
+        open_serial_fn=opener,
+        reconnect_delay=0.25,
+        sleep_fn=sleeps.append,
+    )
+
+    stop_event = threading.Event()
+    runner.run_once(stop_event)
+    runner.run_once(stop_event)
+
+    assert len(runs) == 2
+    assert sleeps == [0.25, 0.25]

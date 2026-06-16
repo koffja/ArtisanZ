@@ -141,6 +141,27 @@ class P1ModbusPoller:
         self._exhaust_register = exhaust_register
         self._inlet_register = inlet_register
 
+    def _required_register_count(self) -> int:
+        return max(
+            self._bt_register,
+            self._et_register,
+            self._exhaust_register,
+            self._inlet_register,
+        ) + 1
+
+    def _reset_input_buffer(self) -> None:
+        reset = getattr(self._serial, "reset_input_buffer", None)
+        if reset is not None:
+            reset()
+
+    def _validate_register_count(self, registers: list[int]) -> None:
+        expected = self._required_register_count()
+        actual = len(registers)
+        if actual < expected:
+            raise RuntimeError(
+                f"short Modbus register response: expected at least {expected} registers, got {actual}"
+            )
+
     def _read_exact(self, size: int) -> bytes:
         chunks = bytearray()
         while len(chunks) < size:
@@ -151,13 +172,9 @@ class P1ModbusPoller:
         return bytes(chunks)
 
     def _read_registers(self) -> list[int]:
-        count = max(
-            self._bt_register,
-            self._et_register,
-            self._exhaust_register,
-            self._inlet_register,
-        ) + 1
+        count = self._required_register_count()
         request = build_read_input_registers_request(self._slave_id, 0, count)
+        self._reset_input_buffer()
         self._frame_logger.log("p1", "tx", request)
         self._serial.write(request)
         self._serial.flush()
@@ -173,6 +190,7 @@ class P1ModbusPoller:
 
     def poll_once(self) -> TemperatureSample:
         registers = self._read_registers()
+        self._validate_register_count(registers)
         et = self._scaled(registers, self._et_register)
         sample = TemperatureSample(
             bt=self._scaled(registers, self._bt_register),
@@ -233,12 +251,14 @@ class CropsterModbusResponder:
         bt_register: int = 0,
         exhaust_register: int = 3,
         register_3_source: str = "exhaust",
+        hold_last_for: float = 60.0,
     ) -> None:
         self._cache = cache
         self._slave_id = slave_id
         self._bt_register = bt_register
         self._exhaust_register = exhaust_register
         self._register_3_source = register_3_source
+        self._hold_last_for = hold_last_for
 
     def _registers_for(self, sample: TemperatureSample) -> dict[int, float]:
         exhaust_value = sample.et if self._register_3_source == "et" else sample.exhaust
@@ -246,6 +266,18 @@ class CropsterModbusResponder:
             self._bt_register: sample.bt,
             self._exhaust_register: exhaust_value,
         }
+
+    def _sample_for_response(self) -> TemperatureSample | None:
+        sample = self._cache.get()
+        if sample is None:
+            return None
+        if not self._cache.is_stale():
+            return sample
+        age = self._cache.sample_age()
+        if self._hold_last_for <= 0 or age is None or age > self._hold_last_for:
+            return None
+        _log.debug("serving held Cropster sample age=%.2fs", age)
+        return sample
 
     def handle_frame(self, frame: bytes) -> bytes:
         try:
@@ -258,9 +290,7 @@ class CropsterModbusResponder:
             return build_exception_response(request.slave_id, request.function, 4)
         if request.function != 4:
             return build_exception_response(request.slave_id, request.function, 1)
-        if self._cache.is_stale():
-            return build_exception_response(request.slave_id, request.function, 4)
-        sample = self._cache.get()
+        sample = self._sample_for_response()
         if sample is None:
             return build_exception_response(request.slave_id, request.function, 4)
         return build_read_input_registers_response(request, self._registers_for(sample))
@@ -441,6 +471,62 @@ class ReconnectingP1Runner:
         self.close()
 
 
+class ReconnectingSerialServerRunner:
+    def __init__(
+        self,
+        name: str,
+        serial_settings: SerialSettings,
+        server_factory,
+        open_serial_fn=open_serial,
+        reconnect_delay: float = 2.0,
+        sleep_fn: Callable[[float], object] = time.sleep,
+    ) -> None:
+        self._name = name
+        self._serial_settings = serial_settings
+        self._server_factory = server_factory
+        self._open_serial_fn = open_serial_fn
+        self._reconnect_delay = reconnect_delay
+        self._sleep = sleep_fn
+        self._serial_port = None
+
+    def close(self) -> None:
+        if self._serial_port is not None:
+            close = getattr(self._serial_port, "close", None)
+            if close is not None:
+                with contextlib.suppress(Exception):
+                    close()
+        self._serial_port = None
+
+    def run_once(self, stop_event: threading.Event) -> None:
+        if stop_event.is_set():
+            return
+        try:
+            self._serial_port = self._open_serial_fn(self._serial_settings)
+        except Exception as exc:  # pylint: disable=broad-except
+            self.close()
+            if not stop_event.is_set():
+                _log.warning("%s serial open failed: %s", self._name, exc)
+                self._sleep(self._reconnect_delay)
+            return
+
+        try:
+            server = self._server_factory(self._serial_port)
+            server.run(stop_event)
+        except Exception as exc:  # pylint: disable=broad-except
+            if not stop_event.is_set():
+                _log.warning("%s serial server failed: %s", self._name, exc)
+        finally:
+            self.close()
+
+        if not stop_event.is_set():
+            self._sleep(self._reconnect_delay)
+
+    def run(self, stop_event: threading.Event) -> None:
+        while not stop_event.is_set():
+            self.run_once(stop_event)
+        self.close()
+
+
 class ProxyRuntime:
     def __init__(
         self,
@@ -461,6 +547,8 @@ class ProxyRuntime:
         auto_reconnect: bool = True,
         reconnect_after_failures: int = 3,
         reconnect_delay: float = 2.0,
+        cropster_hold_last_for: float = 60.0,
+        virtual_reconnect_delay: float = 2.0,
     ) -> None:
         self._real_settings = real_settings
         self._artisan_settings = artisan_settings
@@ -479,6 +567,8 @@ class ProxyRuntime:
         self._auto_reconnect = auto_reconnect
         self._reconnect_after_failures = reconnect_after_failures
         self._reconnect_delay = reconnect_delay
+        self._cropster_hold_last_for = cropster_hold_last_for
+        self._virtual_reconnect_delay = virtual_reconnect_delay
         self._stop_event = threading.Event()
         self._threads: list[threading.Thread] = []
 
@@ -495,22 +585,41 @@ class ProxyRuntime:
             "inlet_register": self._real_modbus_inlet_register,
         }
 
-    def _start_threads(self, poller_target, artisan_port, cropster_port, cache, frame_logger) -> None:
-        artisan = ArtisanSerialServer(
-            artisan_port,
-            ArtisanTc4Responder(cache),
-            frame_logger=frame_logger,
-        )
-        cropster = CropsterSerialServer(
-            cropster_port,
-            CropsterModbusResponder(
-                cache,
-                bt_register=self._cropster_bt_register,
-                exhaust_register=self._cropster_exhaust_register,
-                register_3_source=self._cropster_register_3_source,
+    def _artisan_runner(self, cache: TemperatureCache, frame_logger: FrameLogger) -> ReconnectingSerialServerRunner:
+        return ReconnectingSerialServerRunner(
+            name="artisan",
+            serial_settings=self._artisan_settings,
+            reconnect_delay=self._virtual_reconnect_delay,
+            sleep_fn=self._stop_event.wait,
+            server_factory=lambda port: ArtisanSerialServer(
+                port,
+                ArtisanTc4Responder(cache),
+                frame_logger=frame_logger,
             ),
-            frame_logger=frame_logger,
         )
+
+    def _cropster_runner(self, cache: TemperatureCache, frame_logger: FrameLogger) -> ReconnectingSerialServerRunner:
+        return ReconnectingSerialServerRunner(
+            name="cropster",
+            serial_settings=self._cropster_settings,
+            reconnect_delay=self._virtual_reconnect_delay,
+            sleep_fn=self._stop_event.wait,
+            server_factory=lambda port: CropsterSerialServer(
+                port,
+                CropsterModbusResponder(
+                    cache,
+                    bt_register=self._cropster_bt_register,
+                    exhaust_register=self._cropster_exhaust_register,
+                    register_3_source=self._cropster_register_3_source,
+                    hold_last_for=self._cropster_hold_last_for,
+                ),
+                frame_logger=frame_logger,
+            ),
+        )
+
+    def _start_threads(self, poller_target, cache, frame_logger) -> None:
+        artisan = self._artisan_runner(cache, frame_logger)
+        cropster = self._cropster_runner(cache, frame_logger)
         self._threads = [
             threading.Thread(target=poller_target, daemon=True),
             threading.Thread(target=artisan.run, args=(self._stop_event,), daemon=True),
@@ -527,38 +636,36 @@ class ProxyRuntime:
             for thread in self._threads:
                 with contextlib.suppress(RuntimeError):
                     thread.join(timeout=1.0)
+            artisan.close()
+            cropster.close()
 
     def run(self) -> None:
         frame_logger = FrameLogger(self._frame_log_path)
         cache = TemperatureCache(stale_after=self._stale_after)
         poller_factory, poller_kwargs = self._poller_factory()
-        with open_serial(self._artisan_settings) as artisan_port, open_serial(
-            self._cropster_settings
-        ) as cropster_port:
-            if self._auto_reconnect:
-                runner = ReconnectingP1Runner(
-                    real_settings=self._real_settings,
-                    cache=cache,
-                    poller_factory=poller_factory,
-                    poll_interval=self._poll_interval,
-                    reconnect_after_failures=self._reconnect_after_failures,
-                    reconnect_delay=self._reconnect_delay,
-                    sleep_fn=self._stop_event.wait,
-                    frame_logger=frame_logger,
-                    poller_kwargs=poller_kwargs,
+        if self._auto_reconnect:
+            runner = ReconnectingP1Runner(
+                real_settings=self._real_settings,
+                cache=cache,
+                poller_factory=poller_factory,
+                poll_interval=self._poll_interval,
+                reconnect_after_failures=self._reconnect_after_failures,
+                reconnect_delay=self._reconnect_delay,
+                sleep_fn=self._stop_event.wait,
+                frame_logger=frame_logger,
+                poller_kwargs=poller_kwargs,
+            )
+            try:
+                self._start_threads(
+                    lambda: runner.run(self._stop_event),
+                    cache,
+                    frame_logger,
                 )
-                try:
-                    self._start_threads(
-                        lambda: runner.run(self._stop_event),
-                        artisan_port,
-                        cropster_port,
-                        cache,
-                        frame_logger,
-                    )
-                finally:
-                    runner.close()
-                return
+            finally:
+                runner.close()
+            return
 
+        try:
             with open_serial(self._real_settings) as real_port:
                 poller = poller_factory(
                     real_port,
@@ -568,8 +675,8 @@ class ProxyRuntime:
                 )
                 self._start_threads(
                     lambda: poller.run(self._stop_event, self._poll_interval),
-                    artisan_port,
-                    cropster_port,
                     cache,
                     frame_logger,
                 )
+        finally:
+            self._stop_event.set()

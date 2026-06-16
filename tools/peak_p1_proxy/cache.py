@@ -22,6 +22,12 @@ class TemperatureCache:
         with self._lock:
             return self._sample
 
+    def sample_age(self) -> float | None:
+        with self._lock:
+            if self._sample is None:
+                return None
+            return self._clock() - self._sample.timestamp
+
     def is_stale(self) -> bool:
         with self._lock:
             if self._sample is None:
