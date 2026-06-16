@@ -14450,7 +14450,12 @@ class ApplicationWindow(QMainWindow):
                 # order background events
                 self.orderBackgroundEvents()
                 #
-                self.qmc.backgroundFlavors = profile['flavors']
+                self.qmc.backgroundFlavors = [
+                    max(0.0, min(10.0, float(fl))) for fl in profile.get('flavors', [])
+                ]
+                if not self.qmc.backgroundFlavors:
+                    flavor_count = len(self.qmc.flavors or self.qmc.artisanflavordefaultlabels)
+                    self.qmc.backgroundFlavors = [self.qmc.flavors_default_value] * flavor_count
                 self.qmc.titleB = decodeLocalStrict(profile['title'])
 
                 if 'roastbatchnr' in profile:
@@ -15937,6 +15942,10 @@ class ApplicationWindow(QMainWindow):
             elif len(self.qmc.flavorlabels) < len(self.qmc.flavors):
                 # remove superfluous values
                 self.qmc.flavors = self.qmc.flavors[:len(self.qmc.flavorlabels)]
+            if not self.qmc.flavorlabels:
+                self.qmc.flavorlabels = list(self.qmc.artisanflavordefaultlabels)
+            if not self.qmc.flavors:
+                self.qmc.flavors = [self.qmc.flavors_default_value] * len(self.qmc.flavorlabels)
             if 'flavors_total_correction' in profile:
                 self.qmc.flavors_total_correction = max(-10.0, min(10.0, float(profile['flavors_total_correction'])))
             else:
