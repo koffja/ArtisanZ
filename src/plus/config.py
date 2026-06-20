@@ -24,11 +24,14 @@
 
 from typing import Final, TYPE_CHECKING
 
+from plus import service_identity
+
 if TYPE_CHECKING:
     from artisanlib.main import ApplicationWindow # pylint: disable=unused-import
 
 # Constants
-app_name: Final[str] = 'artisan.plus'
+app_name: Final[str] = service_identity.display_name()
+keyring_service: Final[str] = service_identity.keyring_service()
 profile_ext: Final[str] = 'alog'
 uuid_tag: Final[str] = 'roastUUID' # as used in .alog profiles, send as 'roast_id' as part of the sync record to the server
 schedule_uuid_tag: Final[str] = 'scheduleID' # send as 's_item_id' as part of the sync record to the server
@@ -41,10 +44,10 @@ schedule_date_tag: Final[str] = 'scheduleDate' # send as 's_item_date' as part o
 #web_base_url         = 'https://localhost:8088'
 
 # # CLOUD SETUP
-api_base_url: Final[str] = 'https://artisan.plus/api/v1'
-web_base_url: Final[str] = 'https://artisan.plus'
+api_base_url: Final[str] = service_identity.api_base_url()
+web_base_url: Final[str] = service_identity.web_base_url()
 
-shop_base_url: Final[str] = 'https://buy.artisan.plus/'
+shop_base_url: Final[str] = service_identity.shop_base_url()
 
 register_url: Final[str] = web_base_url + '/register'
 reset_passwd_url: Final[str] = web_base_url + '/resetPassword'

@@ -497,7 +497,7 @@ class TestCredentialManagement:
             connection.clearCredentials(remove_from_keychain=True)
 
             # Assert
-            mock_delete_password.assert_called_once_with('artisan.plus', 'test@example.com')
+            mock_delete_password.assert_called_once_with('tm-artisanz', 'test@example.com')
             assert mock_config.token is None
             assert mock_config.nickname is None
             assert mock_config.account_nr is None

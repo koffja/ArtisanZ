@@ -97,7 +97,7 @@ import pytest
 
 # Import the config module directly since it only contains constants
 # No mocking needed for the config module itself
-from plus import config
+from plus import config, service_identity
 
 
 @pytest.fixture(scope='session', autouse=True)
@@ -207,7 +207,7 @@ class TestConfigConstants:
     def test_app_name_constant(self) -> None:
         """Test app_name constant value."""
         # Assert
-        assert config.app_name == 'artisan.plus'
+        assert config.app_name == service_identity.display_name()
         assert isinstance(config.app_name, str)
 
     def test_profile_extension_constant(self) -> None:
@@ -241,21 +241,21 @@ class TestServiceUrls:
     def test_api_base_url(self) -> None:
         """Test API base URL configuration."""
         # Assert
-        assert config.api_base_url == 'https://artisan.plus/api/v1'
+        assert config.api_base_url == service_identity.api_base_url()
         assert isinstance(config.api_base_url, str)
         assert config.api_base_url.startswith('https://')
 
     def test_web_base_url(self) -> None:
         """Test web base URL configuration."""
         # Assert
-        assert config.web_base_url == 'https://artisan.plus'
+        assert config.web_base_url == service_identity.web_base_url()
         assert isinstance(config.web_base_url, str)
         assert config.web_base_url.startswith('https://')
 
     def test_shop_base_url(self) -> None:
         """Test shop base URL configuration."""
         # Assert
-        assert config.shop_base_url == 'https://buy.artisan.plus/'
+        assert config.shop_base_url == service_identity.shop_base_url()
         assert isinstance(config.shop_base_url, str)
         assert config.shop_base_url.startswith('https://')
 

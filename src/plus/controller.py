@@ -32,7 +32,7 @@ from typing import Final, TYPE_CHECKING
 if TYPE_CHECKING:
     from artisanlib.main import ApplicationWindow # noqa: F401 # pylint: disable=unused-import
 
-from plus import config, connection, stock, queue, sync, roast, util
+from plus import config, connection, service_identity, stock, queue, sync, roast, util
 
 
 _log: Final[logging.Logger] = logging.getLogger(__name__)
@@ -153,7 +153,7 @@ def connect(clear_on_failure: bool =False, interactive: bool = True) -> None:
                     try:
                         # try-catch as the keyring might not work
                         config_passwd = keyring.get_password(
-                            config.app_name, account
+                            service_identity.keyring_service(), account
                         )  # @UndefinedVariable
                         if config_passwd is None:
                             _log.debug(
@@ -197,7 +197,7 @@ def connect(clear_on_failure: bool =False, interactive: bool = True) -> None:
                             try:
                                 # try-catch as the keyring might not work
                                 keyring.set_password(
-                                    config.app_name, login, passwd
+                                    service_identity.keyring_service(), login, passwd
                                 )
                                 keychain_success = True
                                 _log.debug('keyring set password (%s)', login)
@@ -224,7 +224,7 @@ def connect(clear_on_failure: bool =False, interactive: bool = True) -> None:
                             try:
                                 import keyring
                                 keyring.delete_password(
-                                    config.app_name, login
+                                    service_identity.keyring_service(), login
                                 )  # @UndefinedVariable
                             except Exception:  # pylint: disable=broad-except
                                 pass

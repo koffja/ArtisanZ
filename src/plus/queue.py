@@ -404,6 +404,49 @@ def queue_roast_item(roast_item:dict[str, Any]) -> bool:
 
     return queued
 
+
+def addFullRoastRecord(roast_record:dict[str, Any], unsynced:bool=False) -> None:
+    try:
+        _log.debug('addFullRoastRecord(%s, %s)', roast_record, unsynced)
+        aw = config.app_window
+        if aw is None:
+            _log.info('config.app_window is None')
+        elif aw.plus_readonly:
+            _log.info(
+                '-> roast not queued as users'
+                 ' account access is readonly'
+            )
+        elif queue is None:
+            _log.info(
+                '-> roast not queued as queue'
+                 ' is not running'
+            )
+        else:
+            r = dict(roast_record)
+            if unsynced or 'modified_at' not in r:
+                r['modified_at'] = util.epoch2ISO8601(time.time())
+            if is_full_roast_record(r):
+                aw.sendmessage(
+                    QApplication.translate(
+                        'Plus',
+                        'Queuing roast for upload to {}'
+                    ).format(config.app_name)
+                )  # @UndefinedVariable
+                rr = sync.suppress_zero_values(r)
+                queued:bool = queue_roast_item(rr)
+                if queued:
+                    _log.debug('-> full roast queued up')
+                    if 'roast_id' in rr:
+                        _log.info('full roast queued: %s', rr['roast_id'])
+                    _log.debug('-> qsize: %s', queue.qsize())
+            else:
+                _log.debug(
+                    '-> full roast not queued as mandatory info missing'
+                )
+    except Exception as e:  # pylint: disable=broad-except
+        _log.exception(e)
+
+
 # called on completed roasts with roast data
 # if roast_record is given, we assume an update is queued, otherwise a new
 # roast is queued

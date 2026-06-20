@@ -40,7 +40,7 @@ import requests.models
 import requests.exceptions
 from cryptography.fernet import Fernet
 
-from plus import config, account, util
+from plus import config, account, service_identity, util
 
 _log: Final[logging.Logger] = logging.getLogger(__name__)
 
@@ -121,7 +121,7 @@ def clearCredentials(remove_from_keychain: bool = True) -> None:
             try:
                 import keyring
                 keyring.delete_password(
-                    config.app_name, aw.plus_account
+                    service_identity.keyring_service(), aw.plus_account
                 )  # @UndefinedVariable
             except Exception as e:  # pylint: disable=broad-except
                 _log.error(e)
@@ -185,7 +185,7 @@ def make_authentify() -> Authentifier:
                     try:
                         import keyring  # @Reimport # imported last to make py2app work
                         passwd = keyring.get_password(
-                            config.app_name, aw.plus_account
+                            service_identity.keyring_service(), aw.plus_account
                         )  # @UndefinedVariable
                         keychain_success = True
                     except Exception as e:  # pylint: disable=broad-except
