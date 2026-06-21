@@ -727,6 +727,7 @@ import plus.util
 import plus.sync
 import plus.queue
 import plus.controller
+from plus.controller import translatedServiceMessage  # noqa: F401  (re-exported from plus.util in Phase 3)
 import plus.connection
 import plus.register
 import plus.notifications
@@ -5401,13 +5402,13 @@ class ApplicationWindow(QMainWindow):
                     if self.editgraphdialog is False:
                         # syncing from server in progress
                         plus_icon = 'plus-dirty'
-                        tooltip = QApplication.translate('Tooltip', 'Syncing with artisan.plus')
+                        tooltip = translatedServiceMessage('Syncing with artisan.plus', context='Tooltip')
                     elif plus.controller.is_synced():
                         plus_icon = 'plus-connected'
-                        tooltip = QApplication.translate('Tooltip', 'Disconnect artisan.plus')
+                        tooltip = translatedServiceMessage('Disconnect artisan.plus', context='Tooltip')
                     else:
                         plus_icon = 'plus-unsynced'
-                        tooltip = QApplication.translate('Tooltip', 'Upload to artisan.plus')
+                        tooltip = translatedServiceMessage('Upload to artisan.plus', context='Tooltip')
                     if self.plus_subscription == 'HOME':
                         subscription_icon = 'plus-home'
                         if self.plus_paidUntil is not None:
@@ -5438,10 +5439,10 @@ class ApplicationWindow(QMainWindow):
                                     subscription_icon = 'plus-pro-low'
                 else:
                     plus_icon = 'plus-on'
-                    tooltip = QApplication.translate('Tooltip', 'Disconnect artisan.plus')
+                    tooltip = translatedServiceMessage('Disconnect artisan.plus', context='Tooltip')
             else:
                 plus_icon = 'plus-off'
-                tooltip = QApplication.translate('Tooltip', 'Connect artisan.plus')
+                tooltip = translatedServiceMessage('Connect artisan.plus', context='Tooltip')
             if svgsupport:
                 plus_icon += '.svg'
             else:

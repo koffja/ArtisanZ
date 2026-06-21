@@ -42,8 +42,8 @@ connect_semaphore = QSemaphore(1)
 def is_connected() -> bool:
     return config.connected
 
-def translatedServiceMessage(source: str) -> str:
-    return QApplication.translate('Plus', source).replace(
+def translatedServiceMessage(source: str, context: str = 'Plus') -> str:
+    return QApplication.translate(context, source).replace(
         'artisan.plus', service_identity.display_name()
     )
 
