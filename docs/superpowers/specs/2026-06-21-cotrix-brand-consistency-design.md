@@ -28,7 +28,7 @@ User-visible symptoms include the main window title showing "artisan.plus", tool
 ### Non-Goals
 - Re-translating the 16 existing `.ts` entries. Once call sites use `translatedServiceMessage()`, the `.replace()` post-processes translated text too — `.ts` content becomes harmless.
 - Updating test fixtures that mock old `artisan.plus` URLs (separate cleanup, lower priority).
-- Updating 16 plus-module file-header comments (cosmetic; deferred to Phase 5, low priority).
+- Updating 16 plus-module file-header comments (handled in Phase 5; user approved inclusion 2026-06-21).
 - Changing email recipient `logfile@artisan.plus` in `main.py:5014` (functional dependency, must not change).
 
 ## 3. Design Decisions
@@ -100,7 +100,7 @@ __release_sponsor_url__ = 'https://tastermatrix.com/'
 __signature__ = '...'
 ```
 
-**Open question for user**: Does ArtisanZ want to retain artisan.plus as the "release sponsor" (attribution to upstream funder) or switch to Cotrix / Taster-Matrix (brand consistency)? **This spec defaults to brand consistency (Option A above) but flags it as a decision point.**
+**Decision locked 2026-06-21 (user choice)**: Option A — brand consistency. `__release_sponsor_name__ = 'Cotrix'`, `__release_sponsor_domain__ = 'tastermatrix.com'`, `__release_sponsor_url__ = 'https://tastermatrix.com/'`.
 
 ### 3.4 Unsafe call-site refactor pattern
 
@@ -294,9 +294,9 @@ Each phase is a separate atomic commit, smallest-first to enable bisect.
 
 **Commit message**: `ci(pre-commit): add grep hook to forbid bare 'artisan.plus' literals`
 
-### Phase 5 — Documentation
+### Phase 5 — Documentation (INCLUDED per user decision 2026-06-21)
 
-**Scope**: Update file-header comments in plus/*.py for cosmetic cleanliness (lower priority, can defer).
+**Scope**: Update file-header comments in plus/*.py for cosmetic cleanliness. User chose to include this in the same change set.
 
 **Files touched**:
 - 16 files in `src/plus/*.py` — change line 9 from `# This module connects to the artisan.plus inventory management service` to `# This module connects to the Cotrix inventory management service`.
@@ -439,14 +439,14 @@ For each phase, completion requires evidence (not assertion).
 - Investigating why Cotrix `/acoffees` returns empty (Phase 2 of Cotrix backend migration — separate effort).
 - Migrating `logfile@artisan.plus` email recipient (functional dependency, deferred indefinitely).
 
-## 9. Open Decisions (require user input before implementation)
+## 9. Resolved Decisions (locked 2026-06-21)
 
-| ID | Decision | Default if no answer |
-|---|---|---|
-| **D1** | `__release_sponsor_name__` value: `'Cotrix'` (brand consistency) vs `'artisan.plus'` (preserve upstream sponsor attribution) vs `''` (remove sponsor) | `'Cotrix'` |
-| **D2** | `__release_sponsor_url__`: `'https://tastermatrix.com/'` (brand) vs `'https://artisan.plus/'` (preserve) | `'https://tastermatrix.com/'` |
-| **D3** | Phase 5 (cosmetic comment update) included or deferred? | Deferred (low value, adds noise to diff) |
+| ID | Decision | Choice | Rationale |
+|---|---|---|---|
+| **D1** | `__release_sponsor_name__` value | `'Cotrix'` | Brand consistency — main window title and About dialog align with the rest of the GUI |
+| **D2** | `__release_sponsor_url__` value | `'https://tastermatrix.com/'` | Browser opens Cotrix homepage on sponsor click, not the legacy artisan.plus site |
+| **D3** | Phase 5 (cosmetic comment update) | **Included** | One-shot cleanup; 16 lines changed; no functional risk; keeps the codebase internally consistent |
 
----
+All decisions resolved. Implementation can proceed without further user input.
 
 **End of spec.** Implementation agents should treat §4 (phases) as the work breakdown and §7 (acceptance) as the definition of done. Decisions in §9 must be resolved before Phase 1 starts.
