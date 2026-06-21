@@ -726,6 +726,7 @@ import plus.config
 import plus.util
 import plus.sync
 import plus.queue
+import plus.service_identity
 import plus.controller
 from plus.controller import translatedServiceMessage  # noqa: F401  (re-exported from plus.util in Phase 3)
 import plus.connection
@@ -5134,7 +5135,7 @@ class ApplicationWindow(QMainWindow):
                     0 <= starts < everystarts):
 #                message = QApplication.translate('Message', 'Artisan is free to use!<br><br>To keep it free and current please support us<br><br><a href="{0}">{0}</a><br><br>and book<br><br><a href="{1}">{1}</a><br><br>to suppress this dialog')
 #                message = message.format('https://artisan-scope.org/donate/', 'https://artisan.plus')
-                message = QApplication.translate('Message', 'Artisan is free to use!\n\nTo keep it free and current please support us with your donation and subscribe to artisan.plus to suppress this dialog!')
+                message = translatedServiceMessage('Artisan is free to use!\n\nTo keep it free and current please support us with your donation and subscribe to artisan.plus to suppress this dialog!', context='Message')
                 donate_message_box = QMessageBox()
                 donate_message_box.setText(message)
                 donate_message_box.setIcon(QMessageBox.Icon.Information)
@@ -13401,7 +13402,7 @@ class ApplicationWindow(QMainWindow):
                 self,            # this dialog as parent
                 self.helpdialog, # the existing help dialog
                 QApplication.translate('Form Caption','Keyboard Shortcuts Help'),
-                keyboardshortcuts_help.content())
+                keyboardshortcuts_help.content().replace('artisan.plus', plus.service_identity.display_name()))
 
     @pyqtSlot(bool)
     def decrEventNumber(self, _:bool = False) -> None:

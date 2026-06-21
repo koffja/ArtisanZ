@@ -434,6 +434,8 @@ def getApplidedServerUpdatesModifiedAt() -> float|None:
 # variables directly
 # NOTE: server returns always all values of the SyncRecord, but suppresses NULL values
 def applyServerUpdates(data:dict[str, Any]) -> None:
+    # local import to avoid circular dependency (plus.controller imports plus.sync via plus.queue)
+    from plus.controller import translatedServiceMessage  # noqa: PLC0415
     dirty = False
     title_changed = False
     aw = config.app_window
@@ -726,9 +728,7 @@ def applyServerUpdates(data:dict[str, Any]) -> None:
         if aw is not None and dirty:
             aw.qmc.fileDirty()
             aw.sendmessageSignal.emit(
-                QApplication.translate(
-                    'Plus', 'Updated data received from artisan.plus'
-                ),
+                translatedServiceMessage('Updated data received from artisan.plus'),
                 True,
                 None,
             )
