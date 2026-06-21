@@ -40,6 +40,7 @@ import plus.stock
 import plus.controller
 import plus.queue
 import plus.blend
+import plus.service_identity
 
 #from artisanlib.suppress_errors import suppress_stdout_stderr
 from artisanlib.util import (deltaLabelUTF8, stringfromseconds,stringtoseconds, toInt, toFloat, abbrevString,
@@ -61,6 +62,25 @@ from PyQt6.QtWidgets import (QApplication, QWidget, QCheckBox, QComboBox, QDialo
                              QHBoxLayout, QVBoxLayout, QHeaderView, QLabel, QLineEdit, QTextEdit, QListView,
                              QPushButton, QSpinBox, QTableWidget, QTableWidgetItem, QTabWidget, QSizePolicy,
                              QGroupBox, QToolButton, QFrame)
+
+
+def translatedServiceMessage(context: str, source: str) -> str:
+    return QApplication.translate(context, source).replace(
+        'artisan.plus', plus.service_identity.display_name()
+    )
+
+
+def hasRecordingBeans(
+        plus_coffee: object|None,
+        plus_blend_spec: object|None,
+        beans: str|None,
+        title: str|None = None) -> bool:
+    default_title = QApplication.translate('Scope Title', 'Roaster Scope')
+    return plus_coffee is not None or plus_blend_spec is not None or (
+        beans is not None and beans.strip() != ''
+    ) or (
+        title is not None and title.strip() not in {'', default_title}
+    )
 
 
 ########################################################################################
@@ -897,6 +917,7 @@ class editGraphDlg(ArtisanResizeablDialog):
         beanslabel = QLabel('<b>' + QApplication.translate('Label', 'Beans') + '</b>')
         self.beansedit = ClickableTextEdit()
         self.beansedit.editingFinished.connect(self.beansEdited)
+        self.beansedit.textChanged.connect(self.beansEdited)
 
         self.beansedit.setNewPlainText(self.aw.qmc.beans)
 
@@ -1680,7 +1701,10 @@ class editGraphDlg(ArtisanResizeablDialog):
 
         if start_recording_on_exit:
             from PyQt6.QtWidgets import QMessageBox
-            string = QApplication.translate('Message', 'artisan.plus needs to know the beans you are roasting')
+            string = translatedServiceMessage(
+                'Message',
+                'artisan.plus needs to know the beans you are roasting',
+            )
             mbox = QMessageBox(self.aw)
             mbox.setText(string)
             plus.util.setPlusIcon(mbox)
@@ -1974,7 +1998,14 @@ class editGraphDlg(ArtisanResizeablDialog):
                 if self.start_recording_on_exit:
                     ok_button = self.dialogbuttons.button(QDialogButtonBox.StandardButton.Ok)
                     if ok_button is not None:
-                        ok_button.setEnabled(False)
+                        ok_button.setEnabled(
+                            hasRecordingBeans(
+                                self.plus_coffee_selected,
+                                self.plus_blend_selected_spec,
+                                self.beansedit.toPlainText(),
+                                self.titleedit.currentText(),
+                            )
+                        )
             elif self.start_recording_on_exit:
                 ok_button = self.dialogbuttons.button(QDialogButtonBox.StandardButton.Ok)
                 if ok_button is not None:
@@ -1987,6 +2018,8 @@ class editGraphDlg(ArtisanResizeablDialog):
     @pyqtSlot()
     def beansEdited(self) -> None:
         self.modified_beans = self.beansedit.toPlainText()
+        if self.aw.plus_account is not None and hasattr(self, 'plus_selected_line'):
+            self.updatePlusSelectedLine()
 
     @pyqtSlot()
     def beanSizeMinEdited(self) -> None:
@@ -2541,6 +2574,8 @@ class editGraphDlg(ArtisanResizeablDialog):
             else:
                 self.addRecentButton.setEnabled(False)
                 self.delRecentButton.setEnabled(False)
+            if self.aw.plus_account is not None and hasattr(self, 'plus_selected_line'):
+                self.updatePlusSelectedLine()
         except Exception as e: # pylint: disable=broad-except
             _log.exception(e)
             self.addRecentButton.setEnabled(False)
@@ -5747,12 +5782,18 @@ class editGraphDlg(ArtisanResizeablDialog):
 
         self.clean_up()
 
+        has_recording_details = hasRecordingBeans(
+            self.aw.qmc.plus_coffee,
+            self.aw.qmc.plus_blend_spec,
+            self.aw.qmc.beans,
+            self.aw.qmc.title,
+        )
         if (self.start_recording_on_exit and
                 not self.aw.qmc.flagstart and                        # not yet recording
                 self.aw.plus_account is not None and                 # plus connected
                 not self.aw.qmc.roastpropertiesAutoOpenFlag and      # no "Open on CHARGE"
                 not self.aw.qmc.roastpropertiesAutoOpenDropFlag and  # no "Open on DROP"
-                (self.aw.qmc.plus_coffee is not None or self.aw.qmc.plus_blend_spec is not None or self.aw.qmc.beans != '')): # beans are set
+                has_recording_details):                              # recording details are set
             # we trigger the START of the recording on leaving this dialog
             self.aw.qmc.toggleRecorderSignal.emit()
 

@@ -615,6 +615,11 @@ class TestConnectFunction:
             mock_qsemaphore.release.assert_called_once_with(1)
             mock_connection.authentify.assert_called_once()
             mock_queue.start.assert_called_once()
+            mock_app_window.sendmessageSignal.emit.assert_any_call(
+                'Connected to Cotrix',
+                True,
+                None,
+            )
             mock_app_window.updatePlusStatusSignal.emit.assert_called_once()
 
     def test_connect_failed_authentication(
@@ -642,6 +647,39 @@ class TestConnectFunction:
             # Assert
             mock_connection.authentify.assert_called_once()
             mock_app_window.sendmessageSignal.emit.assert_called()
+
+    def test_connect_failed_authentication_preserves_attempted_account_in_message(
+        self, mock_app_window: Mock, mock_qsemaphore: Mock
+    ) -> None:
+        """Test failed auth message keeps account even if credentials are cleared."""
+        # Arrange
+        mock_app_window.plus_account = 'test@example.com'
+
+        def fail_and_clear_credentials(*_args: Any, **_kwargs: Any) -> bool:
+            mock_app_window.plus_account = None
+            return False
+
+        with patch('plus.controller.is_connected', return_value=False), patch(
+            'plus.controller.connect_semaphore', mock_qsemaphore
+        ), patch('plus.controller.config') as mock_config, patch(
+            'plus.controller.connection'
+        ) as mock_connection, patch(
+            'keyring.get_password', return_value='password123'
+        ):
+
+            mock_config.app_window = mock_app_window
+            mock_connection.authentify = Mock(side_effect=fail_and_clear_credentials)
+            mock_qsemaphore.available.return_value = 0  # Semaphore acquired
+
+            # Act
+            controller.connect(interactive=True)
+
+            # Assert
+            mock_app_window.sendmessageSignal.emit.assert_any_call(
+                'test@example.com Authentication failed',
+                True,
+                None,
+            )
 
     def test_connect_with_login_dialog(
         self, mock_app_window: Mock, mock_login_response: Mock, mock_qsemaphore: Mock

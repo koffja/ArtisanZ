@@ -110,7 +110,7 @@ class Login(ArtisanDialog):
 
         self.textName:QLineEdit = QLineEdit(self)
         self.textName.setPlaceholderText(
-            QApplication.translate('Plus', 'Email')
+            QApplication.translate('Plus', 'Username or email')
         )
         self.textName.textChanged.connect(self.textChanged)
         if email is not None:
@@ -171,13 +171,11 @@ class Login(ArtisanDialog):
         self.remember = bool(i)
 
     def isInputReasonable(self) -> bool:
-        login = self.textName.text()
+        login = self.textName.text().strip()
         passwd = self.textPass.text()
         return (
             len(passwd) >= config.min_passwd_len
             and len(login) >= config.min_login_len
-            and '@' in login
-            and '.' in login
         )
 
     @pyqtSlot(str)

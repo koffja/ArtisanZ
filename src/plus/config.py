@@ -65,7 +65,7 @@ connect_timeout: Final[int] = 6  # in seconds
 read_timeout: Final[int] = 12  # in seconds
 read_timeout_max: Final[int] = 30  # in seconds
 min_passwd_len: Final[int] = 4
-min_login_len: Final[int] = 6
+min_login_len: Final[int] = 1
 compress_posts: Final[bool] = True
 # post_compression_threshold holds the number in bytes before compression
 # kicks in

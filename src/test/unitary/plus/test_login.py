@@ -236,7 +236,7 @@ with patch('PyQt6.QtWidgets.QApplication', MockQApplication), patch(
 ), patch(
     'plus.config.min_passwd_len', 4
 ), patch(
-    'plus.config.min_login_len', 6
+    'plus.config.min_login_len', 1
 ):
     from plus import login
 
@@ -491,8 +491,8 @@ class TestLoginDialogValidation:
             # Assert
             assert result is False
 
-    def test_is_input_reasonable_short_login(self, mock_parent_widget:Mock, mock_app_window:Mock) -> None:
-        """Test isInputReasonable returns False for short login."""
+    def test_is_input_reasonable_empty_login(self, mock_parent_widget:Mock, mock_app_window:Mock) -> None:
+        """Test isInputReasonable returns False for empty login."""
         # Arrange
         with patch('plus.login.ArtisanDialog.__init__') as mock_super_init:
             mock_super_init.return_value = None
@@ -500,7 +500,7 @@ class TestLoginDialogValidation:
 
             # Mock text inputs
             dialog.textName = Mock()
-            dialog.textName.text = Mock(return_value='user')  # Too short
+            dialog.textName.text = Mock(return_value='')
             dialog.textPass = Mock()
             dialog.textPass.text = Mock(return_value='password123')
 
@@ -510,10 +510,10 @@ class TestLoginDialogValidation:
             # Assert
             assert result is False
 
-    def test_is_input_reasonable_invalid_email_no_at(
+    def test_is_input_reasonable_accepts_short_tm_id(
         self, mock_parent_widget:Mock, mock_app_window:Mock
     ) -> None:
-        """Test isInputReasonable returns False for email without @ symbol."""
+        """Test isInputReasonable accepts short Taster-Matrix identifiers."""
         # Arrange
         with patch('plus.login.ArtisanDialog.__init__') as mock_super_init:
             mock_super_init.return_value = None
@@ -521,7 +521,7 @@ class TestLoginDialogValidation:
 
             # Mock text inputs
             dialog.textName = Mock()
-            dialog.textName.text = Mock(return_value='userexample.com')  # No @ symbol
+            dialog.textName.text = Mock(return_value='cz')
             dialog.textPass = Mock()
             dialog.textPass.text = Mock(return_value='password123')
 
@@ -529,12 +529,12 @@ class TestLoginDialogValidation:
             result = dialog.isInputReasonable()
 
             # Assert
-            assert result is False
+            assert result is True
 
-    def test_is_input_reasonable_invalid_email_no_dot(
+    def test_is_input_reasonable_valid_username_without_at(
         self, mock_parent_widget:Mock, mock_app_window:Mock
     ) -> None:
-        """Test isInputReasonable returns False for email without dot."""
+        """Test isInputReasonable accepts a Taster-Matrix username."""
         # Arrange
         with patch('plus.login.ArtisanDialog.__init__') as mock_super_init:
             mock_super_init.return_value = None
@@ -542,7 +542,7 @@ class TestLoginDialogValidation:
 
             # Mock text inputs
             dialog.textName = Mock()
-            dialog.textName.text = Mock(return_value='user@examplecom')  # No dot
+            dialog.textName.text = Mock(return_value='roaster123')
             dialog.textPass = Mock()
             dialog.textPass.text = Mock(return_value='password123')
 
@@ -550,7 +550,28 @@ class TestLoginDialogValidation:
             result = dialog.isInputReasonable()
 
             # Assert
-            assert result is False
+            assert result is True
+
+    def test_is_input_reasonable_valid_username_without_dot(
+        self, mock_parent_widget:Mock, mock_app_window:Mock
+    ) -> None:
+        """Test isInputReasonable accepts usernames that are not email addresses."""
+        # Arrange
+        with patch('plus.login.ArtisanDialog.__init__') as mock_super_init:
+            mock_super_init.return_value = None
+            dialog = login.Login(mock_parent_widget, mock_app_window)
+
+            # Mock text inputs
+            dialog.textName = Mock()
+            dialog.textName.text = Mock(return_value='roaster')
+            dialog.textPass = Mock()
+            dialog.textPass.text = Mock(return_value='password123')
+
+            # Act
+            result = dialog.isInputReasonable()
+
+            # Assert
+            assert result is True
 
 
 class TestLoginDialogEventHandlers:
@@ -1001,7 +1022,7 @@ class TestLoginDialogEdgeCases:
 
             # Test minimum valid lengths
             dialog.textName = Mock()
-            dialog.textName.text = Mock(return_value='u@e.co')  # Exactly min_login_len
+            dialog.textName.text = Mock(return_value='c')  # Exactly min_login_len
             dialog.textPass = Mock()
             dialog.textPass.text = Mock(return_value='1234')  # Exactly min_passwd_len
 

@@ -557,6 +557,72 @@ class TestCredentialManagement:
             assert mock_config.token is None
 
 
+class TestAuthenticationPayload:
+    """Test TM-ArtisanZ authentication request helpers."""
+
+    def test_build_authentication_payload_uses_email_for_email_login(self) -> None:
+        """Test email-like logins are sent as email credentials."""
+        payload = connection.buildAuthenticationPayload('user@example.com', 'password123')
+
+        assert payload == {
+            'email': 'user@example.com',
+            'password': 'password123',
+        }
+
+    def test_build_authentication_payload_uses_username_for_plain_login(self) -> None:
+        """Test Taster-Matrix usernames are sent as username credentials."""
+        payload = connection.buildAuthenticationPayload('roaster123', 'password123')
+
+        assert payload == {
+            'username': 'roaster123',
+            'password': 'password123',
+        }
+
+    def test_extract_authentication_error_uses_backend_message(self) -> None:
+        """Test Taster-Matrix auth errors surface their message field."""
+        message = connection.extractAuthenticationError({
+            'code': 'uni-id-password-error',
+            'message': '用户名或密码错误',
+        })
+
+        assert message == '用户名或密码错误'
+
+    def test_authentify_sends_username_payload_for_plain_login(self) -> None:
+        """Test authentify sends plain Taster-Matrix logins as username."""
+        mock_aw = Mock()
+        mock_aw.plus_account = 'roaster123'
+
+        mock_response = Mock()
+        mock_response.status_code = 401
+        mock_response.headers = {'content-type': 'application/json; charset=utf-8'}
+        mock_response.json.return_value = {
+            'code': 'uni-id-password-error',
+            'message': '用户名或密码错误',
+        }
+
+        authentify = connection.make_authentify()
+
+        with patch('plus.connection.config') as mock_config, patch(
+            'plus.connection.sendData', return_value=mock_response
+        ) as mock_send_data, patch('plus.connection.clearCredentials') as mock_clear_credentials:
+            mock_config.app_window = mock_aw
+            mock_config.auth_url = 'https://tastermatrix.com/api/tm-artisanz/v1/accounts/users/authenticate'
+
+            assert authentify('password123') is False
+
+            mock_send_data.assert_called_once_with(
+                mock_config.auth_url,
+                {
+                    'username': 'roaster123',
+                    'password': 'password123',
+                },
+                'POST',
+                False,
+            )
+            mock_aw.sendmessage.assert_called_once_with('用户名或密码错误')
+            mock_clear_credentials.assert_called_once()
+
+
 class TestHeaderGeneration:
     """Test HTTP header generation functionality."""
 

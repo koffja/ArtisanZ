@@ -5,7 +5,7 @@ from plus import config, service_identity
 
 def test_tm_artisanz_service_identity_values() -> None:
     assert service_identity.service_id() == 'tm-artisanz'
-    assert service_identity.display_name() == 'TM-ArtisanZ'
+    assert service_identity.display_name() == 'Cotrix'
     assert service_identity.api_base_url() == 'https://tastermatrix.com/api/tm-artisanz/v1'
     assert service_identity.web_base_url() == 'https://tastermatrix.com'
     assert service_identity.shop_base_url() == 'https://tastermatrix.com'

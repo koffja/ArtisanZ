@@ -342,7 +342,7 @@ class TestConnectionConfigurations:
     def test_min_login_len_setting(self) -> None:
         """Test minimum login length setting."""
         # Assert
-        assert config.min_login_len == 6
+        assert config.min_login_len == 1
         assert isinstance(config.min_login_len, int)
         assert config.min_login_len > 0
 
@@ -554,8 +554,7 @@ class TestConfigurationValidation:
         """Test that length constraints are reasonable."""
         # Assert
         assert config.min_passwd_len >= 4
-        assert config.min_login_len >= 6
-        assert config.min_passwd_len <= config.min_login_len
+        assert config.min_login_len >= 1
 
     def test_cache_expiration_values_are_positive(self) -> None:
         """Test that cache expiration values are positive."""

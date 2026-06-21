@@ -8,7 +8,7 @@ from typing import Final
 
 
 SERVICE_ID: Final[str] = 'tm-artisanz'
-DISPLAY_NAME: Final[str] = 'TM-ArtisanZ'
+DISPLAY_NAME: Final[str] = 'Cotrix'
 API_BASE_URL: Final[str] = 'https://tastermatrix.com/api/tm-artisanz/v1'
 WEB_BASE_URL: Final[str] = 'https://tastermatrix.com'
 SHOP_BASE_URL: Final[str] = WEB_BASE_URL

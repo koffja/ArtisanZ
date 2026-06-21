@@ -42,6 +42,11 @@ connect_semaphore = QSemaphore(1)
 def is_connected() -> bool:
     return config.connected
 
+def translatedServiceMessage(source: str) -> str:
+    return QApplication.translate('Plus', source).replace(
+        'artisan.plus', service_identity.display_name()
+    )
+
 
 # artisan.plus is on as soon as an account id has been established
 # Note that artisan.plus might be on, while not being connected due to
@@ -241,6 +246,7 @@ def connect(clear_on_failure: bool =False, interactive: bool = True) -> None:
                             None,
                         )  # @UndefinedVariable
                 else:
+                    attempted_account = aw.plus_account
                     success = connection.authentify(config_passwd, keychain_success)
                     if success:
                         config.connected = success
@@ -250,13 +256,11 @@ def connect(clear_on_failure: bool =False, interactive: bool = True) -> None:
                             None,
                         )  # @UndefinedVariable
                         aw.sendmessageSignal.emit(
-                            QApplication.translate(
-                                'Plus', 'Connected to artisan.plus'
-                            ),
+                            translatedServiceMessage('Connected to artisan.plus'),
                             True,
                             None,
                         )  # @UndefinedVariable
-                        _log.info('artisan.plus connected')
+                        _log.info('%s connected', service_identity.display_name())
                         try:
                             queue.start()  # start the outbox queue
                         except Exception as e:  # pylint: disable=broad-except
@@ -268,9 +272,7 @@ def connect(clear_on_failure: bool =False, interactive: bool = True) -> None:
                     elif clear_on_failure:
                         connection.clearCredentials()
                         aw.sendmessageSignal.emit(
-                            QApplication.translate(
-                                'Plus', 'artisan.plus turned off'
-                            ),
+                            translatedServiceMessage('artisan.plus turned off'),
                             True,
                             None,
                         )  # @UndefinedVariable
@@ -278,8 +280,9 @@ def connect(clear_on_failure: bool =False, interactive: bool = True) -> None:
                         message = QApplication.translate(
                             'Plus', 'Authentication failed'
                         )
+                        account = attempted_account if attempted_account is not None else aw.plus_account
                         message = (
-                            f'{aw.plus_account} {message}'
+                            f'{account} {message}'
                         )  # @UndefinedVariable
                         aw.sendmessageSignal.emit(
                             message, True, None
@@ -291,18 +294,14 @@ def connect(clear_on_failure: bool =False, interactive: bool = True) -> None:
                 connection.clearCredentials()
                 if interactive and aw is not None:
                     aw.sendmessageSignal.emit(
-                        QApplication.translate(
-                            'Plus', 'artisan.plus turned off'
-                        ),
+                        translatedServiceMessage('artisan.plus turned off'),
                         True,
                         None,
                     )
             elif aw is not None:
                 if interactive:
                     aw.sendmessageSignal.emit(
-                        QApplication.translate(
-                            'Plus', "Couldn't connect to artisan.plus"
-                        ),
+                        translatedServiceMessage("Couldn't connect to artisan.plus"),
                         True,
                         None,
                     )
@@ -325,7 +324,7 @@ def connect(clear_on_failure: bool =False, interactive: bool = True) -> None:
 
 # show a dialog to have the user confirm the disconnect action
 def disconnect_confirmed() -> bool:
-    string = QApplication.translate('Plus', 'Disconnect artisan.plus?')
+    string = translatedServiceMessage('Disconnect artisan.plus?')
     mbox = QMessageBox()
     mbox.setText(string)
     util.setPlusIcon(mbox)
@@ -366,28 +365,24 @@ def disconnect(
                     aw.plus_user_id = None # if this is cleared, the Scheduler cannot filter by user in this ON (dark-grey) state
                 if remove_credentials:
                     aw.sendmessageSignal.emit(
-                        QApplication.translate(
-                            'Plus', 'artisan.plus turned off'
-                        ),
+                        translatedServiceMessage('artisan.plus turned off'),
                         True,
                         None,
                     )
                 else:
                     aw.sendmessageSignal.emit(
                         (
-                        QApplication.translate(
-                            'Plus', 'artisan.plus connection lost. Reconnecting automatically...'
+                        translatedServiceMessage(
+                            'artisan.plus connection lost. Reconnecting automatically...'
                         )
                         if keepON else
-                        QApplication.translate(
-                            'Plus', 'artisan.plus disconnected'
-                        )),
+                        translatedServiceMessage('artisan.plus disconnected')),
                         True,
                         None,
                     )
             if stop_queue:
                 queue.stop()  # stop the outbox queue
-            _log.info('artisan.plus disconnected')
+            _log.info('%s disconnected', service_identity.display_name())
         finally:
             if connect_semaphore.available() < 1:
                 connect_semaphore.release(1)
@@ -401,7 +396,7 @@ def reconnected() -> None:
         try:
             connect_semaphore.acquire(1)
             config.connected = True
-            _log.info('artisan.plus reconnected')
+            _log.info('%s reconnected', service_identity.display_name())
         finally:
             if connect_semaphore.available() < 1:
                 connect_semaphore.release(1)
@@ -412,8 +407,7 @@ def reconnected() -> None:
             queue.start()  # restart the outbox queue
             if aw is not None:
                 aw.sendmessageSignal.emit(
-                    QApplication.translate(
-                        'Plus', 'artisan.plus reconnected'),
+                    translatedServiceMessage('artisan.plus reconnected'),
                     True,
                     None)
 

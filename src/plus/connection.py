@@ -151,6 +151,21 @@ class Authentifier(Protocol):
     def __call__(self, passwd:str|None = ..., keychain_success: bool = ..., clear_password_cache: bool = ...) -> bool:
         ...
 
+def buildAuthenticationPayload(login: str, passwd: str) -> dict[str, str]:
+    login_processed = login.strip()
+    login_key = 'email' if '@' in login_processed and '.' in login_processed else 'username'
+    return {
+        login_key: login_processed,
+        'password': passwd,
+    }
+
+def extractAuthenticationError(res: dict[str, Any]) -> str|None:
+    for key in ('error', 'message', 'errMsg'):
+        value = res.get(key)
+        if isinstance(value, str) and value != '':
+            return value
+    return None
+
 def make_authentify() -> Authentifier:
     # in-memory password stored in closure only if keychain is not available
     passwd_encrypted:bytes|None = None
@@ -203,10 +218,7 @@ def make_authentify() -> Authentifier:
                     '-> authentifying %s',
                     aw.plus_account,
                 )  # @UndefinedVariable
-                data = {
-                    'email': aw.plus_account,
-                    'password': passwd,
-                }  # @UndefinedVariable
+                data = buildAuthenticationPayload(aw.plus_account, passwd)
                 r = sendData(config.auth_url, data, 'POST', False)
                 del data
                 del passwd
@@ -288,10 +300,9 @@ def make_authentify() -> Authentifier:
                                             '-> authentication failed due to'
                                             ' long expired subscription'
                                     )
-                                    if 'error' in res:
-                                        aw.sendmessage(
-                                            res['error']
-                                        )  # @UndefinedVariable
+                                    error_message = extractAuthenticationError(res)
+                                    if error_message is not None:
+                                        aw.sendmessage(error_message)  # @UndefinedVariable
                                     clearCredentials()
                                     return False
                             except Exception as e:  # pylint: disable=broad-except
@@ -320,10 +331,9 @@ def make_authentify() -> Authentifier:
                             )
                         return True
                     _log.debug('-> authentication failed')
-                    if 'error' in res:
-                        aw.sendmessage(
-                            res['error']
-                        )  # @UndefinedVariable
+                    error_message = extractAuthenticationError(res)
+                    if error_message is not None:
+                        aw.sendmessage(error_message)  # @UndefinedVariable
                     clearCredentials()
                     return False
                 _log.error('204: empty response')
