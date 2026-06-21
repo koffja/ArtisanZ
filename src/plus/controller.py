@@ -42,10 +42,9 @@ connect_semaphore = QSemaphore(1)
 def is_connected() -> bool:
     return config.connected
 
-def translatedServiceMessage(source: str, context: str = 'Plus') -> str:
-    return QApplication.translate(context, source).replace(
-        'artisan.plus', service_identity.display_name()
-    )
+# Re-exported from plus.util for backwards compatibility.
+# All call sites should eventually import directly from plus.util.
+from plus.util import translatedServiceMessage  # noqa: F401
 
 
 # artisan.plus is on as soon as an account id has been established

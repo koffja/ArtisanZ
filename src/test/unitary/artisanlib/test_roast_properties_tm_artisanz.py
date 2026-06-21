@@ -35,8 +35,8 @@ def test_translated_service_message_rebrands_artisan_plus_to_cotrix() -> None:
     ):
         assert (
             roast_properties.translatedServiceMessage(
-                'Message',
                 'artisan.plus needs to know the beans you are roasting',
+                context='Message',
             )
             == 'Cotrix needs to know the beans you are roasting'
         )

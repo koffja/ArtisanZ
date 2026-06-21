@@ -28,7 +28,7 @@ from PyQt6.QtWidgets import QApplication, QStyle
 
 from artisanlib.util import decodeLocal, getResourcePath, float2float
 from pathlib import Path
-from plus import config
+from plus import config, service_identity
 import datetime
 import dateutil.parser
 import logging
@@ -41,6 +41,19 @@ if TYPE_CHECKING:
     from PyQt6.QtWidgets import QMessageBox # pylint: disable=unused-import
 
 _log: Final[logging.Logger] = logging.getLogger(__name__)
+
+
+def translatedServiceMessage(source: str, context: str = 'Plus') -> str:
+    """Translate ``source`` under ``context``, then runtime-replace the literal
+    ``'artisan.plus'`` with the configured service display name (Cotrix).
+
+    All user-facing strings that mention 'artisan.plus' MUST route through
+    this function. The pre-commit hook ``no-bare-artisan-plus-literal``
+    enforces this.
+    """
+    return QApplication.translate(context, source).replace(
+        'artisan.plus', service_identity.display_name()
+    )
 
 
 # Files

@@ -728,7 +728,7 @@ import plus.sync
 import plus.queue
 import plus.service_identity
 import plus.controller
-from plus.controller import translatedServiceMessage  # noqa: F401  (re-exported from plus.util in Phase 3)
+from plus.util import translatedServiceMessage  # unified implementation
 import plus.connection
 import plus.register
 import plus.notifications

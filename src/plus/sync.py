@@ -27,6 +27,7 @@ from PyQt6.QtWidgets import QApplication
 from pathlib import Path
 from artisanlib.util import getDirectory, weight_units, convertWeight, float2float
 from plus import config, util, connection, controller, roast, stock
+from plus.util import translatedServiceMessage
 import os
 import time
 import logging
@@ -434,8 +435,6 @@ def getApplidedServerUpdatesModifiedAt() -> float|None:
 # variables directly
 # NOTE: server returns always all values of the SyncRecord, but suppresses NULL values
 def applyServerUpdates(data:dict[str, Any]) -> None:
-    # local import to avoid circular dependency (plus.controller imports plus.sync via plus.queue)
-    from plus.controller import translatedServiceMessage  # noqa: PLC0415
     dirty = False
     title_changed = False
     aw = config.app_window

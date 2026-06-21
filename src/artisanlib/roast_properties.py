@@ -36,6 +36,7 @@ from artisanlib.main import UI_MODE
 # import artisan.plus modules
 import plus.config  # @UnusedImport
 import plus.util
+from plus.util import translatedServiceMessage
 import plus.stock
 import plus.controller
 import plus.queue
@@ -62,12 +63,6 @@ from PyQt6.QtWidgets import (QApplication, QWidget, QCheckBox, QComboBox, QDialo
                              QHBoxLayout, QVBoxLayout, QHeaderView, QLabel, QLineEdit, QTextEdit, QListView,
                              QPushButton, QSpinBox, QTableWidget, QTableWidgetItem, QTabWidget, QSizePolicy,
                              QGroupBox, QToolButton, QFrame)
-
-
-def translatedServiceMessage(context: str, source: str) -> str:
-    return QApplication.translate(context, source).replace(
-        'artisan.plus', plus.service_identity.display_name()
-    )
 
 
 def hasRecordingBeans(
@@ -1702,8 +1697,8 @@ class editGraphDlg(ArtisanResizeablDialog):
         if start_recording_on_exit:
             from PyQt6.QtWidgets import QMessageBox
             string = translatedServiceMessage(
-                'Message',
                 'artisan.plus needs to know the beans you are roasting',
+                context='Message',
             )
             mbox = QMessageBox(self.aw)
             mbox.setText(string)
