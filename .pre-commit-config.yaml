@@ -17,3 +17,17 @@ repos:
     -   id: pyupgrade
         args: [--py312-plus]
         exclude: ^(src/uic/|src/translations/|src/includes/)
+-   repo: local
+    hooks:
+    -   id: no-bare-artisan-plus-literal
+        name: Forbid bare 'artisan.plus' literal in plus/ or artisanlib/
+        description: >-
+            User-facing strings mentioning artisan.plus must route through
+            plus.util.translatedServiceMessage to get the runtime brand swap
+            to Cotrix. Update the source string inside the translatedServiceMessage(...)
+            call to keep the literal in context, OR replace the call site with
+            config.app_name in a format string.
+        language: system
+        entry: bash tools/check_no_bare_artisan_plus.sh
+        pass_filenames: false
+        always_run: true
