@@ -7,7 +7,7 @@
 #
 #
 # ABOUT
-# This module connects to the artisan.plus inventory management service
+# This module connects to the Cotrix inventory management service
 
 # LICENSE
 # This program or module is free software: you can redistribute it and/or

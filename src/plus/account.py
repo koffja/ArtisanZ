@@ -6,7 +6,7 @@
 #
 #
 # ABOUT
-# This module connects to the artisan.plus inventory management service
+# This module connects to the Cotrix inventory management service
 
 # LICENSE
 # This program or module is free software: you can redistribute it and/or
@@ -21,7 +21,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-"""This module connects to the artisan.plus inventory management service."""
+"""This module connects to the Cotrix inventory management service."""
 
 from PyQt6.QtCore import QSemaphore
 
