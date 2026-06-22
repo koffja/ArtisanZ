@@ -68,6 +68,7 @@ modules_to_isolate = [
     'plus.connection',
     'plus.sync',
     'plus.controller',
+    'plus.register',
     'portalocker',
     'portalocker.exceptions',
     'shelve',
@@ -192,7 +193,49 @@ sys.modules['artisanlib.util'].getDirectory = Mock(return_value='/tmp/cache') # 
 # Now safe to import other modules
 # ============================================================================
 
+sys.modules.pop('plus.register', None)
+if 'plus' in sys.modules and hasattr(sys.modules['plus'], 'register'):
+    delattr(sys.modules['plus'], 'register')
+
 from plus import register
+
+
+def restore_mocked_import_modules() -> None:
+    """Restore module cache entries replaced only to import plus.register in isolation."""
+    for module_name, mock_module in mock_modules.items():
+        if module_name in original_modules:
+            sys.modules[module_name] = original_modules[module_name]
+        else:
+            sys.modules.pop(module_name, None)
+
+        if '.' not in module_name:
+            continue
+        parent_name, attr_name = module_name.rsplit('.', 1)
+        parent_module = sys.modules.get(parent_name)
+        if parent_module is None or getattr(parent_module, attr_name, None) is not mock_module:
+            continue
+        if module_name in original_modules:
+            setattr(parent_module, attr_name, original_modules[module_name])
+        else:
+            delattr(parent_module, attr_name)
+
+
+def register_register_modules() -> None:
+    """Ensure register tests resolve their isolated modules and mocks."""
+    for module_name, mock_module in mock_modules.items():
+        sys.modules[module_name] = mock_module
+        if '.' not in module_name:
+            continue
+        parent_name, attr_name = module_name.rsplit('.', 1)
+        parent_module = sys.modules.get(parent_name)
+        if parent_module is not None:
+            setattr(parent_module, attr_name, mock_module)
+    sys.modules['plus.register'] = register
+    if 'plus' in sys.modules:
+        setattr(sys.modules['plus'], 'register', register)
+
+
+restore_mocked_import_modules()
 
 # ============================================================================
 # SESSION-LEVEL ISOLATION FIXTURES
@@ -280,6 +323,7 @@ def reset_register_state() -> Generator[None, None, None]:
     This fixture ensures that each test starts with a clean state and that
     mock objects are properly reset between tests.
     """
+    register_register_modules()
     # Reset mock states before each test
     for mock_module in mock_modules.values():
         if hasattr(mock_module, 'reset_mock'):
@@ -307,6 +351,7 @@ def reset_register_state() -> Generator[None, None, None]:
     for mock_module in mock_modules.values():
         if hasattr(mock_module, 'reset_mock'):
             mock_module.reset_mock()
+    restore_mocked_import_modules()
 
 
 # ============================================================================

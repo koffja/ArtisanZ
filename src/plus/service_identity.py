@@ -13,6 +13,7 @@ API_BASE_URL: Final[str] = 'https://tastermatrix.com/api/tm-artisanz/v1'
 WEB_BASE_URL: Final[str] = 'https://tastermatrix.com'
 SHOP_BASE_URL: Final[str] = WEB_BASE_URL
 KEYRING_SERVICE: Final[str] = SERVICE_ID
+COTRIX_ROASTS_PATH: Final[str] = '/app/#/pages/cotrix/roasts'
 
 
 def service_id() -> str:
@@ -33,6 +34,10 @@ def web_base_url() -> str:
 
 def shop_base_url() -> str:
     return SHOP_BASE_URL
+
+
+def cotrix_roasts_url() -> str:
+    return f'{WEB_BASE_URL}{COTRIX_ROASTS_PATH}'
 
 
 def keyring_service() -> str:

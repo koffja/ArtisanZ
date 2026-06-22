@@ -17,6 +17,7 @@ modules_to_isolate = [
     'PyQt5.QtCore',
     'PyQt5.QtWidgets',
     'artisanlib.main',
+    'plus.controller',
     'plus.config',
     'plus.connection',
     'plus.stock',
@@ -122,9 +123,8 @@ class MockQTimer:
 
 
 class MockQApplication:
-    def __init__(self) -> None:
-        self.keyboardModifiers = Mock(return_value=0)
-        self.style = Mock(return_value=Mock())
+    keyboardModifiers = Mock(return_value=0)
+    style = Mock(return_value=Mock())
 
     @staticmethod
     def translate(_context: str, text: str) -> str:
@@ -132,11 +132,12 @@ class MockQApplication:
 
 
 class MockQMessageBox:
+    class StandardButton:
+        Yes = 1
+        No = 0
+
     def __init__(self) -> None:
-        self.StandardButton = Mock()
-        self.StandardButton.Yes = 1
-        self.StandardButton.No = 0
-        self.exec = Mock(return_value=1)
+        self.exec = Mock(return_value=self.StandardButton.Yes)
         self.setText = Mock()
         self.setInformativeText = Mock()
         self.setStandardButtons = Mock()
@@ -148,6 +149,10 @@ class MockQt:
     class KeyboardModifier:
         ControlModifier = 1
 
+
+sys.modules.pop('plus.controller', None)
+if 'plus' in sys.modules and hasattr(sys.modules['plus'], 'controller'):
+    delattr(sys.modules['plus'], 'controller')
 
 # Import the controller module with targeted patches
 # Only patch PyQt6 since PyQt5 is not installed and should be ignored
@@ -175,6 +180,13 @@ with patch('PyQt6.QtCore.QSemaphore', MockQSemaphore), patch(
     'keyring.delete_password', Mock()
 ):
     from plus import controller
+
+
+def register_controller_module() -> None:
+    """Ensure string patches resolve to this test module's isolated controller module."""
+    sys.modules['plus.controller'] = controller
+    if 'plus' in sys.modules:
+        setattr(sys.modules['plus'], 'controller', controller)
 
 
 @pytest.fixture(scope='session', autouse=True)
@@ -255,6 +267,7 @@ def reset_controller_state() -> Generator[None, None, None]:
     This fixture automatically runs for every test to prevent cross-test contamination
     and ensures that each test starts with a clean state.
     """
+    register_controller_module()
     # Store original values
     original_connected = getattr(controller.config, 'connected', False)
     original_app_window = getattr(controller.config, 'app_window', None)

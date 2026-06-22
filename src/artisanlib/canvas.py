@@ -74,7 +74,7 @@ from artisanlib.atypes import SerialSettings, BTBreakParams, BbpCache, AlarmSet,
 
 # import artisan.plus modules
 from plus.util import roastLink
-from plus.queue import addRoast, sendLockSchedule
+from plus.queue import sendLockSchedule
 from plus.sync import clearSyncRecordHash
 
 from PyQt6.QtWidgets import (QApplication, QWidget, QMessageBox,
@@ -4236,8 +4236,6 @@ class tgraphcanvas(QObject):
     @pyqtSlot('QAction*')
     def event_popup_action(self, action:QAction) -> None:
         if action.key[0] >= 0:  # type: ignore[attr-defined] # "QAction" has no attribute "key"
-            # we check if this is the first DROP mark on this roast
-            firstDROP = (action.key[0] == 6 and self.timeindex[6] == 0)  # type: ignore[attr-defined] # "QAction" has no attribute "key"
             timeindex_before = self.timeindex[action.key[0]]  # type: ignore[attr-defined] # "QAction" has no attribute "key"
             self.timeindex[action.key[0]] = action.key[1]  # type: ignore[attr-defined] # "QAction" has no attribute "key"
             # clear custom label positions cache entry
@@ -4299,21 +4297,6 @@ class tgraphcanvas(QObject):
                     self.updateAmbientPressure()
                 except Exception: # pylint: disable=broad-except
                     pass
-#PLUS
-                # only on first setting the DROP event (not set yet and no previous DROP undone), we upload to PLUS
-                if firstDROP and self.autoDROPenabled and self.aw.plus_account is not None:
-                    # NOTE: scheduler is only active if connected to artisan.plus
-                    if self.aw.schedule_window is not None:
-                        self.aw.schedule_window.register_completed_roast.emit()
-                    try:
-                        self.aw.updatePlusStatus()
-                    except Exception: # pylint: disable=broad-except
-                        pass
-                        # add to out-queue
-                    try:
-                        addRoast()
-                    except Exception: # pylint: disable=broad-except
-                        pass
                 if not self.flagstart:
                     self.aw.autoAdjustAxis(deltas=False)
 
@@ -15386,8 +15369,6 @@ class tgraphcanvas(QObject):
                         start = self.timex[self.timeindex[0]]
                     else:
                         start = 0
-                    # we check if this is the first DROP mark on this roast
-                    firstDROP = self.timeindex[6] == 0 # on UNDO DROP we do not send the record to plus
                     if self.aw.buttonDROP.isFlat() and self.timeindex[6] > 0:
                         _log.debug('EVENT: undo DROP')
                         self.aw.setTimerColorSignal.emit('timer')  # reset cooling timer color back to the default
@@ -15487,21 +15468,6 @@ class tgraphcanvas(QObject):
                             self.updateAmbientPressure()
                         except Exception as e: # pylint: disable=broad-except
                             _log.exception(e)
-    #PLUS
-                        # only on first setting the DROP event (not set yet and no previous DROP undone) and (not anymore: if not in simulator modus, we upload to PLUS)
-                        if firstDROP and self.autoDROPenabled and self.aw.plus_account is not None:  # and not bool(self.aw.simulator): # we also upload simulated roasts to PLUS
-                            # NOTE: scheduler is only active if connected to artisan.plus
-                            if self.aw.schedule_window is not None:
-                                self.aw.schedule_window.register_completed_roast.emit()
-                            try:
-                                self.aw.updatePlusStatus()
-                            except Exception as e: # pylint: disable=broad-except
-                                _log.exception(e)
-                                # add to out-queue
-                            try:
-                                addRoast()
-                            except Exception as e: # pylint: disable=broad-except
-                                _log.exception(e)
                 else:
                     message = QApplication.translate('Message','DROP: Scope is not recording')
                     self.aw.sendmessage(message)

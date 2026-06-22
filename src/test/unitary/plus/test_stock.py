@@ -40,6 +40,7 @@ modules_to_isolate = [
     'plus.config',
     'plus.connection',
     'plus.controller',
+    'plus.stock',
     'plus.util',
 ]
 
@@ -65,51 +66,13 @@ for func_path in function_paths:
         if module_name in sys.modules:
             original_functions[func_path] = getattr(sys.modules[module_name], func_name, None)
 
-# Create comprehensive mocks for required dependencies only
-mock_modules = {
-    'PyQt6.QtCore': Mock(),
-    'PyQt6.QtWidgets': Mock(),
-    'artisanlib.util': Mock(),
-    'artisanlib.dialogs': Mock(),
-    'plus.config': Mock(),
-    'plus.connection': Mock(),
-    'plus.controller': Mock(),
-    'plus.util': Mock(),
-}
 
-# Note: plus.roast, plus.queue, plus.sync are NOT mocked as stock module doesn't depend on them
-# Note: artisanlib.main is NOT mocked as stock module doesn't depend on it
-# Note: plus.register is NOT globally mocked to prevent cross-file contamination
+class MockSignal:
+    """Enhanced mock for Qt signals with connect and emit call tracking."""
 
-# Apply mocks to sys.modules
-for module_name, mock_module in mock_modules.items():
-    sys.modules[module_name] = mock_module
-
-# Mock specific Qt classes that stock module uses
-sys.modules['PyQt6.QtCore'].QSemaphore = Mock # type: ignore[attr-defined]
-sys.modules['PyQt6.QtCore'].QThread = Mock # type: ignore[attr-defined]
-sys.modules['PyQt6.QtCore'].QObject = Mock # type: ignore[attr-defined]
-sys.modules['PyQt6.QtCore'].pyqtSignal = Mock # type: ignore[attr-defined]
-sys.modules['PyQt6.QtCore'].pyqtSlot = Mock # type: ignore[attr-defined]
-
-# Mock QApplication in QtWidgets (where it actually belongs)
-sys.modules['PyQt6.QtWidgets'].QApplication = Mock() # type: ignore[attr-defined]
-sys.modules['PyQt6.QtWidgets'].QApplication.translate = Mock(return_value='Ethiopia') # ty: ignore
-
-# Mock specific artisanlib.util functions that stock module uses
-sys.modules['artisanlib.util'].getDirectory = Mock(return_value='test_cache_dir') # type: ignore[attr-defined]
-sys.modules['artisanlib.util'].decodeLocal = Mock(side_effect=lambda x: x) # type: ignore[attr-defined]
-sys.modules['artisanlib.util'].encodeLocal = Mock(side_effect=lambda x: x) # type: ignore[attr-defined]
-sys.modules['artisanlib.util'].is_int_list = Mock(return_value=True) # type: ignore[attr-defined]
-sys.modules['artisanlib.util'].is_float_list = Mock(return_value=True) # type: ignore[attr-defined]
-sys.modules['artisanlib.util'].render_weight = Mock(return_value='1.0 kg') # type: ignore[attr-defined]
-
-# Import the stock module after setting up mocks
-from plus import stock
-
-# ============================================================================
-# ENHANCED MOCK CLASSES
-# ============================================================================
+    def __init__(self, *_args: Any, **_kwargs: Any) -> None:
+        self.connect = Mock()
+        self.emit = Mock()
 
 
 class MockQSemaphore:
@@ -119,8 +82,8 @@ class MockQSemaphore:
         """Initialize mock semaphore."""
         self.resources = resources
         self._acquired = 0
-        # Create Mock objects for method call tracking
         self.acquire = Mock(side_effect=self._acquire)
+        self.tryAcquire = Mock(side_effect=self._try_acquire)
         self.release = Mock(side_effect=self._release)
         self.available = Mock(side_effect=self._available)
 
@@ -128,6 +91,10 @@ class MockQSemaphore:
         """Internal acquire method."""
         self._acquired += n
         return True
+
+    def _try_acquire(self, n: int = 1) -> bool:
+        """Internal tryAcquire method."""
+        return self._acquire(n)
 
     def _release(self, n: int = 1) -> None:
         """Internal release method."""
@@ -161,9 +128,90 @@ class MockQThread:
 class MockQObject:
     """Enhanced mock for QObject with proper method signatures."""
 
-    def moveToThread(self, thread:Mock) -> None:
+    def moveToThread(self, thread: Mock) -> None:
         """Mock moveToThread method."""
+        del thread
 
+
+def mock_pyqt_slot(*_args: Any, **_kwargs: Any) -> Any:
+    """Return an identity decorator matching pyqtSlot."""
+    return lambda func: func
+
+# Create comprehensive mocks for required dependencies only
+mock_modules = {
+    'PyQt6.QtCore': Mock(),
+    'PyQt6.QtWidgets': Mock(),
+    'artisanlib.util': Mock(),
+    'artisanlib.dialogs': Mock(),
+    'plus.config': Mock(),
+    'plus.connection': Mock(),
+    'plus.controller': Mock(),
+    'plus.util': Mock(),
+}
+
+# Note: plus.roast, plus.queue, plus.sync are NOT mocked as stock module doesn't depend on them
+# Note: artisanlib.main is NOT mocked as stock module doesn't depend on it
+# Note: plus.register is NOT globally mocked to prevent cross-file contamination
+
+# Apply mocks to sys.modules
+for module_name, mock_module in mock_modules.items():
+    sys.modules[module_name] = mock_module
+
+sys.modules.pop('plus.stock', None)
+if 'plus' in sys.modules and hasattr(sys.modules['plus'], 'stock'):
+    delattr(sys.modules['plus'], 'stock')
+
+# Mock specific Qt classes that stock module uses
+sys.modules['PyQt6.QtCore'].QSemaphore = MockQSemaphore # type: ignore[attr-defined]
+sys.modules['PyQt6.QtCore'].QThread = MockQThread # type: ignore[attr-defined]
+sys.modules['PyQt6.QtCore'].QObject = MockQObject # type: ignore[attr-defined]
+sys.modules['PyQt6.QtCore'].pyqtSignal = MockSignal # type: ignore[attr-defined]
+sys.modules['PyQt6.QtCore'].pyqtSlot = mock_pyqt_slot # type: ignore[attr-defined]
+
+# Mock QApplication in QtWidgets (where it actually belongs)
+sys.modules['PyQt6.QtWidgets'].QApplication = Mock() # type: ignore[attr-defined]
+sys.modules['PyQt6.QtWidgets'].QApplication.translate = Mock(return_value='Ethiopia') # ty: ignore
+
+# Mock specific artisanlib.util functions that stock module uses
+sys.modules['artisanlib.util'].getDirectory = Mock(return_value='test_cache_dir') # type: ignore[attr-defined]
+sys.modules['artisanlib.util'].decodeLocal = Mock(side_effect=lambda x: x) # type: ignore[attr-defined]
+sys.modules['artisanlib.util'].encodeLocal = Mock(side_effect=lambda x: x) # type: ignore[attr-defined]
+sys.modules['artisanlib.util'].is_int_list = Mock(return_value=True) # type: ignore[attr-defined]
+sys.modules['artisanlib.util'].is_float_list = Mock(return_value=True) # type: ignore[attr-defined]
+sys.modules['artisanlib.util'].render_weight = Mock(return_value='1.0 kg') # type: ignore[attr-defined]
+
+# Import the stock module after setting up mocks
+from plus import stock
+
+
+def restore_mocked_import_modules() -> None:
+    """Restore module cache entries replaced only to import plus.stock in isolation."""
+    for module_name, mock_module in mock_modules.items():
+        if module_name in original_modules:
+            sys.modules[module_name] = original_modules[module_name]
+        else:
+            sys.modules.pop(module_name, None)
+
+        if '.' not in module_name:
+            continue
+        parent_name, attr_name = module_name.rsplit('.', 1)
+        parent_module = sys.modules.get(parent_name)
+        if parent_module is None or getattr(parent_module, attr_name, None) is not mock_module:
+            continue
+        if module_name in original_modules:
+            setattr(parent_module, attr_name, original_modules[module_name])
+        else:
+            delattr(parent_module, attr_name)
+
+
+restore_mocked_import_modules()
+
+
+def register_stock_module() -> None:
+    """Ensure string patches resolve to this test module's isolated stock module."""
+    sys.modules['plus.stock'] = stock
+    if 'plus' in sys.modules:
+        setattr(sys.modules['plus'], 'stock', stock)
 
 # ============================================================================
 # SESSION-LEVEL ISOLATION FIXTURES
@@ -229,6 +277,7 @@ def reset_stock_state() -> Generator[None, None, None]:
     This fixture runs before each test method to ensure clean state
     and prevent test interdependencies.
     """
+    register_stock_module()
     # Reset stock module global variables before test
     if hasattr(stock, 'stock'):
         stock.stock = None
@@ -1196,11 +1245,9 @@ class TestCoffeeLabelGeneration:
     def test_coffee_label_normal_order(self, sample_coffee:stock.Coffee) -> None:
         """Test coffee label with normal order (origin first)."""
         # Arrange
-        # Mock QApplication.translate to return the origin as-is
-        sys.modules['PyQt6.QtWidgets'].QApplication = Mock()  # type: ignore[attr-defined]
-        sys.modules['PyQt6.QtWidgets'].QApplication.translate = Mock(return_value='Ethiopia')  # ty: ignore
-
-        with patch('plus.stock.coffee_label_normal_order', True), patch(
+        with patch('plus.stock.QApplication.translate', return_value='Ethiopia'), patch(
+            'plus.stock.coffee_label_normal_order', True
+        ), patch(
             'plus.stock.duplicate_coffee_origin_labels', set()
         ):
 
@@ -1214,11 +1261,9 @@ class TestCoffeeLabelGeneration:
     def test_coffee_label_reverse_order(self, sample_coffee:stock.Coffee) -> None:
         """Test coffee label with reverse order (label first)."""
         # Arrange
-        # Mock QApplication.translate to return the origin as-is
-        sys.modules['PyQt6.QtWidgets'].QApplication = Mock()  # type: ignore[attr-defined]
-        sys.modules['PyQt6.QtWidgets'].QApplication.translate = Mock(return_value='Ethiopia')  # ty: ignore
-
-        with patch('plus.stock.coffee_label_normal_order', False), patch(
+        with patch('plus.stock.QApplication.translate', return_value='Ethiopia'), patch(
+            'plus.stock.coffee_label_normal_order', False
+        ), patch(
             'plus.stock.duplicate_coffee_origin_labels', set()
         ):
 
@@ -1232,15 +1277,13 @@ class TestCoffeeLabelGeneration:
     def test_coffee_label_with_picked_year(self, sample_coffee:stock.Coffee) -> None:
         """Test coffee label includes picked year when needed for disambiguation."""
         # Arrange
-        # Mock QApplication.translate to return the origin as-is
-        sys.modules['PyQt6.QtWidgets'].QApplication = Mock() # type: ignore[attr-defined]
-        sys.modules['PyQt6.QtWidgets'].QApplication.translate = Mock(return_value='Ethiopia') # ty: ignore
-
         # The function checks for origin+label without space
         assert 'origin' in sample_coffee
         assert 'label' in sample_coffee
         origin_label = f"{sample_coffee['origin']}{sample_coffee['label']}"
-        with patch('plus.stock.coffee_label_normal_order', True), patch(
+        with patch('plus.stock.QApplication.translate', return_value='Ethiopia'), patch(
+            'plus.stock.coffee_label_normal_order', True
+        ), patch(
             'plus.stock.duplicate_coffee_origin_labels', {origin_label}
         ):
 

@@ -24,6 +24,7 @@ modules_to_isolate = [
     'PyQt5.QtWidgets',
     'artisanlib.util',
     'plus.config',
+    'plus.util',
 ]
 
 # Store original modules if they exist
@@ -99,7 +100,18 @@ modules that test utility functionality while preventing cross-file contaminatio
 import numpy as np
 import pytest
 
+sys.modules.pop('plus.util', None)
+if 'plus' in sys.modules and hasattr(sys.modules['plus'], 'util'):
+    delattr(sys.modules['plus'], 'util')
+
 from plus import util
+
+
+def register_util_module() -> None:
+    """Ensure string patches resolve to this test module's isolated util module."""
+    sys.modules['plus.util'] = util
+    if 'plus' in sys.modules:
+        setattr(sys.modules['plus'], 'util', util)
 
 
 @pytest.fixture(scope='session', autouse=True)
@@ -180,6 +192,7 @@ def reset_util_state() -> Generator[None, None, None]:
     This fixture automatically runs for every test to prevent cross-test contamination
     and ensures that each test starts with a clean state.
     """
+    register_util_module()
     yield
 
     # Clean up after each test - no specific state to reset for util module
@@ -901,6 +914,34 @@ class TestWebLinks:
 
             # Assert
             assert result == 'https://artisan.plus/coffees;id=coffee456'
+
+    def test_cotrix_roasts_link(self) -> None:
+        """Test Cotrix roasts management URL generation."""
+        # Arrange
+        with patch(
+            'plus.util.service_identity.cotrix_roasts_url',
+            return_value='https://tastermatrix.com/app/#/pages/cotrix/roasts',
+        ):
+            # Act
+            result = util.cotrixRoastsLink()
+
+            # Assert
+            assert result == 'https://tastermatrix.com/app/#/pages/cotrix/roasts'
+
+    def test_open_cotrix_roasts_page(self) -> None:
+        """Test opening the Cotrix roasts management page."""
+        # Arrange
+        with patch(
+            'plus.util.cotrixRoastsLink',
+            return_value='https://tastermatrix.com/app/#/pages/cotrix/roasts',
+        ), patch('plus.util.QDesktopServices.openUrl', return_value=True) as mock_open:
+            # Act
+            result = util.openCotrixRoastsPage()
+
+            # Assert
+            assert result is True
+            opened_url = mock_open.call_args.args[0]
+            assert opened_url.toString() == 'https://tastermatrix.com/app/#/pages/cotrix/roasts'
 
     def test_blend_link(self) -> None:
         """Test blendLink URL generation."""

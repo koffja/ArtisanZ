@@ -20,7 +20,8 @@ import math
 import platform
 import logging
 from collections.abc import Callable
-from typing import override, Final, cast, Any, TYPE_CHECKING
+from dataclasses import dataclass
+from typing import override, Final, cast, Any, TYPE_CHECKING, Literal
 
 if TYPE_CHECKING:
     from artisanlib.main import ApplicationWindow # noqa: F401 # pylint: disable=unused-import
@@ -62,7 +63,97 @@ from PyQt6.QtGui import QColor, QIntValidator, QRegularExpressionValidator, QKey
 from PyQt6.QtWidgets import (QApplication, QWidget, QCheckBox, QComboBox, QDialogButtonBox, QGridLayout,
                              QHBoxLayout, QVBoxLayout, QHeaderView, QLabel, QLineEdit, QTextEdit, QListView,
                              QPushButton, QSpinBox, QTableWidget, QTableWidgetItem, QTabWidget, QSizePolicy,
-                             QGroupBox, QToolButton, QFrame)
+                             QGroupBox, QToolButton, QFrame, QAbstractButton)
+
+
+CompletionAction = Literal['save_only', 'save_and_finish', 'save_and_continue_cooling']
+
+COMPLETION_ACTION_SAVE_ONLY: Final[CompletionAction] = 'save_only'
+COMPLETION_ACTION_SAVE_AND_FINISH: Final[CompletionAction] = 'save_and_finish'
+COMPLETION_ACTION_SAVE_AND_CONTINUE_COOLING: Final[CompletionAction] = 'save_and_continue_cooling'
+
+
+def isCompletedRoast(*, charge_index: int, drop_index: int) -> bool:
+    return charge_index > -1 and drop_index > 0
+
+
+def shouldOfferFinishRoastAction(
+        *,
+        flagstart: bool,
+        flagon: bool,
+        charge_index: int,
+        drop_index: int) -> bool:
+    return flagstart and flagon and isCompletedRoast(
+        charge_index=charge_index,
+        drop_index=drop_index,
+    )
+
+
+def shouldFinishRecordingAfterRoastProperties(
+        completion_action: CompletionAction,
+        *,
+        flagstart: bool,
+        flagon: bool) -> bool:
+    return (
+        completion_action == COMPLETION_ACTION_SAVE_AND_FINISH
+        and flagstart
+        and flagon
+    )
+
+
+@dataclass(frozen=True)
+class RoastPropertiesButtonTexts:
+    primary: str
+    secondary: str|None
+
+
+def roastPropertiesButtonTexts(
+        *,
+        offer_finish: bool,
+        upload_available: bool,
+        plus_account: str|None,
+        plus_readonly: bool,
+        service_name: str) -> RoastPropertiesButtonTexts:
+    del plus_account, plus_readonly, service_name
+    if offer_finish:
+        primary = (
+            QApplication.translate('Button', 'Save, Upload and Finish')
+            if upload_available else
+            QApplication.translate('Button', 'Save and Finish')
+        )
+        return RoastPropertiesButtonTexts(
+            primary=primary,
+            secondary=(
+                QApplication.translate('Button', 'Save, Upload and Continue Cooling')
+                if upload_available else
+                QApplication.translate('Button', 'Save and Continue Cooling')
+            ),
+        )
+    return RoastPropertiesButtonTexts(
+        primary=QApplication.translate('Button', 'Save'),
+        secondary=None,
+    )
+
+
+def completedRoastSaveMessage(
+        *,
+        upload_queued: bool,
+        completion_action: CompletionAction,
+        plus_account: str|None,
+        plus_readonly: bool,
+        service_name: str) -> str:
+    del completion_action
+    if upload_queued:
+        return QApplication.translate(
+            'Message',
+            'Roast saved. Upload queued to {service_name}.',
+        ).format(service_name=service_name)
+    if plus_account is not None and plus_readonly:
+        return QApplication.translate(
+            'Message',
+            'Roast saved locally. {service_name} is read-only.',
+        ).format(service_name=service_name)
+    return QApplication.translate('Message', 'Roast saved locally.')
 
 
 def hasRecordingBeans(
@@ -76,6 +167,59 @@ def hasRecordingBeans(
     ) or (
         title is not None and title.strip() not in {'', default_title}
     )
+
+
+def shouldQueueRoastPropertiesUpload(
+        *,
+        flagstart: bool,
+        safesaveflag: bool,
+        charge_index: int,
+        drop_index: int,
+        plus_account: str|None,
+        plus_readonly: bool,
+        simulator: bool,
+        start_recording_on_exit: bool) -> bool:
+    return (
+        not start_recording_on_exit
+        and flagstart
+        and safesaveflag
+        and charge_index > -1
+        and drop_index > 0
+        and plus_account is not None
+        and not plus_readonly
+        and not simulator
+    )
+
+
+def queueConfirmedCompletedRoastUpload(
+        aw:'ApplicationWindow',
+        *,
+        start_recording_on_exit: bool) -> bool:
+    if not shouldQueueRoastPropertiesUpload(
+            flagstart=aw.qmc.flagstart,
+            safesaveflag=aw.qmc.safesaveflag,
+            charge_index=aw.qmc.timeindex[0],
+            drop_index=aw.qmc.timeindex[6],
+            plus_account=aw.plus_account,
+            plus_readonly=bool(aw.plus_readonly),
+            simulator=bool(aw.simulator),
+            start_recording_on_exit=start_recording_on_exit):
+        return False
+
+    if aw.schedule_window is not None:
+        try:
+            aw.schedule_window.register_completed_roast.emit()
+        except Exception as e: # pylint: disable=broad-except
+            _log.exception(e)
+    try:
+        aw.updatePlusStatus()
+    except Exception as e: # pylint: disable=broad-except
+        _log.exception(e)
+    try:
+        return plus.queue.addRoast()
+    except Exception as e: # pylint: disable=broad-except
+        _log.exception(e)
+        return False
 
 
 ########################################################################################
@@ -842,8 +986,10 @@ class editGraphDlg(ArtisanResizeablDialog):
         self.copydataTableButton.setMinimumSize(self.copydataTableButton.minimumSizeHint())
         self.copydataTableButton.clicked.connect(self.copyDataTabletoClipboard)
         #TITLE
-        titlelabel = QLabel('<b>' + QApplication.translate('Label', 'Title') + '</b>')
+        titlelabel = QLabel('<b>' + QApplication.translate('Label', 'Roast Title') + '</b>')
+        titlelabel.setToolTip(QApplication.translate('Tooltip', 'Short name shown on the roast profile and lists'))
         self.titleedit = RoastsComboBox(self,self.aw, selection = self.aw.qmc.title)
+        self.titleedit.setToolTip(QApplication.translate('Tooltip', 'Short name shown on the roast profile and lists'))
         self.titleedit.setMinimumWidth(100)
         self.titleedit.setSizePolicy(QSizePolicy.Policy.MinimumExpanding,QSizePolicy.Policy.Fixed)
         self.titleedit.activated.connect(self.recentRoastActivated)
@@ -909,8 +1055,10 @@ class editGraphDlg(ArtisanResizeablDialog):
             self.batchedit.setToolTip(QApplication.translate('Tooltip','Right-click to edit'))
 
         #Beans
-        beanslabel = QLabel('<b>' + QApplication.translate('Label', 'Beans') + '</b>')
+        beanslabel = QLabel('<b>' + QApplication.translate('Label', 'Bean Description') + '</b>')
+        beanslabel.setToolTip(QApplication.translate('Tooltip', 'Manual green coffee description, origin, lot, or blend recipe'))
         self.beansedit = ClickableTextEdit()
+        self.beansedit.setToolTip(QApplication.translate('Tooltip', 'Manual green coffee description, origin, lot, or blend recipe'))
         self.beansedit.editingFinished.connect(self.beansEdited)
         self.beansedit.textChanged.connect(self.beansEdited)
 
@@ -1050,13 +1198,13 @@ class editGraphDlg(ArtisanResizeablDialog):
         volumeCalcButton.setFocusPolicy(Qt.FocusPolicy.NoFocus)
 
         # add to recent
-        self.addRecentButton = QPushButton('+')
+        self.addRecentButton = QPushButton(QApplication.translate('Button', 'Save Template'))
         self.addRecentButton.clicked.connect(self.addRecentRoast)
         self.addRecentButton.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.addRecentButton.setToolTip(QApplication.translate('Tooltip','Add roast properties to list of recent roasts'))
 
         # delete from recent
-        self.delRecentButton = QPushButton('-')
+        self.delRecentButton = QPushButton(QApplication.translate('Button', 'Remove Template'))
         self.delRecentButton.clicked.connect(self.delRecentRoast)
         self.delRecentButton.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.delRecentButton.setToolTip(QApplication.translate('Tooltip','Remove roast properties from list of recent roasts'))
@@ -1107,10 +1255,10 @@ class editGraphDlg(ArtisanResizeablDialog):
         else: # in older versions this could have been a string
             self.aw.qmc.color_system_idx = 0 # type: ignore[unreachable]
         #Greens Temp
-        greens_temp_label = QLabel('<b>' + QApplication.translate('Label', 'Beans') + '</b>')
+        greens_temp_label = QLabel('<b>' + QApplication.translate('Label', 'Green Bean Temp') + '</b>')
         greens_temp_unit_label = QLabel(self.aw.qmc.mode)
         self.greens_temp_edit = QLineEdit()
-        self.greens_temp_edit.setToolTip(QApplication.translate('Tooltip', 'temperature of the green coffee'))
+        self.greens_temp_edit.setToolTip(QApplication.translate('Tooltip', 'temperature of the green coffee before CHARGE'))
         self.greens_temp_edit.setText(f'{float2float(self.aw.qmc.greens_temp):g}')
         self.greens_temp_edit.setMaximumWidth(60)
         self.greens_temp_edit.setValidator(self.aw.createCLocaleDoubleValidator(-9999., 999999., 1, self.greens_temp_edit)) # range to 1000 needed to trigger editing_finished on input "12,2"
@@ -1232,6 +1380,10 @@ class editGraphDlg(ArtisanResizeablDialog):
         # connect the ArtisanDialog standard OK/Cancel buttons
         self.dialogbuttons.accepted.connect(self.close_OK)
         self.dialogbuttons.rejected.connect(self.closeEvent)
+        self.completion_action: CompletionAction = COMPLETION_ACTION_SAVE_ONLY
+        self.save_continue_cooling_button: QPushButton|None = None
+        self.dialogbuttons.clicked.connect(self.roastDialogButtonClicked)
+        self.configureCompletionButtons()
 
         # container tare
         self.tareComboBox = QComboBox()
@@ -1375,7 +1527,7 @@ class editGraphDlg(ArtisanResizeablDialog):
 
             self.plus_amount_selected:float|None = None # holds the max amount of the selected coffee/blend if known
             self.plus_amount_replace_selected:float|None = None # holds the max amount of the selected coffee/blend incl. replacements if known
-            plusCoffeeslabel = QLabel('<b>' + QApplication.translate('Label', 'Stock') + '</b>')
+            plusCoffeeslabel = QLabel('<b>' + QApplication.translate('Label', 'Inventory') + '</b>')
             plusCoffeeslabel.setToolTip(QApplication.translate('Tooltip','Select beans from your inventory'))
             self.plusStoreslabel = QLabel('<b>' + QApplication.translate('Label', 'Store') + '</b>')
             self.plusStoreslabel.setToolTip(QApplication.translate('Tooltip','Select a storage location'))
@@ -1394,6 +1546,12 @@ class editGraphDlg(ArtisanResizeablDialog):
             self.plus_custom_blend_button.setToolTip(QApplication.translate('Tooltip','Define a custom blend'))
             self.plus_custom_blend_button.setText('...')
             self.plus_custom_blend_button.clicked.connect(self.customBlendButton_triggered)
+            self.plus_cotrix_roasts_button = QToolButton()
+            self.plus_cotrix_roasts_button.setToolTip(
+                QApplication.translate('Tooltip', 'Open Cotrix management')
+            )
+            self.plus_cotrix_roasts_button.setText(plus.service_identity.display_name())
+            self.plus_cotrix_roasts_button.clicked.connect(plus.util.openCotrixRoastsPage)
             self.plus_selected_line = QLabel()
             self.plus_selected_line.setOpenExternalLinks(True)
             label_font = self.plus_selected_line.font()
@@ -1427,12 +1585,13 @@ class editGraphDlg(ArtisanResizeablDialog):
             plusLine.addSpacing(4)
             plusLine.addWidget(self.plus_blends_combo)
             plusLine.addWidget(self.plus_custom_blend_button)
+            plusLine.addWidget(self.plus_cotrix_roasts_button)
             plusLine.addWidget(self.plusLineStoresFrame)
             plusLine.setStretch(0, 3)
             plusLine.setStretch(4, 2)
-            plusLine.setStretch(6, 1)
-            self.label_origin_flag = QCheckBox(QApplication.translate('CheckBox','Standard bean labels'))
-            self.label_origin_flag.setToolTip(QApplication.translate('Tooltip',"Beans are listed as 'origin, name' if ticked, otherwise as 'name, origin'"))
+            plusLine.setStretch(7, 1)
+            self.label_origin_flag = QCheckBox(QApplication.translate('CheckBox', 'Inventory label order'))
+            self.label_origin_flag.setToolTip(QApplication.translate('Tooltip', "Show inventory beans as 'origin, name' when checked, otherwise as 'name, origin'"))
             self.label_origin_flag.setChecked(bool(plus.stock.coffee_label_normal_order))
             self.label_origin_flag.stateChanged.connect(self.labelOriginFlagChanged)
             selectedLineLayout = QHBoxLayout()
@@ -2100,7 +2259,7 @@ class editGraphDlg(ArtisanResizeablDialog):
                 self.plus_coffees_combo.clear()
                 self.plus_coffees_combo.resetInverted()
                 coffee_items = plus.stock.getCoffeesLabels(self.plus_coffees)
-                self.plus_coffees_combo.addItems([''] + coffee_items)
+                self.plus_coffees_combo.addItems([QApplication.translate('ComboBox', 'No inventory link')] + coffee_items)
 
                 p = None
                 if self.plus_coffee_selected is not None and self.plus_store_selected is not None:
@@ -2139,7 +2298,7 @@ class editGraphDlg(ArtisanResizeablDialog):
                 self.plus_blends_combo.resetInverted()
                 blend_items = plus.stock.getBlendLabels(self.plus_blends)
 
-                self.plus_blends_combo.addItems([''] + blend_items)
+                self.plus_blends_combo.addItems([QApplication.translate('ComboBox', 'No inventory link')] + blend_items)
 
                 if len(self.plus_blends) == 0:
                     self.plusBlendslabel.setVisible(False)
@@ -5759,12 +5918,21 @@ class editGraphDlg(ArtisanResizeablDialog):
         if not self.aw.qmc.flagon:
             self.aw.sendmessage(QApplication.translate('Message','Roast properties updated but profile not saved to disk'))
         # if recording, dirty and CHARGE and DROP set we send changes to artisan.plus if it is running and we are not in simmulator mode
-        if (self.aw.qmc.flagstart and self.aw.qmc.safesaveflag and self.aw.qmc.timeindex[0] > -1 and self.aw.qmc.timeindex[6] > 0 and
-                self.aw.plus_account is not None and not bool(self.aw.simulator)):
-            try:
-                plus.queue.addRoast()
-            except Exception as e: # pylint: disable=broad-except
-                _log.exception(e)
+        upload_queued = queueConfirmedCompletedRoastUpload(
+            self.aw,
+            start_recording_on_exit=self.start_recording_on_exit,
+        )
+        if (isCompletedRoast(
+                charge_index=self.aw.qmc.timeindex[0],
+                drop_index=self.aw.qmc.timeindex[6]) and
+                (self.aw.qmc.flagon or upload_queued)):
+            self.aw.sendmessage(completedRoastSaveMessage(
+                upload_queued=upload_queued,
+                completion_action=self.completion_action,
+                plus_account=self.aw.plus_account,
+                plus_readonly=bool(self.aw.plus_readonly),
+                service_name=plus.service_identity.display_name(),
+            ))
 
         if redraw:
             self.aw.qmc.redrawKeepViewSignal.emit(
@@ -5776,6 +5944,7 @@ class editGraphDlg(ArtisanResizeablDialog):
             )
 
         self.clean_up()
+        self.finishCompletedRoastIfRequested()
 
         has_recording_details = hasRecordingBeans(
             self.aw.qmc.plus_coffee,
@@ -5793,6 +5962,73 @@ class editGraphDlg(ArtisanResizeablDialog):
             self.aw.qmc.toggleRecorderSignal.emit()
 
         super().accept()
+
+    def configureCompletionButtons(self) -> None:
+        if self.save_continue_cooling_button is not None:
+            self.dialogbuttons.removeButton(self.save_continue_cooling_button)
+            self.save_continue_cooling_button = None
+        offer_finish = shouldOfferFinishRoastAction(
+            flagstart=self.aw.qmc.flagstart,
+            flagon=self.aw.qmc.flagon,
+            charge_index=self.aw.qmc.timeindex[0],
+            drop_index=self.aw.qmc.timeindex[6],
+        )
+        upload_available = shouldQueueRoastPropertiesUpload(
+            flagstart=self.aw.qmc.flagstart,
+            safesaveflag=self.aw.qmc.safesaveflag,
+            charge_index=self.aw.qmc.timeindex[0],
+            drop_index=self.aw.qmc.timeindex[6],
+            plus_account=self.aw.plus_account,
+            plus_readonly=bool(self.aw.plus_readonly),
+            simulator=bool(self.aw.simulator),
+            start_recording_on_exit=self.start_recording_on_exit,
+        )
+        texts = roastPropertiesButtonTexts(
+            offer_finish=offer_finish,
+            upload_available=upload_available,
+            plus_account=self.aw.plus_account,
+            plus_readonly=bool(self.aw.plus_readonly),
+            service_name=plus.service_identity.display_name(),
+        )
+        ok_button = self.dialogbuttons.button(QDialogButtonBox.StandardButton.Ok)
+        if ok_button is not None:
+            ok_button.setText(texts.primary)
+            self.completion_action = (
+                COMPLETION_ACTION_SAVE_AND_FINISH
+                if offer_finish else
+                COMPLETION_ACTION_SAVE_ONLY
+            )
+        if texts.secondary is not None:
+            self.save_continue_cooling_button = self.dialogbuttons.addButton(
+                texts.secondary,
+                QDialogButtonBox.ButtonRole.AcceptRole,
+            )
+
+    @pyqtSlot(QAbstractButton)
+    def roastDialogButtonClicked(self, button: QAbstractButton) -> None:
+        if self.save_continue_cooling_button is not None and button is self.save_continue_cooling_button:
+            self.completion_action = COMPLETION_ACTION_SAVE_AND_CONTINUE_COOLING
+            return
+        ok_button = self.dialogbuttons.button(QDialogButtonBox.StandardButton.Ok)
+        if button is ok_button:
+            if shouldOfferFinishRoastAction(
+                    flagstart=self.aw.qmc.flagstart,
+                    flagon=self.aw.qmc.flagon,
+                    charge_index=self.aw.qmc.timeindex[0],
+                    drop_index=self.aw.qmc.timeindex[6]):
+                self.completion_action = COMPLETION_ACTION_SAVE_AND_FINISH
+            else:
+                self.completion_action = COMPLETION_ACTION_SAVE_ONLY
+
+    def finishCompletedRoastIfRequested(self) -> None:
+        if (shouldFinishRecordingAfterRoastProperties(
+                self.completion_action,
+                flagstart=self.aw.qmc.flagstart,
+                flagon=self.aw.qmc.flagon) and
+                isCompletedRoast(
+                    charge_index=self.aw.qmc.timeindex[0],
+                    drop_index=self.aw.qmc.timeindex[6])):
+            QTimer.singleShot(0, self.aw.qmc.toggleMonitorSignal.emit)
 
     def getMeasuredvalues(self, title:str, func_updatefields:Callable[[],None],
             fields:list[QLineEdit], loadEnergy:list[float], func_updateduration:Callable[[],None],
@@ -5920,7 +6156,7 @@ class CoffeesComboBox(StockComboBox):
     @override
     def getItems(self, unit:int) -> list[str]:
         plus_coffees = plus.stock.getCoffees(unit, self.parentDialog.plus_default_store)
-        return [''] + plus.stock.getCoffeesLabels(plus_coffees)
+        return [QApplication.translate('ComboBox', 'No inventory link')] + plus.stock.getCoffeesLabels(plus_coffees)
 
 class BlendsComboBox(StockComboBox):
     def __init__(self, parent:editGraphDlg, *args:Any, **kwargs:Any) -> None:
@@ -5939,7 +6175,7 @@ class BlendsComboBox(StockComboBox):
                     ingredients = [plus.stock.BlendIngredient(ratio = c.ratio, coffee= c.coffee) for c in self.parentDialog.aw.qmc.plus_custom_blend.components])
         plus_blends = plus.stock.getBlends(unit,self.parentDialog.plus_default_store, custom_blend)
         blend_items:list[str] = plus.stock.getBlendLabels(plus_blends)
-        return [''] + blend_items
+        return [QApplication.translate('ComboBox', 'No inventory link')] + blend_items
 
 
 

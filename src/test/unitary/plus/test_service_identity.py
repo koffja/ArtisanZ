@@ -9,6 +9,7 @@ def test_tm_artisanz_service_identity_values() -> None:
     assert service_identity.api_base_url() == 'https://tastermatrix.com/api/tm-artisanz/v1'
     assert service_identity.web_base_url() == 'https://tastermatrix.com'
     assert service_identity.shop_base_url() == 'https://tastermatrix.com'
+    assert service_identity.cotrix_roasts_url() == 'https://tastermatrix.com/app/#/pages/cotrix/roasts'
     assert service_identity.keyring_service() == 'tm-artisanz'
 
 

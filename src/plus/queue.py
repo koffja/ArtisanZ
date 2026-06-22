@@ -26,7 +26,7 @@ from PyQt6.QtCore import QCoreApplication, QObject, QThread, pyqtSlot, pyqtSigna
 from PyQt6.QtWidgets import QApplication
 
 from artisanlib.util import getDirectory
-from plus import config, util, roast, connection, sync, controller
+from plus import config, util, roast, connection, sync, controller, tm_profile
 import threading
 import time
 import datetime
@@ -447,6 +447,15 @@ def addFullRoastRecord(roast_record:dict[str, Any], unsynced:bool=False) -> None
         _log.exception(e)
 
 
+def recordWithTmProfile(roast_record:dict[str, Any], app_window:Any|None = None) -> dict[str, Any]:
+    record = dict(roast_record)
+    if 'tm_profile' not in record:
+        record['tm_profile'] = tm_profile.serialize(
+            config.app_window if app_window is None else app_window
+        )
+    return record
+
+
 # called on completed roasts with roast data
 # if roast_record is given, we assume an update is queued, otherwise a new
 # roast is queued
@@ -457,25 +466,31 @@ def addFullRoastRecord(roast_record:dict[str, Any], unsynced:bool=False) -> None
 #   an update only the roast_id
 # if unsynced is set (roast was not yet in sync DB) we always set current time as modified_at, overwriting the last saved dated
 # that might have been set by roast.getRoast()
-def addRoast(roast_record:dict[str, Any]|None = None, unsynced:bool=False) -> None:
+def addRoast(roast_record:dict[str, Any]|None = None, unsynced:bool=False) -> bool:
     try:
         _log.debug('addRoast(%s, %s)', roast_record, unsynced)
         aw = config.app_window
         if aw is None:
             _log.info('config.app_window is None')
+            return False
         elif aw.plus_readonly:
             _log.info(
                 '-> roast not queued as users'
                  ' account access is readonly'
             )
+            return False
         elif queue is None:
             _log.info(
                 '-> roast not queued as queue'
                  ' is not running'
             )
+            return False
         else:
             r: dict[str, Any]
-            r = roast.getRoast() if roast_record is None else roast_record
+            r = recordWithTmProfile(
+                roast.getRoast() if roast_record is None else roast_record,
+                aw,
+            )
             # if modification date is not set yet, we add the current time as
             # modified_at timestamp as float EPOCH with millisecond
             if unsynced or 'modified_at' not in r:
@@ -512,13 +527,19 @@ def addRoast(roast_record:dict[str, Any]|None = None, unsynced:bool=False) -> No
                     _log.debug('-> roast queued up')
                     if 'roast_id' in rr:
                         _log.info('roast queued: %s', rr['roast_id'])
-                    _log.debug('-> qsize: %s', queue.qsize())
+                    try:
+                        _log.debug('-> qsize: %s', queue.qsize())
+                    except Exception as e:  # pylint: disable=broad-except
+                        _log.exception(e)
+                return queued
             else:
                 _log.debug(
                     '-> roast not queued as mandatory info missing'
                 )
+                return False
     except Exception as e:  # pylint: disable=broad-except
         _log.exception(e)
+        return False
 
 def sendLockSchedule() -> None:
     try:

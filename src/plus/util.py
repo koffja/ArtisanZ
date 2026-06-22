@@ -21,8 +21,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-from PyQt6.QtCore import QSize, pyqtSlot
-from PyQt6.QtGui import QIcon
+from PyQt6.QtCore import QSize, QUrl, pyqtSlot
+from PyQt6.QtGui import QDesktopServices, QIcon
 from PyQt6.QtWidgets import QApplication, QStyle
 
 
@@ -426,6 +426,12 @@ def storeLink(plus_store:str) -> str:
 def coffeeLink(plus_coffee:str) -> str:
 #    return f'{config.web_base_url}/{getLanguage()}/coffees;id={plus_coffee}'
     return f'{config.web_base_url}/coffees;id={plus_coffee}'
+
+def cotrixRoastsLink() -> str:
+    return service_identity.cotrix_roasts_url()
+
+def openCotrixRoastsPage() -> bool:
+    return QDesktopServices.openUrl(QUrl(cotrixRoastsLink(), QUrl.ParsingMode.TolerantMode))
 
 def blendLink(plus_blend:str) -> str:
 #    return f'{config.web_base_url}/{getLanguage()}/blends;id={plus_blend}'

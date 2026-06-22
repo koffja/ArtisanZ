@@ -19,6 +19,7 @@ modules_to_isolate = [
     'artisanlib.main',
     'artisanlib.__version__',
     'plus.config',
+    'plus.connection',
     'plus.account',
     'plus.util',
     'requests',
@@ -116,6 +117,10 @@ class MockQSemaphore:
 
 # Import the connection module with targeted patches
 # Only patch PyQt6 since PyQt5 is not installed and should be ignored
+sys.modules.pop('plus.connection', None)
+if 'plus' in sys.modules and hasattr(sys.modules['plus'], 'connection'):
+    delattr(sys.modules['plus'], 'connection')
+
 with patch('artisanlib.__version__', '2.8.4'), patch(
     'artisanlib.util.getDirectory', return_value='/test/cache/path'
 ), patch('plus.config.app_name', 'artisan.plus'), patch(
@@ -125,7 +130,7 @@ with patch('artisanlib.__version__', '2.8.4'), patch(
 ), patch(
     'plus.config.connect_timeout', 6
 ), patch(
-    'plus.config.read_timeout', 6
+    'plus.config.read_timeout', 12
 ), patch(
     'plus.config.compress_posts', True
 ), patch(
@@ -152,6 +157,13 @@ with patch('artisanlib.__version__', '2.8.4'), patch(
     'keyring.delete_password', Mock()
 ):
     from plus import connection
+
+
+def register_connection_module() -> None:
+    """Ensure string patches resolve to this test module's isolated connection module."""
+    sys.modules['plus.connection'] = connection
+    if 'plus' in sys.modules:
+        setattr(sys.modules['plus'], 'connection', connection)
 
 
 @pytest.fixture(autouse=True)
@@ -194,13 +206,14 @@ def isolated_test_environment() -> Generator[None, None, None]:
         config_mock.auth_url = 'https://artisan.plus/api/v1/accounts/users/authenticate'  # type: ignore[attr-defined]
         config_mock.verify_ssl = True # type: ignore[attr-defined]
         config_mock.connect_timeout = 6 # type: ignore[attr-defined]
-        config_mock.read_timeout = 6 # type: ignore[attr-defined]
+        config_mock.read_timeout = 12 # type: ignore[attr-defined]
         config_mock.compress_posts = True # type: ignore[attr-defined]
         config_mock.post_compression_threshold = 500 # type: ignore[attr-defined]
         config_mock.token = None  # type: ignore[attr-defined]
         config_mock.nickname = None # type: ignore[attr-defined]
         config_mock.connected = False # type: ignore[attr-defined]
         config_mock.app_window = None # type: ignore[attr-defined]
+        register_connection_module()
 
         yield
 
@@ -311,6 +324,7 @@ def mock_app_window() -> Mock:
 @pytest.fixture(autouse=True)
 def reset_connection_state() -> Generator[None, None, None]:
     """Reset connection module state before and after each test to ensure complete isolation."""
+    register_connection_module()
     # Store original values
     original_token = getattr(connection.config, 'token', None)
     original_nickname = getattr(connection.config, 'nickname', None)

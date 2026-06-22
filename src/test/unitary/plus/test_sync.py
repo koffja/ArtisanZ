@@ -145,6 +145,7 @@ modules_to_isolate = [
     'plus.controller',
     'plus.roast',
     'plus.stock',
+    'plus.sync',
     'plus.account',
     'portalocker',
     'portalocker.exceptions',
@@ -223,8 +224,42 @@ sys.modules['plus.util'].ISO86012epoch = Mock(return_value=1640995200.0) # type:
 sys.modules['plus.connection'].getData = Mock() # type: ignore[attr-defined]
 sys.modules['plus.controller'].is_connected = Mock(return_value=True) # type: ignore[attr-defined]
 
+sys.modules.pop('plus.sync', None)
+if 'plus' in sys.modules and hasattr(sys.modules['plus'], 'sync'):
+    delattr(sys.modules['plus'], 'sync')
+
 # Import the sync module after setting up mocks
 from plus import sync
+
+
+def restore_mocked_import_modules() -> None:
+    """Restore module cache entries replaced only to import plus.sync in isolation."""
+    for module_name, mock_module in mock_modules.items():
+        if module_name in _original_modules:
+            sys.modules[module_name] = _original_modules[module_name]
+        else:
+            sys.modules.pop(module_name, None)
+
+        if '.' not in module_name:
+            continue
+        parent_name, attr_name = module_name.rsplit('.', 1)
+        parent_module = sys.modules.get(parent_name)
+        if parent_module is None or getattr(parent_module, attr_name, None) is not mock_module:
+            continue
+        if module_name in _original_modules:
+            setattr(parent_module, attr_name, _original_modules[module_name])
+        else:
+            delattr(parent_module, attr_name)
+
+
+restore_mocked_import_modules()
+
+
+def register_sync_module() -> None:
+    """Ensure string patches resolve to this test module's isolated sync module."""
+    sys.modules['plus.sync'] = sync
+    if 'plus' in sys.modules:
+        setattr(sys.modules['plus'], 'sync', sync)
 
 
 # Session-level isolation fixture
@@ -254,6 +289,7 @@ def isolate_sync_module() -> Generator[None, None, None]:
 @pytest.fixture(autouse=True)
 def reset_sync_state() -> Generator[None, None, None]:
     """Reset sync module state before each test to ensure test independence."""
+    register_sync_module()
     # Reset sync module global variables
     if hasattr(sync, 'cached_sync_record'):
         sync.cached_sync_record = None
