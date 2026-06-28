@@ -1,6 +1,6 @@
 # GUI Modernization Baseline
 
-**Status:** Phase 0 instrumentation ready; manual GUI baseline pending.
+**Status:** Automated profile redraw baseline captured; live sampling baseline still pending.
 
 ## Purpose
 
@@ -76,12 +76,33 @@ Run each scenario for at least five minutes where possible:
 4. START recording with extra event buttons visible.
 5. Load a representative historical profile and trigger a full redraw.
 
+## Automated Profile Redraw Scenario
+
+For repeatable local confirmation:
+
+```bash
+cd src
+ARTISANZ_GUI_PERF=1 \
+ARTISANZ_GUI_PERF_AUTORUN=1 \
+ARTISANZ_GUI_PERF_AUTORUN_ITERATIONS=16 \
+ARTISANZ_GUI_PERF_AUTORUN_INTERVAL_MS=50 \
+ARTISANZ_GUI_PERF_FILE=/tmp/artisanz-gui-perf.jsonl \
+QT_QPA_PLATFORM=offscreen \
+QTWEBENGINE_DISABLE_SANDBOX=1 \
+QTWEBENGINE_CHROMIUM_FLAGS="--disable-gpu --disable-software-rasterizer" \
+.venv/bin/python artisan.py test/sanity/data/artisan/profile1.alog
+
+.venv/bin/python -m artisanlib.performance_report /tmp/artisanz-gui-perf.jsonl --sort-by max_ms --limit 20
+```
+
 ## Results Template
 
 | Date | Branch | Scenario | Sampling Interval | Visible Curves | Key Metrics | Notes |
 | --- | --- | --- | --- | --- | --- | --- |
 | 2026-06-29 | ArtisanZ | Not yet run | Not recorded | Not recorded | Not recorded | Instrumentation implemented and verified; capture hardened before real GUI baseline |
 | 2026-06-29 | ArtisanZ | First manual run follow-up | Not recorded | Not recorded | No metrics file found | Default path and `ARTISANZ_GUI_PERF_FILE` search found no ArtisanZ JSONL; capture flow hardened with default temp export and `atexit` fallback |
+| 2026-06-29 | ArtisanZ | Automated profile redraw baseline | N/A | Historical profile `profile1.alog` | `redraw max=106.627ms avg=75.284ms`; `redraw_keep_view max=103.192ms avg=73.427ms`; `updateBackground max=85.556ms avg=57.277ms`; `updategraphics max=0.006ms avg=0.002ms` | Baseline before Phase 1 stylesheet |
+| 2026-06-29 | ArtisanZ | Automated profile redraw after Phase 1 stylesheet | N/A | Historical profile `profile1.alog` | `redraw max=110.339ms avg=76.577ms`; `redraw_keep_view max=108.581ms avg=74.567ms`; `updateBackground max=80.033ms avg=56.631ms`; `updategraphics max=0.005ms avg=0.002ms` | Visual stylesheet did not materially worsen measured redraw path |
 
 ## Decision Log
 
@@ -91,6 +112,8 @@ Record decisions after benchmark runs:
 - If `canvas.sample_processing` dominates, prioritize processing decoupling before renderer replacement.
 - If `canvas.redraw` dominates only during settings/profile actions, prioritize full-redraw reduction but keep live renderer scope narrow.
 - If lock skip counters rise under normal sampling, prioritize signal scheduling and critical-section reduction.
+
+Current automated profile redraw result: `canvas.updateBackground`, `canvas.redraw`, and `canvas.redraw_keep_view` dominate. `canvas.updategraphics` is negligible in this profile-only scenario. This supports low-risk Widgets visual modernization first, while keeping renderer-boundary work focused on full redraw/background refresh.
 
 ## Capture Troubleshooting
 

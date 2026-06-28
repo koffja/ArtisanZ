@@ -24,6 +24,7 @@ startup_time = libtime.process_time()
 from artisanlib import __version__, __revision__, __build__, __signature__, __release_sponsor_name__
 from artisanlib.charge_manager import ChargeTargetManager
 from artisanlib.charge_dialog import ChargeTempRorDlg
+from artisanlib.gui_theme import modern_application_stylesheet
 from artisanlib.performance import export_gui_perf_metrics
 
 
@@ -28178,6 +28179,55 @@ def initialize_locale(my_app:Artisan) -> str:
 
     return locale
 
+
+def _gui_perf_env_int(name: str, default: int, minimum: int = 1) -> int:
+    try:
+        return max(minimum, int(os.environ.get(name, str(default))))
+    except ValueError:
+        return default
+
+
+def _schedule_gui_perf_autorun(appWindow:'ApplicationWindow') -> None:
+    enabled = os.environ.get('ARTISANZ_GUI_PERF_AUTORUN', '').strip().lower()
+    if enabled not in {'1', 'true', 'yes', 'on'}:
+        return
+
+    iterations = _gui_perf_env_int('ARTISANZ_GUI_PERF_AUTORUN_ITERATIONS', 12)
+    interval_ms = _gui_perf_env_int('ARTISANZ_GUI_PERF_AUTORUN_INTERVAL_MS', 75)
+    start_delay_ms = _gui_perf_env_int('ARTISANZ_GUI_PERF_AUTORUN_START_MS', 1200)
+    state = {'remaining': iterations}
+
+    def run_once() -> None:
+        try:
+            if state['remaining'] == iterations:
+                appWindow.qmc.redraw(False)
+            else:
+                appWindow.qmc.redraw_keep_view(recomputeAllDeltas=False)
+            appWindow.qmc.updateBackground()
+            appWindow.qmc.updategraphics()
+        except Exception as e: # pylint: disable=broad-except
+            _log.exception(e)
+
+        state['remaining'] -= 1
+        if state['remaining'] > 0:
+            QTimer.singleShot(interval_ms, run_once)
+            return
+
+        try:
+            export_gui_perf_metrics()
+        except Exception as e: # pylint: disable=broad-except
+            _log.exception(e)
+        appWindow.qmc.safesaveflag = False
+        appWindow.fileQuit()
+
+    QTimer.singleShot(start_delay_ms, run_once)
+
+
+def _modern_ui_enabled() -> bool:
+    legacy_flag = os.environ.get('ARTISANZ_LEGACY_UI', '').strip().lower()
+    return legacy_flag not in {'1', 'true', 'yes', 'on'}
+
+
 def main() -> None:
 
 
@@ -28198,6 +28248,9 @@ def main() -> None:
 
     locale_str = initialize_locale(app)
     _log.info('locale: %s',locale_str)
+
+    if _modern_ui_enabled():
+        app.setStyleSheet(modern_application_stylesheet())
 
     appWindow = ApplicationWindow(locale=locale_str, WebEngineSupport=QtWebEngineSupport, artisanviewerFirstStart=artisanviewerFirstStart)
 
@@ -28340,6 +28393,7 @@ def main() -> None:
 
 
     QTimer.singleShot(700, appWindow.qmc.startPhidgetManager)
+    _schedule_gui_perf_autorun(appWindow)
 #    QTimer.singleShot(1, appWindow.fileQuit) # uncomment to measure startup/quit turnaround times
 
     #the following line is to trap numpy warnings that occur in the Cup Profile dialog if all values are set to 0

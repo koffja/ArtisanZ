@@ -655,6 +655,7 @@ Expected: only Phase 0 performance instrumentation, tests, and docs are changed.
 - Added skip counters for `canvas.updateBackground.skip`, `canvas.sample_processing.lock_skip`, and `canvas.updategraphics.lock_skip`.
 - Added automatic/default JSONL export from `ApplicationWindow.stopActivities()` plus `atexit` fallback.
 - Added follow-up JSONL summary utility in `src/artisanlib/performance_report.py`.
+- Added automated profile redraw autorun for repeatable local GUI performance checks.
 - Added unit coverage in `src/test/unitary/artisanlib/test_performance.py`.
 - Verified focused ArtisanZ charge-target and canvas tests on Python 3.14.5 from `src/.venv`.
-- Next required action: run the manual GUI scenarios in `docs/GUI_MODERNIZATION_BASELINE.md` and record actual metrics before approving renderer or threading changes.
+- Automated profile redraw data supports starting Phase 1. Live sampling scenarios remain required before approving renderer or threading changes.
