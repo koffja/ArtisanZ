@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ArtisanZ 高效能重構優化路徑計畫</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f7f3ec;
+      --paper: #fffaf2;
+      --ink: #251a12;
+      --muted: #6f6258;
+      --line: #dfd0bd;
+      --accent: #9b4d1f;
+      --accent-2: #2f6f73;
+      --warn: #a05a00;
+      --code-bg: #f1e7d8;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", "Noto Sans SC", "PingFang TC", "PingFang SC", sans-serif;
+      line-height: 1.7;
+    }
+
+    main {
+      width: min(1120px, calc(100% - 32px));
+      margin: 32px auto 72px;
+      padding: 40px;
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      box-shadow: 0 18px 48px rgba(61, 37, 18, 0.12);
+    }
+
+    h1, h2, h3 { line-height: 1.25; }
+    h1 { margin: 0 0 8px; font-size: 2.25rem; }
+    h2 { margin-top: 48px; padding-top: 24px; border-top: 2px solid var(--line); color: var(--accent); }
+    h3 { margin-top: 32px; color: var(--accent-2); }
+
+    .subtitle { margin: 0 0 24px; color: var(--muted); font-size: 1.05rem; }
+    .meta, .note, .warning, .success {
+      padding: 16px 18px;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      background: #fff3df;
+      margin: 18px 0;
+    }
+    .warning { border-color: #ddb06d; background: #fff1d4; color: var(--warn); }
+    .success { border-color: #9bc9b8; background: #ecfbf4; color: #225246; }
+
+    code, pre {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+      background: var(--code-bg);
+      border-radius: 6px;
+    }
+    code { padding: 0.12em 0.35em; }
+    pre { padding: 14px; overflow-x: auto; border: 1px solid var(--line); }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 18px 0 28px;
+      background: #fffdf8;
+    }
+    th, td { border: 1px solid var(--line); padding: 10px 12px; vertical-align: top; }
+    th { background: #f1dfc9; text-align: left; }
+
+    .phase {
+      margin: 26px 0;
+      padding: 22px;
+      border: 1px solid var(--line);
+      border-left: 6px solid var(--accent);
+      border-radius: 14px;
+      background: #fffdf8;
+    }
+
+    .checklist li { margin: 8px 0; }
+    .small { color: var(--muted); font-size: 0.92rem; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>ArtisanZ 高效能重構優化路徑計畫</h1>
+    <p class="subtitle">以可測量、可回退、低風險方式，從現有 Python / PyQt6 / matplotlib 架構逐步走向更高效能的混合架構。</p>
+
+    <section class="meta">
+      <p><strong>Goal:</strong> 建立一份可執行的高效能重構路線圖，先保住 ArtisanZ 現有功能與打包能力，再逐步驗證 OMP/threadpool、scipy/math 隔離、Modbus 邊界抽象、Rust/PyO3/Tauri 原型與長期 UI 遷移。</p>
+      <p><strong>Architecture:</strong> 短期保留 PyQt6 主應用與 matplotlib 交互模型，先把可量測熱點隔離出來；中期在 scipy/RoR/Modbus 等邊界建立穩定接口；長期只在原型證明收益後，才考慮 Rust/Tauri/uPlot/egui/Slint 類替代方案。</p>
+      <p><strong>Tech Stack:</strong> Python 3.12+ / PyQt6 / PyInstaller / numpy / scipy / matplotlib / pymodbus / threadpoolctl / Rust / PyO3 / Tauri / uPlot / egui / Slint。</p>
+      <p><strong>文件位置:</strong> <code>docs/plans/performance-refactor-optimization-plan.html</code></p>
+      <p><strong>撰寫日期:</strong> 2026-06-06</p>
+    </section>
+
+    <section>
+      <h2>一、核心判斷</h2>
+      <div class="success">
+        <strong>推薦策略:</strong> 不從「換語言」開始，而從「建立可測量邊界」開始。先讓目前 Python/Qt 版本可穩定 benchmark 與打包，再逐步隔離熱路徑；只有當 Rust/Tauri 原型在真實資料與交互複雜度下明顯勝出，才擴大遷移範圍。
+      </div>
+      <ul>
+        <li><strong>完整 Rust 重寫不建議作為第一步。</strong> 現有應用不是單純 GUI，而是 PyQt6、matplotlib QtAgg、設備通信、即時採樣、報表與狀態機深耦合系統。</li>
+        <li><strong>matplotlib 替換難度高。</strong> 它不只畫線，還承擔拖拽標註、pick/mouse events、座標轉換、blit、PDF/export 與 QtAgg 交互。</li>
+        <li><strong>scipy API 面有限，但所在路徑重要。</strong> 主要集中於 RoR 平滑、樣條、curve fitting、PID/filter 等核心體驗路徑。</li>
+        <li><strong>Modbus-only 新產品可行，但必須收窄。</strong> 若只保留 Modbus、基礎曲線、profile 儲存/載入，Rust/Tauri 原型有驗證價值；若複製 Artisan 全功能，會重新接近全量重寫。</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>二、事實底座與關鍵文件</h2>
+      <table>
+        <thead>
+          <tr><th>主題</th><th>文件 / 符號</th><th>為什麼重要</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>啟動與 OMP</td>
+            <td><code>src/artisan.py:13</code></td>
+            <td>全專案唯一明確設定 <code>OMP_NUM_THREADS=1</code> 的位置。任何 OMP/threadpool 實驗都必須從這裡建立基線，而不是直接刪除。</td>
+          </tr>
+          <tr>
+            <td>打包與 matplotlib 快取</td>
+            <td><code>src/pyinstaller_hooks/rthooks/pyi_rth_mplconfig.py</code></td>
+            <td>此空 hook 用於避免 PyInstaller 預設 runtime hook 每次將 <code>MPLCONFIGDIR</code> 指向臨時目錄，導致 matplotlib 字體快取重建。</td>
+          </tr>
+          <tr>
+            <td>macOS 打包</td>
+            <td><code>src/artisan-mac.spec:130-138</code>, <code>src/artisan-mac.spec:165</code></td>
+            <td>明確配置 matplotlib backend 與 <code>target_arch='x86_64'</code>；arm64 原生打包需以 spec 為起點驗證。</td>
+          </tr>
+          <tr>
+            <td>Windows 打包</td>
+            <td><code>src/artisan-win.spec</code>, <code>build-win-portable.bat</code></td>
+            <td>Windows 便攜包依賴 PyInstaller spec；scipy/matplotlib hiddenimports 與 DLL 收集是體積與啟動時間的主要來源之一。</td>
+          </tr>
+          <tr>
+            <td>通信抽象</td>
+            <td><code>src/artisanlib/async_comm.py:40-71</code> <code>AsyncLoopThread</code></td>
+            <td>每個通信客戶端一個 thread + asyncio loop；是未來 Rust tokio runtime 或統一 async 邊界最自然的對應點。</td>
+          </tr>
+          <tr>
+            <td>Modbus 邊界</td>
+            <td><code>src/artisanlib/modbusport.py</code></td>
+            <td>包含寄存器分段、BCD 轉換、同步/async 讀寫、reconnect、delay/timeout 等完整 Modbus 行為；是 Rust 化或抽象化的第一候選。</td>
+          </tr>
+          <tr>
+            <td>S7 邊界</td>
+            <td><code>src/artisanlib/s7port.py</code>, <code>src/artisanlib/s7client.py</code></td>
+            <td>S7 為同步阻塞 I/O，與 Modbus async 模式不同；抽象層必須能容納同步設備與 async 設備。</td>
+          </tr>
+          <tr>
+            <td>matplotlib 主戰場</td>
+            <td><code>src/artisanlib/canvas.py</code>, <code>src/artisanlib/main.py</code></td>
+            <td>主圖、事件、標註、RoR、背景曲線、交互行為高度集中；替換前必須列出不可降級交互清單。</td>
+          </tr>
+          <tr>
+            <td>scipy 熱路徑</td>
+            <td><code>canvas.py:8944</code>, <code>canvas.py:17586</code>, <code>canvas.py:17693</code>, <code>pid.py:31</code></td>
+            <td><code>savgol_filter</code>, <code>UnivariateSpline</code>, <code>curve_fit</code>, <code>iirfilter</code> 使用面有限但位於核心曲線體驗。</td>
+          </tr>
+          <tr>
+            <td>測試回歸</td>
+            <td><code>src/test/unitary/artisanlib/test_async_comm.py</code>, <code>test_modbus.py</code>, <code>test_canvas.py</code>, <code>test_main.py</code>, <code>test_charge_manager.py</code></td>
+            <td>分別覆蓋 async loop、Modbus、canvas、主應用與 ArtisanZ 投豆目標功能，是每階段最小回歸集。</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>三、需要避免的過度推論</h2>
+      <div class="warning">
+        <strong>不要把估計值當結論。</strong> 「刪 OMP 一行可快 2-4 倍」、「Tauri/uPlot 必然 10x」、「Rust 0 抖動」、「Slint 可簡單替換 Qt」都應降級為假設，必須用 ArtisanZ 真實資料與真實交互複雜度驗證。
+      </div>
+      <ul>
+        <li><strong>OMP:</strong> 放開 BLAS/OpenMP 線程可能提高批量計算速度，也可能增加 UI 卡頓與採樣 jitter。</li>
+        <li><strong>PyO3:</strong> 可加速單一熱函數，但不會消除 CPython、PyQt6、numpy、scipy、matplotlib 的啟動成本。</li>
+        <li><strong>Tauri/uPlot:</strong> uPlot 對時序曲線很快，但不內建 Artisan 現有 annotation、拖拽、pick event、PDF/export 等完整交互。</li>
+        <li><strong>egui/Slint:</strong> egui 官方承認非 native-looking 且 immediate mode 有 layout/CPU 取捨；Slint 是否適合商用與複雜圖表需重新驗證授權和能力。</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>四、分階段實施計畫</h2>
+
+      <article class="phase">
+        <h3>Phase 0：建立性能與打包基線</h3>
+        <p><strong>目標:</strong> 在不修改功能的前提下，建立啟動、打包、採樣、繪圖、RoR/math 的可重複 benchmark。</p>
+        <p><strong>涉及文件:</strong> <code>src/artisan.py</code>, <code>src/artisan-mac.spec</code>, <code>src/artisan-win.spec</code>, <code>src/pyinstaller_hooks/rthooks/pyi_rth_mplconfig.py</code>, <code>src/pyproject.toml</code>。</p>
+        <ul class="checklist">
+          <li>[ ] 記錄 Python 版本、PyInstaller 版本、PyQt6、numpy、scipy、matplotlib、pymodbus 版本。</li>
+          <li>[ ] 量測 source run 啟動時間、macOS <code>.app</code> 啟動時間、Windows portable 啟動時間。</li>
+          <li>[ ] 用 <code>python -X importtime -c "import matplotlib.pyplot"</code> 量測 matplotlib 冷啟動成本。</li>
+          <li>[ ] 用固定 profile 資料量測 RoR / smooth / spline / curve_fit 的 p50/p95 耗時。</li>
+          <li>[ ] 記錄採樣 jitter、UI redraw 時間、CPU%、記憶體峰值、打包產物大小。</li>
+        </ul>
+        <p><strong>驗收標準:</strong> 產出一份 baseline 表格；後續任何優化都必須與此表對比，不能只靠主觀體感。</p>
+      </article>
+
+      <article class="phase">
+        <h3>Phase 1：低風險 Python / PyInstaller 優化</h3>
+        <p><strong>目標:</strong> 不改 UI 與設備行為，先處理啟動與打包中最容易驗證的成本。</p>
+        <p><strong>涉及文件:</strong> <code>src/artisan.py</code>, <code>src/artisanlib/canvas.py</code>, <code>src/conftest.py</code>, <code>src/artisan-*.spec</code>。</p>
+        <ul class="checklist">
+          <li>[ ] 保留 <code>OMP_NUM_THREADS=1</code> 作為控制組，新增實驗組而不是直接刪除。</li>
+          <li>[ ] 評估引入 <code>threadpoolctl</code>，在 RoR/spline/fit 熱路徑周圍局部限制 BLAS/OpenMP 線程。</li>
+          <li>[ ] 檢查所有函數體內 scipy import，評估是否提升為集中 lazy loader，避免重複初始化。</li>
+          <li>[ ] 分別比較 PyInstaller onedir / onefile 啟動時間；macOS 優先驗證 onedir <code>.app</code>。</li>
+          <li>[ ] 驗證 <code>MPLCONFIGDIR</code> 與字體快取行為，避免 frozen app 每次重建字體 cache。</li>
+        </ul>
+        <p><strong>驗收標準:</strong> 啟動時間或打包體積有可量化改善；採樣 jitter 與 UI redraw 沒有退化；所有最小回歸測試通過。</p>
+      </article>
+
+      <article class="phase">
+        <h3>Phase 2：數學 / 濾波 / RoR 邊界隔離</h3>
+        <p><strong>目標:</strong> 先把 math hot paths 從 <code>canvas.py</code> 的巨大上下文中切出穩定接口，為 PyO3/Rust 或純 Python 優化做準備。</p>
+        <p><strong>涉及文件:</strong> <code>src/artisanlib/canvas.py</code>, <code>src/artisanlib/pid.py</code>, <code>src/artisanlib/filters.py</code>, <code>src/artisanlib/transposer.py</code>, <code>src/test/unitary/artisanlib/test_canvas.py</code>, <code>test_pid.py</code>, <code>test_filters.py</code>。</p>
+        <ul class="checklist">
+          <li>[ ] 建立輸入/輸出 fixture：時間序列、ET/BT、RoR、背景曲線、designer 曲線。</li>
+          <li>[ ] 對 <code>savgol_filter</code>、<code>UnivariateSpline</code>、<code>curve_fit</code>、<code>polyRoR</code>、<code>arrayRoR</code> 建立一致性測試。</li>
+          <li>[ ] 將純計算函數搬入較小模組，保持 <code>canvas.py</code> 只負責 UI/狀態調用。</li>
+          <li>[ ] 比較三種策略：現有 scipy、局部 threadpoolctl、PyO3/Rust prototype。</li>
+          <li>[ ] 確認 <code>.alog</code>、RoR、曲線輸出在允許誤差內一致。</li>
+        </ul>
+        <p><strong>驗收標準:</strong> 任何替代實作都必須通過數值一致性測試；若 PyO3 加速比不足以抵消打包複雜度，停止擴大 Rust 範圍。</p>
+      </article>
+
+      <article class="phase">
+        <h3>Phase 3：Modbus / Serial 設備邊界抽象</h3>
+        <p><strong>目標:</strong> 在 Python GUI 不動的前提下，明確設備通信接口，優先處理 Modbus-only 可遷移子集。</p>
+        <p><strong>涉及文件:</strong> <code>src/artisanlib/async_comm.py</code>, <code>src/artisanlib/modbusport.py</code>, <code>src/artisanlib/s7port.py</code>, <code>src/artisanlib/comm.py</code>, <code>src/test/unitary/artisanlib/test_async_comm.py</code>, <code>test_modbus.py</code>, <code>test_s7port.py</code>。</p>
+        <ul class="checklist">
+          <li>[ ] 將 <code>AsyncLoopThread</code> 的生命週期、send/read/reconnect 行為寫成契約。</li>
+          <li>[ ] 梳理 Modbus RTU/TCP/UDP、register segment、BCD、float endian、timeout、cache、reconnect 行為。</li>
+          <li>[ ] 定義 Python adapter 接口，使現有 UI 只依賴穩定抽象，不直接依賴 pymodbus 細節。</li>
+          <li>[ ] 建立 Modbus simulator 測試與長跑測試，覆蓋 noisy line、timeout、disconnect/reconnect。</li>
+          <li>[ ] 明確暫不遷移範圍：S7、Phidget、Yoctopuce、BLE、plus/cloud、報表與完整 profile import/export。</li>
+        </ul>
+        <p><strong>驗收標準:</strong> Modbus 行為在 Python adapter 後保持一致；test_async_comm/test_modbus 通過；長跑採樣 jitter 無退化。</p>
+      </article>
+
+      <article class="phase">
+        <h3>Phase 4：PyO3 / Rust 熱路徑原型</h3>
+        <p><strong>目標:</strong> 只針對邊界清晰、測試充分的熱函數做 Rust 原型，不碰 UI 主架構。</p>
+        <p><strong>候選:</strong> RoR 向量計算、濾波器、樣條/插值替代、Modbus frame parsing、BCD/endian 轉換。</p>
+        <ul class="checklist">
+          <li>[ ] 使用 <code>maturin</code> 建立最小 PyO3 module，先只導出一個純函數。</li>
+          <li>[ ] 用同一 fixture 對比 Python 版與 Rust 版輸出。</li>
+          <li>[ ] 用 <code>pytest-benchmark</code> 或等價工具比較 p50/p95。</li>
+          <li>[ ] 在 PyInstaller frozen app 中驗證 Rust extension 可被收集與載入。</li>
+          <li>[ ] 計算維護成本：編譯鏈、wheel、ABI、macOS 簽名、公證、Windows VC runtime。</li>
+        </ul>
+        <p><strong>驗收標準:</strong> 單點加速顯著、輸出一致、打包可控，才允許第二個函數進入 Rust；否則保留 Python 優化。</p>
+      </article>
+
+      <article class="phase">
+        <h3>Phase 5：Modbus-only Rust/Tauri 最小產品原型</h3>
+        <p><strong>目標:</strong> 不複製 Artisan 全功能，只做「連接 Modbus → 即時採樣 → 曲線顯示 → 儲存/載入 profile」的最小閉環。</p>
+        <p><strong>候選技術:</strong> Tauri 2 + Rust backend + uPlot 前端；或 egui/Slint 作對照 demo。</p>
+        <ul class="checklist">
+          <li>[ ] 建立最小 Tauri app，記錄 release 體積、啟動時間、首屏時間。</li>
+          <li>[ ] 用真實 ArtisanZ profile 資料量測 1萬/10萬點曲線首幀、zoom、pan 與 CPU%。</li>
+          <li>[ ] 實作 Modbus simulator 連接，記錄採樣頻率與 jitter。</li>
+          <li>[ ] 實作 profile save/load 的最小格式，與 ArtisanZ 現有輸出做一致性比較。</li>
+          <li>[ ] 不實作 S7/Phidget/Yocto/BLE/WebLCD/plus/cloud/PDF/report，避免範圍失控。</li>
+        </ul>
+        <p><strong>驗收標準:</strong> 原型在啟動時間、包體、曲線交互、採樣穩定性至少兩項顯著優於現有 PyQt/matplotlib，且不犧牲最小產品需求，才進入產品化討論。</p>
+      </article>
+
+      <article class="phase">
+        <h3>Phase 6：長期 UI / 繪圖遷移決策</h3>
+        <p><strong>目標:</strong> 根據 Phase 5 真實原型數據，而不是預設偏好，決定是否遷移 UI。</p>
+        <ul class="checklist">
+          <li>[ ] 列出現有 matplotlib 不可降級交互：拖拽標註、pick events、annotation、axis transform、blit、PDF/export、比較器、多背景曲線。</li>
+          <li>[ ] 分別評估 uPlot、egui、Slint、保留 PyQt/matplotlib 四種方案的功能缺口。</li>
+          <li>[ ] 若功能缺口過大，保留 PyQt 主體，只遷移 math/device core。</li>
+          <li>[ ] 若原型收益明顯，建立獨立產品線，不在原 ArtisanZ 主分支直接重寫。</li>
+        </ul>
+        <p><strong>驗收標準:</strong> 有數據、有功能差異表、有維護成本表；沒有這三項，不做 UI 遷移決策。</p>
+      </article>
+    </section>
+
+    <section>
+      <h2>五、每階段共同驗收指標</h2>
+      <table>
+        <thead><tr><th>指標</th><th>量測方式</th><th>用途</th></tr></thead>
+        <tbody>
+          <tr><td>啟動時間 p50/p95</td><td>source run、macOS .app、Windows portable 各跑多次</td><td>判斷 PyInstaller、matplotlib cache、懶載入是否有效</td></tr>
+          <tr><td>產物體積</td><td>比較 <code>src/dist/</code> 與 <code>.app/.dmg/.zip</code></td><td>判斷 scipy/matplotlib/PyQt 是否仍是主要體積來源</td></tr>
+          <tr><td>採樣 jitter</td><td>真機或 simulator 長跑，記錄 interval p50/p95/p99</td><td>確保 OMP/threadpool/Rust 不破壞即時採樣</td></tr>
+          <tr><td>UI redraw / FPS</td><td>固定資料量重畫與互動縮放</td><td>判斷 matplotlib 或替代圖表方案的真實收益</td></tr>
+          <tr><td>RoR/math 耗時</td><td>固定 fixture + benchmark</td><td>判斷 scipy/threadpool/PyO3 是否值得</td></tr>
+          <tr><td>輸出一致性</td><td>比較 <code>.alog</code>、RoR、ET/BT、背景曲線輸出</td><td>防止性能優化改變烘焙結果</td></tr>
+          <tr><td>回歸測試</td><td><code>pytest test/unitary/artisanlib/test_async_comm.py test/unitary/artisanlib/test_modbus.py test/unitary/artisanlib/test_canvas.py test/unitary/artisanlib/test_main.py test/unitary/artisanlib/test_charge_manager.py -q</code></td><td>覆蓋通信、設備、畫布、主應用與 ArtisanZ 自定義功能</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>六、外部技術參考約束</h2>
+      <ul>
+        <li><strong>PyInstaller:</strong> onefile 啟動慢有結構性原因；macOS onefile + .app 方向不應作為主方案。PyInstaller 版本也關聯 scipy/numpy hooks 與安全修復。</li>
+        <li><strong>threadpoolctl:</strong> 可控制 BLAS/OpenMP thread pools，但限制是進程全局生效；OpenMP nesting 與多 runtime 共存需小心。</li>
+        <li><strong>PyO3:</strong> 適合邊界清楚的熱函數，需同時驗證 Rust 端測試、Python 端 pytest、maturin/wheel、PyInstaller 收集與跨平台簽名。</li>
+        <li><strong>Tauri:</strong> 小包體與原生 webview 是優勢，但 Windows WebView2、Linux webkit2gtk、前端 bundle、原生菜單與 HiDPI 行為都需原型驗證。</li>
+        <li><strong>uPlot:</strong> 對大規模時序線圖有明顯性能潛力，但不提供 Artisan 目前完整交互模型；需 plugin 或重寫交互。</li>
+        <li><strong>egui:</strong> 即時模式簡潔但非 native-looking，長 scrollback 與每幀 layout 有 CPU 取捨。</li>
+        <li><strong>Slint:</strong> 需重新查明當前商用授權與複雜圖表能力；不能只因 Rust 原生就假設適合。</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>七、建議優先順序</h2>
+      <ol>
+        <li><strong>先做 Phase 0。</strong> 沒有基線就沒有優化，任何「可能更快」都不應進入主分支。</li>
+        <li><strong>再做 Phase 1。</strong> 懶載入、MPLCONFIGDIR、打包模式、threadpoolctl 是低風險高回報候選。</li>
+        <li><strong>Phase 2 與 Phase 3 並行準備。</strong> math 與 Modbus 是最清楚的可切邊界，優先於 UI 重寫。</li>
+        <li><strong>Phase 4 僅限單點原型。</strong> PyO3 先證明一個函數真的值得，再擴大。</li>
+        <li><strong>Phase 5/6 作為產品策略，不作為維護性重構。</strong> Rust/Tauri 是新產品或長期方向，不應直接替代當前 ArtisanZ 主線。</li>
+      </ol>
+    </section>
+
+    <section>
+      <h2>八、執行前檢查清單</h2>
+      <ul class="checklist">
+        <li>[ ] 確認當前分支是 <code>ArtisanZ</code>，不是 <code>master</code>。</li>
+        <li>[ ] 確認工作區沒有會被覆蓋的使用者修改。</li>
+        <li>[ ] 先跑最小相關測試，再動任何性能代碼。</li>
+        <li>[ ] 每個階段都要有 rollback 策略，不能把 benchmark 實驗混入功能提交。</li>
+        <li>[ ] 不刪除 failing tests；若測試失敗，先定位 root cause。</li>
+        <li>[ ] 不使用 <code>as any</code>、<code>@ts-ignore</code> 之類型安全壓制；Python 端不靠空 <code>except</code> 掩蓋問題。</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>九、推薦的第一個可執行里程碑</h2>
+      <p>第一個里程碑不應該是「改 Rust」或「刪 OMP」，而應該是：</p>
+      <pre><code>Milestone 1: 建立 ArtisanZ 性能基線與打包基線
+
+輸出物:
+1. 啟動時間表: source / macOS .app / Windows portable
+2. 打包體積表: onedir / onefile / .app / .dmg / portable zip
+3. threadpool_info(): source 與 frozen app 各一份
+4. matplotlib importtime 報告
+5. RoR / scipy / spline / curve_fit benchmark 報告
+6. test_async_comm / test_modbus / test_canvas / test_main / test_charge_manager 回歸結果
+
+完成後才開始 Phase 1 的實際優化。</code></pre>
+    </section>
+
+    <p class="small">本計畫根據 ArtisanZ 目前程式結構、既有調研文件、PyInstaller/threadpoolctl/PyO3/Tauri/uPlot/egui/Slint 等外部約束整理。它是實施前計畫文件，不代表已修改任何產品代碼。</p>
+  </main>
+</body>
+</html>

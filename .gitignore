@@ -52,6 +52,15 @@ dmypy.json
 # Augment AI assistant files
 .augment/
 
+# Agent working/state directories (transient)
+tmp/
+.serena/cache/
+.serena/project.local.yml
+.superpowers/brainstorm/
+
+# Redundant archives of committed source
+*.zip
+
 # IDEs and editors
 .project
 .pydevproject
