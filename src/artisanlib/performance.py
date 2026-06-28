@@ -1,19 +1,24 @@
 from __future__ import annotations
 
+import atexit
 from collections import defaultdict
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
+from contextlib import suppress
 from dataclasses import dataclass
 from functools import wraps
 import json
 import os
 from pathlib import Path
+import tempfile
 import time
 from typing import Final
 from typing import ParamSpec, TypeVar
 
 
 _ENV_FLAG: Final[str] = 'ARTISANZ_GUI_PERF'
+_EXPORT_FILE_ENV_FLAG: Final[str] = 'ARTISANZ_GUI_PERF_FILE'
+_DEFAULT_EXPORT_FILENAME: Final[str] = 'artisanz-gui-perf.jsonl'
 _P = ParamSpec('_P')
 _R = TypeVar('_R')
 
@@ -83,6 +88,7 @@ class GuiPerfRecorder:
 
     def write_jsonl(self, path: str | Path) -> None:
         target = Path(path)
+        target.parent.mkdir(parents=True, exist_ok=True)
         with target.open('w', encoding='utf-8') as outfile:
             for name, metric in self.snapshot().items():
                 outfile.write(json.dumps({'name': name, **metric}, sort_keys=True))
@@ -100,11 +106,32 @@ def gui_perf_enabled() -> bool:
     return _env_enabled()
 
 
+def default_gui_perf_export_path() -> Path:
+    return Path(tempfile.gettempdir()) / _DEFAULT_EXPORT_FILENAME
+
+
 def gui_perf_export_path() -> Path | None:
-    raw_path = os.environ.get('ARTISANZ_GUI_PERF_FILE', '').strip()
-    if not raw_path:
+    raw_path = os.environ.get(_EXPORT_FILE_ENV_FLAG, '').strip()
+    if raw_path:
+        return Path(raw_path)
+    if gui_perf_enabled():
+        return default_gui_perf_export_path()
+    return None
+
+
+def export_gui_perf_metrics() -> Path | None:
+    if not _RECORDER.enabled:
         return None
-    return Path(raw_path)
+    perf_path = gui_perf_export_path()
+    if perf_path is None:
+        return None
+    _RECORDER.write_jsonl(perf_path)
+    return perf_path
+
+
+def _export_gui_perf_metrics_at_exit() -> None:
+    with suppress(Exception):
+        export_gui_perf_metrics()
 
 
 @contextmanager
@@ -127,3 +154,6 @@ def gui_perf_tracked(name: str) -> Callable[[Callable[_P, _R]], Callable[_P, _R]
         return wrapper
 
     return decorate
+
+
+atexit.register(_export_gui_perf_metrics_at_exit)

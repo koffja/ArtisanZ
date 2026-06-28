@@ -2,7 +2,7 @@
 
 **Purpose:** Track the multi-phase GUI modernization effort from measurement through visual refresh, plotting improvements, processing decoupling, and optional QML adoption.
 
-**Status:** Phase 0 instrumentation is implemented as of 2026-06-29. Manual GUI baseline collection is the next required gate.
+**Status:** Phase 0 instrumentation is implemented as of 2026-06-29. A first manual follow-up did not produce a metrics file, so capture was hardened; manual GUI baseline collection remains the next required gate.
 
 **Repository Rules:** Work on the `ArtisanZ` branch. Do not commit or push unless explicitly requested. Preserve upstream compatibility and local ArtisanZ customizations.
 
@@ -60,7 +60,7 @@ Important observations from the code review:
 
 **Tracking Plan:** `docs/superpowers/plans/2026-06-29-gui-modernization-phase-0.md`
 
-**Implementation Note:** Timing probes, optional JSONL export, and a JSONL summary utility are in place. Do not start Phase 2 renderer replacement or Phase 3 processing extraction until the scenarios in `docs/GUI_MODERNIZATION_BASELINE.md` have real measurements.
+**Implementation Note:** Timing probes, automatic/default JSONL export, `atexit` export fallback, and a JSONL summary utility are in place. Do not start Phase 2 renderer replacement or Phase 3 processing extraction until the scenarios in `docs/GUI_MODERNIZATION_BASELINE.md` have real measurements.
 
 ## Phase 1: Widgets Visual Modernization
 

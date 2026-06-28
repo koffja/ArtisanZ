@@ -86,3 +86,26 @@ def test_main_prints_report(tmp_path, capsys) -> None:
     output = capsys.readouterr().out
     assert 'canvas.updateBackground' in output
     assert '1.500' in output
+
+
+def test_main_uses_default_report_path(monkeypatch, tmp_path, capsys) -> None:
+    source = tmp_path / 'artisanz-gui-perf.jsonl'
+    source.write_text(
+        json.dumps(
+            {
+                'name':'canvas.redraw',
+                'count':1,
+                'total_ms':9.0,
+                'avg_ms':9.0,
+                'max_ms':9.0,
+            }
+        ),
+        encoding='utf-8',
+    )
+    monkeypatch.setattr('artisanlib.performance_report.default_gui_perf_export_path', lambda: source)
+
+    assert main([]) == 0
+
+    output = capsys.readouterr().out
+    assert 'canvas.redraw' in output
+    assert '9.000' in output

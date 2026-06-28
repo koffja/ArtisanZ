@@ -439,7 +439,7 @@ Run each scenario for at least five minutes where possible:
 
 | Date | Branch | Scenario | Sampling Interval | Visible Curves | Key Metrics | Notes |
 | --- | --- | --- | --- | --- | --- | --- |
-| 2026-06-29 | ArtisanZ | Not yet run | Not recorded | Not recorded | Not recorded | Instrumentation implemented and verified; manual GUI baseline still pending |
+| 2026-06-29 | ArtisanZ | Not yet run | Not recorded | Not recorded | Not recorded | Instrumentation implemented and verified; capture hardened before real GUI baseline |
 
 ## Decision Log
 
@@ -653,7 +653,7 @@ Expected: only Phase 0 performance instrumentation, tests, and docs are changed.
 - Implemented disabled-by-default GUI performance instrumentation in `src/artisanlib/performance.py`.
 - Added timing probes to `canvas.updateBackground`, `canvas.sample_processing`, `canvas.updategraphics`, `canvas.redraw_keep_view`, and `canvas.redraw`.
 - Added skip counters for `canvas.updateBackground.skip`, `canvas.sample_processing.lock_skip`, and `canvas.updategraphics.lock_skip`.
-- Added optional `ARTISANZ_GUI_PERF_FILE` JSONL export from `ApplicationWindow.stopActivities()`.
+- Added automatic/default JSONL export from `ApplicationWindow.stopActivities()` plus `atexit` fallback.
 - Added follow-up JSONL summary utility in `src/artisanlib/performance_report.py`.
 - Added unit coverage in `src/test/unitary/artisanlib/test_performance.py`.
 - Verified focused ArtisanZ charge-target and canvas tests on Python 3.14.5 from `src/.venv`.

@@ -6,6 +6,7 @@ from artisanlib.performance import (
     GuiPerfRecorder,
     gui_perf_count,
     gui_perf_enabled,
+    export_gui_perf_metrics,
     gui_perf_span,
     gui_perf_tracked,
 )
@@ -77,6 +78,47 @@ def test_export_path_comes_from_environment(monkeypatch, tmp_path) -> None:
     from artisanlib.performance import gui_perf_export_path
 
     assert gui_perf_export_path() == output
+
+
+def test_export_path_defaults_to_temp_when_perf_is_enabled(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv('ARTISANZ_GUI_PERF', '1')
+    monkeypatch.delenv('ARTISANZ_GUI_PERF_FILE', raising=False)
+    monkeypatch.setattr(performance.tempfile, 'gettempdir', lambda: str(tmp_path))
+
+    from artisanlib.performance import gui_perf_export_path
+
+    assert gui_perf_export_path() == tmp_path / 'artisanz-gui-perf.jsonl'
+
+
+def test_default_export_path_uses_temp_directory(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(performance.tempfile, 'gettempdir', lambda: str(tmp_path))
+
+    from artisanlib.performance import default_gui_perf_export_path
+
+    assert default_gui_perf_export_path() == tmp_path / 'artisanz-gui-perf.jsonl'
+
+
+def test_export_metrics_writes_default_path(monkeypatch, tmp_path) -> None:
+    recorder = GuiPerfRecorder(enabled=True)
+    recorder.count('probe.default_export')
+    monkeypatch.setattr(performance, '_RECORDER', recorder)
+    monkeypatch.setenv('ARTISANZ_GUI_PERF', '1')
+    monkeypatch.delenv('ARTISANZ_GUI_PERF_FILE', raising=False)
+    monkeypatch.setattr(performance.tempfile, 'gettempdir', lambda: str(tmp_path))
+
+    output = export_gui_perf_metrics()
+
+    assert output == tmp_path / 'artisanz-gui-perf.jsonl'
+    rows = [json.loads(line) for line in output.read_text(encoding='utf-8').splitlines()]
+    assert rows == [
+        {
+            'name':'probe.default_export',
+            'count':1,
+            'total_ms':0,
+            'avg_ms':0,
+            'max_ms':0,
+        },
+    ]
 
 
 def test_module_helpers_are_noops_when_disabled(monkeypatch) -> None:

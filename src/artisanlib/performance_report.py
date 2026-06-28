@@ -7,6 +7,8 @@ import json
 from pathlib import Path
 from typing import Literal
 
+from artisanlib.performance import default_gui_perf_export_path
+
 
 SortKey = Literal['count', 'total_ms', 'avg_ms', 'max_ms']
 
@@ -63,7 +65,7 @@ def format_metric_report(
 def main(argv: Sequence[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
-    metrics = load_metrics(args.path)
+    metrics = load_metrics(args.path or default_gui_perf_export_path())
     lines = format_metric_report(metrics, sort_by=args.sort_by, limit=args.limit)
     for line in lines:
         print(line)
@@ -72,7 +74,11 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description='Summarize ArtisanZ GUI performance JSONL metrics.')
-    parser.add_argument('path', help='Path to ARTISANZ_GUI_PERF_FILE output.')
+    parser.add_argument(
+        'path',
+        nargs='?',
+        help='Path to ARTISANZ_GUI_PERF_FILE output. Defaults to the automatic temp-file path.',
+    )
     parser.add_argument(
         '--sort-by',
         choices=('count', 'total_ms', 'avg_ms', 'max_ms'),

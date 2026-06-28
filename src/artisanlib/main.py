@@ -24,7 +24,7 @@ startup_time = libtime.process_time()
 from artisanlib import __version__, __revision__, __build__, __signature__, __release_sponsor_name__
 from artisanlib.charge_manager import ChargeTargetManager
 from artisanlib.charge_dialog import ChargeTempRorDlg
-from artisanlib.performance import get_gui_perf_recorder, gui_perf_export_path
+from artisanlib.performance import export_gui_perf_metrics
 
 
 import os
@@ -21503,12 +21503,10 @@ class ApplicationWindow(QMainWindow):
             except Exception as e: # pylint: disable=broad-except
                 _log.exception(e)
             self.qmc.stopPhidgetManager()
-        perf_path = gui_perf_export_path()
-        if perf_path is not None:
-            try:
-                get_gui_perf_recorder().write_jsonl(perf_path)
-            except Exception as e: # pylint: disable=broad-except
-                _log.exception(e)
+        try:
+            export_gui_perf_metrics()
+        except Exception as e: # pylint: disable=broad-except
+            _log.exception(e)
 
     # returns True if confirmed, False if canceled by the user
     def closeApp(self) -> bool:

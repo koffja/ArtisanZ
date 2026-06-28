@@ -29,10 +29,11 @@ ARTISANZ_GUI_PERF=1 .venv/bin/python artisan.py
 ```
 
 The probes are disabled unless `ARTISANZ_GUI_PERF` is set to `1`, `true`, `yes`, or `on`.
+When probes are enabled, ArtisanZ writes metrics to the default operating-system temp path on exit, even if `ARTISANZ_GUI_PERF_FILE` is not set.
 
 ## Optional JSONL Export
 
-To write collected metrics when Artisan shuts down:
+To choose the output path explicitly:
 
 ```bash
 cd src
@@ -41,7 +42,14 @@ ARTISANZ_GUI_PERF=1 ARTISANZ_GUI_PERF_FILE=/tmp/artisanz-gui-perf.jsonl .venv/bi
 
 ## Summarize JSONL Metrics
 
-After Artisan exits and writes the JSONL file:
+After Artisan exits and writes the default JSONL file:
+
+```bash
+cd src
+.venv/bin/python -m artisanlib.performance_report --sort-by max_ms --limit 10
+```
+
+If `ARTISANZ_GUI_PERF_FILE` was set explicitly:
 
 ```bash
 cd src
@@ -72,7 +80,8 @@ Run each scenario for at least five minutes where possible:
 
 | Date | Branch | Scenario | Sampling Interval | Visible Curves | Key Metrics | Notes |
 | --- | --- | --- | --- | --- | --- | --- |
-| 2026-06-29 | ArtisanZ | Not yet run | Not recorded | Not recorded | Not recorded | Instrumentation implemented and verified; manual GUI baseline still pending |
+| 2026-06-29 | ArtisanZ | Not yet run | Not recorded | Not recorded | Not recorded | Instrumentation implemented and verified; capture hardened before real GUI baseline |
+| 2026-06-29 | ArtisanZ | First manual run follow-up | Not recorded | Not recorded | No metrics file found | Default path and `ARTISANZ_GUI_PERF_FILE` search found no ArtisanZ JSONL; capture flow hardened with default temp export and `atexit` fallback |
 
 ## Decision Log
 
@@ -82,3 +91,9 @@ Record decisions after benchmark runs:
 - If `canvas.sample_processing` dominates, prioritize processing decoupling before renderer replacement.
 - If `canvas.redraw` dominates only during settings/profile actions, prioritize full-redraw reduction but keep live renderer scope narrow.
 - If lock skip counters rise under normal sampling, prioritize signal scheduling and critical-section reduction.
+
+## Capture Troubleshooting
+
+- If no metrics appear, confirm Artisan was launched from `src/` with `ARTISANZ_GUI_PERF=1`.
+- If no explicit output path is set, run `.venv/bin/python -m artisanlib.performance_report` from `src/`; it reads the default temp-file path.
+- If Artisan is killed rather than closed, the `atexit` fallback should still export metrics for normal Python shutdown, but force-kill paths may still lose data.
