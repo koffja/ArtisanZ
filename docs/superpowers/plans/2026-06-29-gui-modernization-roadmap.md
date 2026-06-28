@@ -60,7 +60,7 @@ Important observations from the code review:
 
 **Tracking Plan:** `docs/superpowers/plans/2026-06-29-gui-modernization-phase-0.md`
 
-**Implementation Note:** Timing probes and optional JSONL export are in place. Do not start Phase 2 renderer replacement or Phase 3 processing extraction until the scenarios in `docs/GUI_MODERNIZATION_BASELINE.md` have real measurements.
+**Implementation Note:** Timing probes, optional JSONL export, and a JSONL summary utility are in place. Do not start Phase 2 renderer replacement or Phase 3 processing extraction until the scenarios in `docs/GUI_MODERNIZATION_BASELINE.md` have real measurements.
 
 ## Phase 1: Widgets Visual Modernization
 

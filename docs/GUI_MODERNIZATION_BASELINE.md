@@ -39,6 +39,17 @@ cd src
 ARTISANZ_GUI_PERF=1 ARTISANZ_GUI_PERF_FILE=/tmp/artisanz-gui-perf.jsonl .venv/bin/python artisan.py
 ```
 
+## Summarize JSONL Metrics
+
+After Artisan exits and writes the JSONL file:
+
+```bash
+cd src
+.venv/bin/python -m artisanlib.performance_report /tmp/artisanz-gui-perf.jsonl --sort-by max_ms --limit 10
+```
+
+Useful sort keys are `max_ms`, `avg_ms`, `total_ms`, and `count`.
+
 ## Hot Paths
 
 - `canvas.sample_processing`: GUI-thread post-processing after samples are read.
