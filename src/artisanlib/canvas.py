@@ -41,7 +41,7 @@ from psutil._common import bytes2human # pyright:ignore[reportPrivateImportUsage
 from babel.units import get_unit_name
 
 from collections.abc import Callable, Sequence
-from typing import override, Final, Literal, Any, Optional, cast, TYPE_CHECKING
+from typing import override, Final, Literal, Any, cast, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from artisanlib.charge_manager import ChargeTargetManager
@@ -103,6 +103,7 @@ from matplotlib.lines import Line2D # type:ignore[untyped-import,unused-ignore]
 from matplotlib.offsetbox import DraggableAnnotation # type:ignore[untyped-import,unused-ignore]
 from matplotlib.colors import to_hex, to_rgba # type:ignore[untyped-import,unused-ignore]
 
+from artisanlib.performance import gui_perf_count, gui_perf_tracked
 from artisanlib.phidgets import PhidgetManager
 from Phidget22.VoltageRange import VoltageRange # type: ignore[import-untyped]
 
@@ -392,7 +393,7 @@ class tgraphcanvas(QObject):
 
         self.aw = aw
         self.canvas = MplCanvas(parent, dpi, self.tight_layout_params, aw)
-        self.charge_manager: 'ChargeTargetManager | None' = None
+        self.charge_manager: ChargeTargetManager | None = None
         self.charge_target_annotation: Annotation | None = None
 
         #default palette of colors
@@ -2808,6 +2809,7 @@ class tgraphcanvas(QObject):
         self.deltaETsamples = max(1,int(round(self.deltaETspan / interval)))
 
     @pyqtSlot()
+    @gui_perf_tracked('canvas.updateBackground')
     def updateBackground(self) -> None:
         if not self.block_update and self.ax is not None:
             try:
@@ -2818,6 +2820,8 @@ class tgraphcanvas(QObject):
                 if self.updateBackgroundSemaphore.available() < 1:
                     self.updateBackgroundSemaphore.release(1)
                 self.block_update = False
+        else:
+            gui_perf_count('canvas.updateBackground.skip')
 
     def doUpdate(self) -> None:
         if not self.designerflag:
@@ -4681,6 +4685,7 @@ class tgraphcanvas(QObject):
     # sample devices at interval self.delay milliseconds.
     # we can assume within the processing of sample_processing() that flagon=True
     # NOTE: sample_processing is processed in the GUI thread NOT the sample thread!
+    @gui_perf_tracked('canvas.sample_processing')
     def sample_processing(self, local_flagstart:bool, temp1_readings:list[float], temp2_readings:list[float], timex_readings:list[float]) -> None: # pyright: ignore [reportGeneralTypeIssues] # Code is too complex to analyze; reduce complexity by refactoring into subroutines or reducing conditional code paths
         ##### (try to) lock resources  #########
         wait_period = 200  # we try to catch a lock within the next 200ms
@@ -4689,6 +4694,7 @@ class tgraphcanvas(QObject):
         gotlock = self.profileDataSemaphore.tryAcquire(1, wait_period) # we try to catch the lock, if we fail we just skip this sampling round (prevents stacking of waiting calls)
         if not gotlock:
             _log.debug('sample_processing(): failed to get profileDataSemaphore lock')
+            gui_perf_count('canvas.sample_processing.lock_skip')
         else:
             try:
                 # duplicate system state flag flagstart locally and only refer to this copy within this function to make it behaving uniquely (either append or overwrite mode)
@@ -5546,11 +5552,13 @@ class tgraphcanvas(QObject):
     # this function is called by a signal at the end of the thread sample() from sample_processing()
     # during sample, updates to GUI widgets or anything GUI must be done here (never from thread)
     @pyqtSlot()
+    @gui_perf_tracked('canvas.updategraphics')
     def updategraphics(self) -> None:
 #        QApplication.processEvents() # without this we see some flickers (canvas redraws) on using multiple button event actions on macOS!?
         gotlock = self.updateGraphicsSemaphore.tryAcquire(1,300) # we try to catch a lock if available but we do not wait, if we fail we just skip this redraw round (prevents stacking of waiting calls); we maximally wait 300ms which should be enough on modern machines
         if not gotlock:
             _log.info('updategraphics(): failed to get updateGraphicsSemaphore lock')
+            gui_perf_count('canvas.updategraphics.lock_skip')
         else:
             try:
                 if self.flagon and self.ax is not None:
@@ -9435,6 +9443,7 @@ class tgraphcanvas(QObject):
                     any(self.aw.extraDelta2[:len(self.extratimex)]))
 
     @pyqtSlot(bool,bool,bool,bool,bool)
+    @gui_perf_tracked('canvas.redraw_keep_view')
     def redraw_keep_view(self, *args:bool, **kwargs:bool) -> None:
         xlimit_min: float|None = None
         xlimit: float|None = None
@@ -9486,6 +9495,7 @@ class tgraphcanvas(QObject):
     #   see https://matplotlib.org/stable/gallery/lines_bars_and_markers/masked_demo.html
     #   to keep points and lines drawn without those breaks data should be interpolated via util:fill_gaps (controlled by the "Interpolate Drops" filter)
     @pyqtSlot(bool,bool,bool,bool,bool)
+    @gui_perf_tracked('canvas.redraw')
     def redraw(self, recomputeAllDeltas:bool = True, re_smooth_foreground:bool = True, takelock:bool = True, forceRenewAxis:bool = False, re_smooth_background:bool = False) -> None: # pyright: ignore [reportGeneralTypeIssues] # Code is too complex to analyze; reduce complexity by refactoring into subroutines or reducing conditional code paths
 #        _log.debug("PRINT redraw(recomputeAllDeltas: %s, re_smooth_foreground: %s, takelock: %s, forceRenewAxis: %s, re_smooth_background: %s)",recomputeAllDeltas, re_smooth_foreground, takelock, forceRenewAxis, re_smooth_background)
         if self.designerflag:
@@ -18371,7 +18381,7 @@ class tgraphcanvas(QObject):
     def set_charge_manager(self, manager: 'ChargeTargetManager') -> None:
         self.charge_manager = manager
 
-    def _charge_window_average_delta(self, window_seconds: float) -> Optional[float]:
+    def _charge_window_average_delta(self, window_seconds: float) -> float | None:
         if not hasattr(self, 'timex') or not hasattr(self, 'delta2'):
             return None
         if len(self.timex) < 2 or len(self.delta2) < 2:
@@ -18392,7 +18402,7 @@ class tgraphcanvas(QObject):
             return None
         return sum(values) / len(values)
 
-    def _charge_et_bt_gap(self) -> Optional[float]:
+    def _charge_et_bt_gap(self) -> float | None:
         if not hasattr(self, 'temp1') or not hasattr(self, 'temp2'):
             return None
         if len(self.temp1) == 0 or len(self.temp2) == 0:
@@ -18419,9 +18429,8 @@ class tgraphcanvas(QObject):
                  c_ror = self.delta2[idx] if (hasattr(self, 'delta2') and idx < len(self.delta2)) else 0.0
                  self.charge_manager.on_charge_event(c_temp, c_ror)
              is_charged = True
-        else:
-             if not self.charge_manager.active:
-                 self.charge_manager.reset()
+        elif not self.charge_manager.active:
+            self.charge_manager.reset()
 
         # If disabled, clean up and return
         if not self.charge_manager.enabled:
@@ -18479,7 +18488,7 @@ class tgraphcanvas(QObject):
                             xytext=(10, -10), textcoords='offset points',
                             fontsize=9, color='#555555',
                             verticalalignment='top', horizontalalignment='left',
-                            bbox=dict(boxstyle='round,pad=0.6', fc='#F8F8F8', ec='#DDDDDD', alpha=0.8),
+                            bbox={'boxstyle':'round,pad=0.6', 'fc':'#F8F8F8', 'ec':'#DDDDDD', 'alpha':0.8},
                         )
                     except Exception:
                         pass
@@ -18548,10 +18557,19 @@ class tgraphcanvas(QObject):
                             fontsize=9,
                             color='#333333',
                             horizontalalignment=halign,
-                            bbox=dict(boxstyle='round,pad=0.8,rounding_size=0.6',
-                                      fc=bg_color, ec='#AAAAAA', lw=0.5, alpha=0.95),
-                            arrowprops=dict(arrowstyle='-|>', connectionstyle=connection_style,
-                                            color='#666666', lw=1.0))
+                            bbox={
+                                'boxstyle':'round,pad=0.8,rounding_size=0.6',
+                                'fc':bg_color,
+                                'ec':'#AAAAAA',
+                                'lw':0.5,
+                                'alpha':0.95,
+                            },
+                            arrowprops={
+                                'arrowstyle':'-|>',
+                                'connectionstyle':connection_style,
+                                'color':'#666666',
+                                'lw':1.0,
+                            })
                     except Exception:
                         pass
     #redraws designer
