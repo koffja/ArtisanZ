@@ -28195,6 +28195,15 @@ def _schedule_gui_perf_autorun(appWindow:'ApplicationWindow') -> None:
     if enabled not in {'1', 'true', 'yes', 'on'}:
         return
 
+    mode = os.environ.get('ARTISANZ_GUI_PERF_AUTORUN_MODE', 'redraw').strip().lower()
+    _write_gui_perf_autorun_status(f'mode={mode}')
+    if mode in {'simulator', 'simulator-recording', 'recording'}:
+        _schedule_gui_perf_simulator_recording_autorun(appWindow)
+        return
+    _schedule_gui_perf_redraw_autorun(appWindow)
+
+
+def _schedule_gui_perf_redraw_autorun(appWindow:'ApplicationWindow') -> None:
     iterations = _gui_perf_env_int('ARTISANZ_GUI_PERF_AUTORUN_ITERATIONS', 12)
     interval_ms = _gui_perf_env_int('ARTISANZ_GUI_PERF_AUTORUN_INTERVAL_MS', 75)
     start_delay_ms = _gui_perf_env_int('ARTISANZ_GUI_PERF_AUTORUN_START_MS', 1200)
@@ -28216,15 +28225,87 @@ def _schedule_gui_perf_autorun(appWindow:'ApplicationWindow') -> None:
             QTimer.singleShot(interval_ms, run_once)
             return
 
-        try:
-            _save_gui_perf_autorun_screenshot(appWindow)
-            export_gui_perf_metrics()
-        except Exception as e: # pylint: disable=broad-except
-            _log.exception(e)
-        appWindow.qmc.safesaveflag = False
-        appWindow.fileQuit()
+        _save_gui_perf_autorun_screenshot(appWindow)
+        _finish_gui_perf_autorun(appWindow)
 
     QTimer.singleShot(start_delay_ms, run_once)
+
+
+def _schedule_gui_perf_simulator_recording_autorun(appWindow:'ApplicationWindow') -> None:
+    duration_ms = _gui_perf_env_int('ARTISANZ_GUI_PERF_AUTORUN_DURATION_MS', 5000)
+    start_delay_ms = _gui_perf_env_int('ARTISANZ_GUI_PERF_AUTORUN_START_MS', 1200)
+    stop_delay_ms = _gui_perf_env_int('ARTISANZ_GUI_PERF_AUTORUN_STOP_MS', 1000)
+
+    def start_recording() -> None:
+        try:
+            _write_gui_perf_autorun_status('simulator-recording:start')
+            if not _start_gui_perf_profile_simulator(appWindow):
+                _log.warning('simulator-recording autorun could not start the profile simulator')
+                _write_gui_perf_autorun_status('simulator-recording:start-failed')
+                _finish_gui_perf_autorun(appWindow)
+                return
+            QTimer.singleShot(250, lambda: appWindow.qmc.ToggleRecorder(False))
+            QTimer.singleShot(duration_ms, stop_recording)
+            _write_gui_perf_autorun_status('simulator-recording:scheduled')
+        except Exception as e: # pylint: disable=broad-except
+            _log.exception(e)
+            _write_gui_perf_autorun_status(f'simulator-recording:start-exception:{e!r}')
+            _finish_gui_perf_autorun(appWindow)
+
+    def stop_recording() -> None:
+        try:
+            _write_gui_perf_autorun_status(
+                f'simulator-recording:stop flagon={appWindow.qmc.flagon} flagstart={appWindow.qmc.flagstart}')
+            _save_gui_perf_autorun_screenshot(appWindow)
+            if appWindow.qmc.flagon:
+                appWindow.qmc.ToggleMonitor(False)
+            QTimer.singleShot(stop_delay_ms, lambda: _finish_gui_perf_autorun(appWindow))
+        except Exception as e: # pylint: disable=broad-except
+            _log.exception(e)
+            _write_gui_perf_autorun_status(f'simulator-recording:stop-exception:{e!r}')
+            _finish_gui_perf_autorun(appWindow)
+
+    QTimer.singleShot(start_delay_ms, start_recording)
+
+
+def _start_gui_perf_profile_simulator(appWindow:'ApplicationWindow') -> bool:
+    profile_path = os.environ.get('ARTISANZ_GUI_PERF_AUTORUN_SIMULATOR_FILE', '').strip()
+    if profile_path:
+        try:
+            profile_file = Path(profile_path).expanduser()
+            if not profile_file.is_absolute():
+                profile_file = Path(getAppPath()) / profile_file
+            profile = cast(dict[str, Any], deserialize(str(profile_file)))
+            appWindow.simulator = Simulator(appWindow.qmc.mode, profile)
+            appWindow.simulatorpath = str(profile_file)
+            appWindow.buttonONOFF.setStyleSheet(appWindow.pushbuttonstyles_simulator['OFF'])
+            appWindow.buttonSTARTSTOP.setStyleSheet(appWindow.pushbuttonstyles_simulator['STOP'])
+            appWindow.qmc.updateDeltaSamples()
+            appWindow.updateWindowTitle()
+            _write_gui_perf_autorun_status(f'simulator:file={profile_file}')
+            return True
+        except Exception as e: # pylint: disable=broad-except
+            _log.exception(e)
+            _write_gui_perf_autorun_status(f'simulator:file-exception:{e!r}')
+            return False
+
+    if appWindow.curFile is None:
+        _log.warning('simulator-recording autorun requires ARTISANZ_GUI_PERF_AUTORUN_SIMULATOR_FILE or a loaded profile file')
+        _write_gui_perf_autorun_status('simulator:no-profile')
+        return False
+    appWindow.simulate(False)
+    _write_gui_perf_autorun_status(f'simulator:curFile={appWindow.curFile} active={appWindow.simulator is not None}')
+    return appWindow.simulator is not None
+
+
+def _finish_gui_perf_autorun(appWindow:'ApplicationWindow') -> None:
+    _write_gui_perf_autorun_status('finish')
+    try:
+        export_gui_perf_metrics()
+    except Exception as e: # pylint: disable=broad-except
+        _log.exception(e)
+    appWindow.qmc.safesaveflag = False
+    appWindow.fileQuit()
 
 
 def _save_gui_perf_autorun_screenshot(appWindow:'ApplicationWindow') -> None:
@@ -28234,6 +28315,18 @@ def _save_gui_perf_autorun_screenshot(appWindow:'ApplicationWindow') -> None:
     try:
         Path(screenshot_path).parent.mkdir(parents=True, exist_ok=True)
         appWindow.grab().save(screenshot_path)
+    except Exception as e: # pylint: disable=broad-except
+        _log.exception(e)
+
+
+def _write_gui_perf_autorun_status(message: str) -> None:
+    status_path = os.environ.get('ARTISANZ_GUI_PERF_AUTORUN_STATUS_FILE', '').strip()
+    if not status_path:
+        return
+    try:
+        Path(status_path).parent.mkdir(parents=True, exist_ok=True)
+        with open(status_path, 'a', encoding='utf-8') as f:
+            f.write(f'{datetime.datetime.now(datetime.UTC).isoformat()} {message}\n')
     except Exception as e: # pylint: disable=broad-except
         _log.exception(e)
 

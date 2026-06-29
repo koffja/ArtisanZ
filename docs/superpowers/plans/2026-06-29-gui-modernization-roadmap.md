@@ -2,7 +2,7 @@
 
 **Purpose:** Track the multi-phase GUI modernization effort from measurement through visual refresh, plotting improvements, processing decoupling, and optional QML adoption.
 
-**Status:** Phase 0 automated profile redraw baseline is captured as of 2026-06-29. Phase 1 Widgets visual modernization has a main-screen first pass with screenshots; live sampling baseline remains pending before Phase 2/3 work.
+**Status:** Phase 0 automated profile redraw baseline and a 20-second internal simulator live-sampling smoke baseline are captured as of 2026-06-29. Phase 1 Widgets visual modernization has a main-screen first pass with screenshots; longer simulator/device baselines remain pending before broad threading work.
 
 **Repository Rules:** Work on the `ArtisanZ` branch. Do not commit or push unless explicitly requested. Preserve upstream compatibility and local ArtisanZ customizations.
 
@@ -31,7 +31,7 @@ Important observations from the code review:
 
 | Phase | Name | Status | Primary Deliverable | Exit Gate |
 | --- | --- | --- | --- | --- |
-| 0 | Performance Baseline and Risk Map | Profile redraw baseline captured | Timing probes, benchmark workflow, baseline report | We know whether rendering, GUI-thread processing, locks, or device sampling dominate latency |
+| 0 | Performance Baseline and Risk Map | Profile + simulator smoke baselines captured | Timing probes, benchmark workflow, baseline report | We know whether rendering, GUI-thread processing, locks, or device sampling dominate latency |
 | 1 | Widgets Visual Modernization | Main-screen first pass captured | Modern theme tokens and refreshed main roast screen styling | Main screen looks modern while behavior and settings compatibility remain intact |
 | 2 | Plot Renderer Boundary and PyQtGraph POC | Not started | Read-only plot snapshot model, Matplotlib adapter, PyQtGraph live adapter prototype | POC is faster or visually/maintainably superior under Phase 0 benchmarks |
 | 3 | Sampling Post-Processing Decoupling | Not started | Pure data pipeline for filtering, RoR, PID inputs, alarm/event decisions | GUI thread consumes snapshots instead of doing heavy processing inline |
@@ -60,7 +60,7 @@ Important observations from the code review:
 
 **Tracking Plan:** `docs/superpowers/plans/2026-06-29-gui-modernization-phase-0.md`
 
-**Implementation Note:** Timing probes, automatic/default JSONL export, `atexit` export fallback, JSONL summary utility, and automated profile redraw autorun are in place. Do not start Phase 2 renderer replacement or Phase 3 processing extraction until the live sampling scenarios in `docs/GUI_MODERNIZATION_BASELINE.md` have real measurements.
+**Implementation Note:** Timing probes, automatic/default JSONL export, `atexit` export fallback, JSONL summary utility, automated profile redraw autorun, and internal simulator-recording autorun are in place. The 20-second simulator smoke baseline shows `sample_processing` is not the immediate short-window bottleneck; prioritize Phase 2 renderer-boundary planning before Phase 3 processing extraction, but keep longer simulator/device runs as a gate before broad threading changes.
 
 ## Phase 1: Widgets Visual Modernization
 
