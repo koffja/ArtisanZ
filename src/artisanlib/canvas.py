@@ -120,6 +120,8 @@ from artisanlib.sample_processing import (
     displayed_ror_value,
     input_filter_backfill_updates,
     input_filter_previous_values,
+    live_x_axis_extension_end,
+    manual_x_axis_extension_end,
     pid_process_value,
     relative_alarm_index,
     ror_curve_window,
@@ -5105,14 +5107,17 @@ class tgraphcanvas(QObject):
                                 self.l_delta2.set_data([], [])
 
                         #readjust xlimit of plot if needed
-                        if not self.fixmaxtime and not self.locktimex:
-                            charge_offset:float = (0 if self.timeindex[0] == -1 else sample_timex[self.timeindex[0]])
-                            now = sample_timex[-1] - charge_offset
-                            trigger_period:float = (self.endofx - self.startofx - charge_offset) / 14 # 14th part of the total x-axis length
-                            if now > (self.endofx - trigger_period):
-                                extension_period:float = trigger_period * 4
-                                self.endofx = now + extension_period
-                                self.xaxistosm()
+                        extended_end = live_x_axis_extension_end(
+                            self.fixmaxtime,
+                            self.locktimex,
+                            self.timeindex[0],
+                            sample_timex,
+                            self.startofx,
+                            self.endofx,
+                        )
+                        if extended_end is not None:
+                            self.endofx = extended_end
+                            self.xaxistosm()
                         if self.ETprojectFlag or self.BTprojectFlag:
                             self.updateProjection()
 
@@ -5366,13 +5371,19 @@ class tgraphcanvas(QObject):
                 else:
                     tx = int(self.timeclock.elapsed()/1000.)
                     #readjust xlimit of plot if needed
-                    if  not self.fixmaxtime and not self.locktimex:
-                        now = (tx if self.timeindex[0] == -1 else tx - sample_timex[self.timeindex[0]])
-                        if now > (self.endofx - 45):            # if difference is smaller than 45 seconds
-                            self.endofx = now + 180              # increase x limit by 3 minutes (180)
-                            if self.ax is not None:
-                                self.ax.set_xlim(self.startofx,self.endofx)
-                            self.xaxistosm()
+                    extended_end = manual_x_axis_extension_end(
+                        self.fixmaxtime,
+                        self.locktimex,
+                        tx,
+                        self.timeindex[0],
+                        sample_timex,
+                        self.endofx,
+                    )
+                    if extended_end is not None:
+                        self.endofx = extended_end
+                        if self.ax is not None:
+                            self.ax.set_xlim(self.startofx,self.endofx)
+                        self.xaxistosm()
                     # also in the manual case we check for TP
                     # check for TP event if already CHARGEed and not yet recognized
                     if local_flagstart and self.TPalarmtimeindex is None and self.timeindex[0] > -1 and self.timeindex[0]+5 < len(sample_temp2) and self.checkTPalarmtime():

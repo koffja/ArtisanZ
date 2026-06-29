@@ -17,6 +17,8 @@ from artisanlib.sample_processing import (
     displayed_ror_value,
     input_filter_backfill_updates,
     input_filter_previous_values,
+    live_x_axis_extension_end,
+    manual_x_axis_extension_end,
     pid_process_value,
     relative_alarm_index,
     ror_curve_window,
@@ -187,6 +189,99 @@ def test_input_filter_previous_values_return_latest_and_previous_readings() -> N
 
     assert previous.latest == 181.0
     assert previous.previous == 176.0
+
+
+def test_live_x_axis_extension_skips_sample_time_access_when_fixed_or_locked() -> None:
+    assert live_x_axis_extension_end(
+        fix_max_time=True,
+        lock_time_x=False,
+        charge_index=-1,
+        sample_times=NoAccessSequence(),
+        start_of_x=0.0,
+        end_of_x=600.0,
+    ) is None
+    assert live_x_axis_extension_end(
+        fix_max_time=False,
+        lock_time_x=True,
+        charge_index=-1,
+        sample_times=NoAccessSequence(),
+        start_of_x=0.0,
+        end_of_x=600.0,
+    ) is None
+
+
+def test_live_x_axis_extension_returns_none_before_trigger() -> None:
+    assert live_x_axis_extension_end(
+        fix_max_time=False,
+        lock_time_x=False,
+        charge_index=-1,
+        sample_times=[0.0, 550.0],
+        start_of_x=0.0,
+        end_of_x=600.0,
+    ) is None
+
+
+def test_live_x_axis_extension_uses_strict_trigger_boundary() -> None:
+    assert live_x_axis_extension_end(
+        fix_max_time=False,
+        lock_time_x=False,
+        charge_index=-1,
+        sample_times=[0.0, 560.0],
+        start_of_x=0.0,
+        end_of_x=640.0,
+    ) is None
+
+
+def test_live_x_axis_extension_uses_charge_offset_and_trigger_period() -> None:
+    assert live_x_axis_extension_end(
+        fix_max_time=False,
+        lock_time_x=False,
+        charge_index=1,
+        sample_times=[0.0, 100.0, 721.0],
+        start_of_x=0.0,
+        end_of_x=660.0,
+    ) == 781.0
+
+
+def test_manual_x_axis_extension_skips_sample_time_access_when_fixed_or_locked() -> None:
+    assert manual_x_axis_extension_end(
+        fix_max_time=True,
+        lock_time_x=False,
+        tx=590.0,
+        charge_index=-1,
+        sample_times=NoAccessSequence(),
+        end_of_x=600.0,
+    ) is None
+    assert manual_x_axis_extension_end(
+        fix_max_time=False,
+        lock_time_x=True,
+        tx=590.0,
+        charge_index=-1,
+        sample_times=NoAccessSequence(),
+        end_of_x=600.0,
+    ) is None
+
+
+def test_manual_x_axis_extension_returns_none_before_threshold() -> None:
+    assert manual_x_axis_extension_end(
+        fix_max_time=False,
+        lock_time_x=False,
+        tx=555.0,
+        charge_index=-1,
+        sample_times=[0.0],
+        end_of_x=600.0,
+    ) is None
+
+
+def test_manual_x_axis_extension_uses_charge_offset_and_extension_period() -> None:
+    assert manual_x_axis_extension_end(
+        fix_max_time=False,
+        lock_time_x=False,
+        tx=662.0,
+        charge_index=1,
+        sample_times=[0.0, 100.0],
+        end_of_x=600.0,
+    ) == 742.0
 
 
 def test_pid_process_value_uses_smoothed_bt_for_default_sources() -> None:

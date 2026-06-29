@@ -92,6 +92,38 @@ def input_filter_previous_values(
     return PreviousReadings(latest, previous)
 
 
+def live_x_axis_extension_end(
+        fix_max_time: bool,
+        lock_time_x: bool,
+        charge_index: int,
+        sample_times: Sequence[float],
+        start_of_x: float,
+        end_of_x: float) -> float | None:
+    if fix_max_time or lock_time_x:
+        return None
+    charge_offset = 0 if charge_index == -1 else sample_times[charge_index]
+    now = sample_times[-1] - charge_offset
+    trigger_period = (end_of_x - start_of_x - charge_offset) / 14
+    if now > (end_of_x - trigger_period):
+        return now + trigger_period * 4
+    return None
+
+
+def manual_x_axis_extension_end(
+        fix_max_time: bool,
+        lock_time_x: bool,
+        tx: float,
+        charge_index: int,
+        sample_times: Sequence[float],
+        end_of_x: float) -> float | None:
+    if fix_max_time or lock_time_x:
+        return None
+    now = tx if charge_index == -1 else tx - sample_times[charge_index]
+    if now > (end_of_x - 45):
+        return now + 180
+    return None
+
+
 def pid_process_value(
         pid_source: int,
         smoothed_et: TemperatureValue,
@@ -419,6 +451,8 @@ __all__ = [
     'displayed_ror_value',
     'input_filter_backfill_updates',
     'input_filter_previous_values',
+    'live_x_axis_extension_end',
+    'manual_x_axis_extension_end',
     'pid_process_value',
     'PreviousReadings',
     'relative_alarm_index',
