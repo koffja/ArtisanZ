@@ -118,6 +118,7 @@ from artisanlib.sample_processing import (
     decay_weight_sequence,
     delta_smoothing_filter_size,
     displayed_ror_value,
+    input_filter_backfill_updates,
     pid_process_value,
     relative_alarm_index,
     ror_curve_window,
@@ -4837,16 +4838,20 @@ class tgraphcanvas(QObject):
 
                                     # now copy the destructively modified values from temp1/2 to ctemp1/2 if any (to ensure to pick the right elements we compare the timestamps at those indices)
                                     if (self.minmaxLimits or self.dropSpikes or self.dropDuplicates):
-                                        if len(sample_extractimex1[i])>0:
-                                            if et1_prev is not None and sample_extractimex1[i][-1] == sample_extratimex[i][-1] and et1_prev != sample_extratemp1[i][-1]:
-                                                sample_extractemp1[i][-1] = sample_extratemp1[i][-1]
-                                            if len(sample_extractimex1[i])>1 and et1_prevprev is not None and sample_extractimex1[i][-2] == sample_extratimex[i][-2] and et1_prevprev != sample_extratemp1[i][-2]:
-                                                sample_extractemp1[i][-2] = sample_extratemp1[i][-2]
-                                        if len(sample_extractimex2[i])>0:
-                                            if et2_prev is not None and sample_extractimex2[i][-1] == sample_extratimex[i][-1] and et2_prev != sample_extratemp2[i][-1]:
-                                                sample_extractemp2[i][-1] = sample_extratemp2[i][-1]
-                                            if len(sample_extractimex2[i])>1 and et2_prevprev is not None and sample_extractimex2[i][-2] == sample_extratimex[i][-2] and et2_prevprev != sample_extratemp2[i][-2]:
-                                                sample_extractemp2[i][-2] = sample_extratemp2[i][-2]
+                                        for update in input_filter_backfill_updates(
+                                                sample_extractimex1[i],
+                                                sample_extratimex[i],
+                                                sample_extratemp1[i],
+                                                et1_prev,
+                                                et1_prevprev):
+                                            sample_extractemp1[i][update.index] = update.value
+                                        for update in input_filter_backfill_updates(
+                                                sample_extractimex2[i],
+                                                sample_extratimex[i],
+                                                sample_extratemp2[i],
+                                                et2_prev,
+                                                et2_prevprev):
+                                            sample_extractemp2[i][update.index] = update.value
 
                                 sample_extratimex[i].append(extratx)
                                 sample_extratemp1[i].append(float(extrat1))
@@ -4928,16 +4933,20 @@ class tgraphcanvas(QObject):
 
                     # now copy the destructively modified values from temp1/2 to ctemp1/2 if any (to ensure to pick the right elements we compare the timestamps at those indices)
                     if (self.minmaxLimits or self.dropSpikes or self.dropDuplicates):
-                        if len(sample_ctimex1)>0:
-                            if t1_prev is not None and sample_ctimex1[-1] == sample_timex[-1] and t1_prev != sample_temp1[-1]:
-                                sample_ctemp1[-1] = sample_temp1[-1]
-                            if len(sample_ctimex1)>1 and t1_prevprev is not None and sample_ctimex1[-2] == sample_timex[-2] and t1_prevprev != sample_temp1[-2]:
-                                sample_ctemp1[-2] = sample_temp1[-2]
-                        if len(sample_ctimex2)>0:
-                            if t2_prev is not None and sample_ctimex2[-1] == sample_timex[-1] and t2_prev != sample_temp2[-1]:
-                                sample_ctemp2[-1] = sample_temp2[-1]
-                            if len(sample_ctimex2)>1 and t2_prevprev is not None and sample_ctimex2[-2] == sample_timex[-2] and t2_prevprev != sample_temp2[-2]:
-                                sample_ctemp2[-2] = sample_temp2[-2]
+                        for update in input_filter_backfill_updates(
+                                sample_ctimex1,
+                                sample_timex,
+                                sample_temp1,
+                                t1_prev,
+                                t1_prevprev):
+                            sample_ctemp1[update.index] = update.value
+                        for update in input_filter_backfill_updates(
+                                sample_ctimex2,
+                                sample_timex,
+                                sample_temp2,
+                                t2_prev,
+                                t2_prevprev):
+                            sample_ctemp2[update.index] = update.value
                     t1_final = t1
                     t2_final = t2
 

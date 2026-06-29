@@ -12,6 +12,12 @@ class ConnectedCurvePoint:
     value: TemperatureValue
 
 
+@dataclass(frozen=True)
+class BackfillUpdate:
+    index: int
+    value: float
+
+
 def decay_weight_sequence(curve_filter: int) -> tuple[int, ...]:
     if curve_filter <= 0:
         return (1,)
@@ -42,6 +48,32 @@ def connected_curve_point(
     if len(readings) > dropout_window and all(value == -1 for value in readings[-dropout_window:]):
         return ConnectedCurvePoint(True, None)
     return ConnectedCurvePoint(False, None)
+
+
+def input_filter_backfill_updates(
+        connected_times: Sequence[float],
+        raw_times: Sequence[float],
+        raw_values: Sequence[float],
+        previous_latest: float | None,
+        previous_previous: float | None) -> tuple[BackfillUpdate, ...]:
+    updates: list[BackfillUpdate] = []
+    if (
+            len(connected_times) > 0 and
+            len(raw_times) > 0 and
+            len(raw_values) > 0 and
+            previous_latest is not None and
+            connected_times[-1] == raw_times[-1] and
+            previous_latest != raw_values[-1]):
+        updates.append(BackfillUpdate(-1, raw_values[-1]))
+    if (
+            len(connected_times) > 1 and
+            len(raw_times) > 1 and
+            len(raw_values) > 1 and
+            previous_previous is not None and
+            connected_times[-2] == raw_times[-2] and
+            previous_previous != raw_values[-2]):
+        updates.append(BackfillUpdate(-2, raw_values[-2]))
+    return tuple(updates)
 
 
 def pid_process_value(
@@ -363,11 +395,13 @@ __all__ = [
     'auto_drop_event_candidate',
     'auto_dry_event_candidate',
     'auto_fcs_event_candidate',
+    'BackfillUpdate',
     'connected_curve_point',
     'ConnectedCurvePoint',
     'decay_weight_sequence',
     'delta_smoothing_filter_size',
     'displayed_ror_value',
+    'input_filter_backfill_updates',
     'pid_process_value',
     'relative_alarm_index',
     'ror_curve_window',

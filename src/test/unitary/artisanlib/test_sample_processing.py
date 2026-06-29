@@ -15,6 +15,7 @@ from artisanlib.sample_processing import (
     decay_weight_sequence,
     delta_smoothing_filter_size,
     displayed_ror_value,
+    input_filter_backfill_updates,
     pid_process_value,
     relative_alarm_index,
     ror_curve_window,
@@ -81,6 +82,71 @@ def test_connected_curve_point_appends_disconnect_marker_after_long_dropout_gap(
 def test_connected_curve_point_matches_post_append_readings_semantics() -> None:
     assert connected_curve_point(-1.0, [100.0, -1.0, -1.0], interpolate_max=1).should_append
     assert not connected_curve_point(-1.0, [-1.0, -1.0], interpolate_max=1).should_append
+
+
+def test_input_filter_backfill_updates_latest_matching_connected_sample() -> None:
+    updates = input_filter_backfill_updates(
+        connected_times=[10.0],
+        raw_times=[10.0],
+        raw_values=[181.0],
+        previous_latest=180.0,
+        previous_previous=None,
+    )
+
+    assert [(update.index, update.value) for update in updates] == [(-1, 181.0)]
+
+
+def test_input_filter_backfill_updates_previous_matching_connected_sample() -> None:
+    updates = input_filter_backfill_updates(
+        connected_times=[5.0, 10.0],
+        raw_times=[5.0, 10.0],
+        raw_values=[176.5, 181.0],
+        previous_latest=181.0,
+        previous_previous=176.0,
+    )
+
+    assert [(update.index, update.value) for update in updates] == [(-2, 176.5)]
+
+
+def test_input_filter_backfill_updates_latest_and_previous_samples_in_order() -> None:
+    updates = input_filter_backfill_updates(
+        connected_times=[5.0, 10.0],
+        raw_times=[5.0, 10.0],
+        raw_values=[176.5, 181.5],
+        previous_latest=181.0,
+        previous_previous=176.0,
+    )
+
+    assert [(update.index, update.value) for update in updates] == [(-1, 181.5), (-2, 176.5)]
+
+
+def test_input_filter_backfill_updates_skip_timestamp_mismatches() -> None:
+    updates = input_filter_backfill_updates(
+        connected_times=[4.0, 9.0],
+        raw_times=[5.0, 10.0],
+        raw_values=[176.5, 181.5],
+        previous_latest=181.0,
+        previous_previous=176.0,
+    )
+
+    assert updates == ()
+
+
+def test_input_filter_backfill_updates_skip_unchanged_or_missing_previous_values() -> None:
+    assert input_filter_backfill_updates(
+        connected_times=[5.0, 10.0],
+        raw_times=[5.0, 10.0],
+        raw_values=[176.0, 181.0],
+        previous_latest=181.0,
+        previous_previous=176.0,
+    ) == ()
+    assert input_filter_backfill_updates(
+        connected_times=[5.0, 10.0],
+        raw_times=[5.0, 10.0],
+        raw_values=[176.5, 181.5],
+        previous_latest=None,
+        previous_previous=None,
+    ) == ()
 
 
 def test_pid_process_value_uses_smoothed_bt_for_default_sources() -> None:
