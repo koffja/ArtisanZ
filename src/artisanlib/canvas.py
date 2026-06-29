@@ -119,6 +119,7 @@ from artisanlib.sample_processing import (
     delta_smoothing_filter_size,
     displayed_ror_value,
     input_filter_backfill_updates,
+    input_filter_previous_values,
     pid_process_value,
     relative_alarm_index,
     ror_curve_window,
@@ -4816,21 +4817,14 @@ class tgraphcanvas(QObject):
                                     except Exception as e: # pylint: disable=broad-except
                                         _log.exception(e)
 
-                                et1_prev = et2_prev = None
-                                et1_prevprev = et2_prevprev = None
+                                input_filters_enabled = self.minmaxLimits or self.dropSpikes or self.dropDuplicates
+                                et1_previous = et2_previous = None
                                 if self.extradevices[i] != 25: # don't apply input filters to virtual devices
 
                                     ## Apply InputFilters. As those might modify destructively up to two older readings in temp1/2 via interpolation for drop outs we try to detect this and copy those
                                     # changes back to the ctemp lines that are rendered.
-                                    if (self.minmaxLimits or self.dropSpikes or self.dropDuplicates):
-                                        if len(sample_extratemp1[i])>0:
-                                            et1_prev = sample_extratemp1[i][-1]
-                                            if len(sample_extratemp1[i])>1:
-                                                et1_prevprev = sample_extratemp1[i][-2]
-                                        if len(sample_extratemp2[i])>0:
-                                            et2_prev = sample_extratemp2[i][-1]
-                                            if len(sample_extratemp2[i])>1:
-                                                et2_prevprev = sample_extratemp2[i][-2]
+                                    et1_previous = input_filter_previous_values(sample_extratemp1[i], input_filters_enabled)
+                                    et2_previous = input_filter_previous_values(sample_extratemp2[i], input_filters_enabled)
                                     if not self.dummy_or_special_device(self.extradevices[i], 0):
                                         extrat1 = self.inputFilter(sample_extratimex[i],sample_extratemp1[i],extratx,extrat1)
                                     if not self.dummy_or_special_device(self.extradevices[i], 1):
@@ -4842,15 +4836,15 @@ class tgraphcanvas(QObject):
                                                 sample_extractimex1[i],
                                                 sample_extratimex[i],
                                                 sample_extratemp1[i],
-                                                et1_prev,
-                                                et1_prevprev):
+                                                et1_previous.latest,
+                                                et1_previous.previous):
                                             sample_extractemp1[i][update.index] = update.value
                                         for update in input_filter_backfill_updates(
                                                 sample_extractimex2[i],
                                                 sample_extratimex[i],
                                                 sample_extratemp2[i],
-                                                et2_prev,
-                                                et2_prevprev):
+                                                et2_previous.latest,
+                                                et2_previous.previous):
                                             sample_extractemp2[i][update.index] = update.value
 
                                 sample_extratimex[i].append(extratx)
@@ -4913,17 +4907,9 @@ class tgraphcanvas(QObject):
 
                     ## Apply InputFilters. As those might modify destructively up to two older readings in temp1/2 via interpolation for drop outs we try to detect this and copy those
                     # changes back to the ctemp lines that are rendered.
-                    t1_prev = t2_prev = None
-                    t1_prevprev = t2_prevprev = None
-                    if (self.minmaxLimits or self.dropSpikes or self.dropDuplicates):
-                        if len(sample_temp1)>0:
-                            t1_prev = sample_temp1[-1]
-                            if len(sample_temp1)>1:
-                                t1_prevprev = sample_temp1[-2]
-                        if len(sample_temp2)>0:
-                            t2_prev = sample_temp2[-1]
-                            if len(sample_temp2)>1:
-                                t2_prevprev = sample_temp2[-2]
+                    input_filters_enabled = self.minmaxLimits or self.dropSpikes or self.dropDuplicates
+                    t1_previous = input_filter_previous_values(sample_temp1, input_filters_enabled)
+                    t2_previous = input_filter_previous_values(sample_temp2, input_filters_enabled)
                     if not self.dummy_or_special_device(self.device, 0):
                         t1 = self.inputFilter(sample_timex,sample_temp1,tx,t1)
                     if not self.dummy_or_special_device(self.device, 0):
@@ -4937,15 +4923,15 @@ class tgraphcanvas(QObject):
                                 sample_ctimex1,
                                 sample_timex,
                                 sample_temp1,
-                                t1_prev,
-                                t1_prevprev):
+                                t1_previous.latest,
+                                t1_previous.previous):
                             sample_ctemp1[update.index] = update.value
                         for update in input_filter_backfill_updates(
                                 sample_ctimex2,
                                 sample_timex,
                                 sample_temp2,
-                                t2_prev,
-                                t2_prevprev):
+                                t2_previous.latest,
+                                t2_previous.previous):
                             sample_ctemp2[update.index] = update.value
                     t1_final = t1
                     t2_final = t2

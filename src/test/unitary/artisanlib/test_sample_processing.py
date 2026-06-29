@@ -16,6 +16,7 @@ from artisanlib.sample_processing import (
     delta_smoothing_filter_size,
     displayed_ror_value,
     input_filter_backfill_updates,
+    input_filter_previous_values,
     pid_process_value,
     relative_alarm_index,
     ror_curve_window,
@@ -35,6 +36,17 @@ class ExplodingSequence(Sequence[float]):
 
     def __iter__(self) -> Iterator[float]:
         raise AssertionError('unexpected sample time iteration')
+
+
+class NoAccessSequence(Sequence[float]):
+    def __getitem__(self, index: int) -> float:
+        raise AssertionError(f'unexpected sequence item access at {index}')
+
+    def __len__(self) -> int:
+        raise AssertionError('unexpected sequence length access')
+
+    def __iter__(self) -> Iterator[float]:
+        raise AssertionError('unexpected sequence iteration')
 
 
 def test_decay_weight_sequence_uses_one_based_linear_weights() -> None:
@@ -147,6 +159,34 @@ def test_input_filter_backfill_updates_skip_unchanged_or_missing_previous_values
         previous_latest=None,
         previous_previous=None,
     ) == ()
+
+
+def test_input_filter_previous_values_skip_sequence_access_when_disabled() -> None:
+    previous = input_filter_previous_values(NoAccessSequence(), input_filters_enabled=False)
+
+    assert previous.latest is None
+    assert previous.previous is None
+
+
+def test_input_filter_previous_values_return_empty_snapshot_for_no_readings() -> None:
+    previous = input_filter_previous_values([], input_filters_enabled=True)
+
+    assert previous.latest is None
+    assert previous.previous is None
+
+
+def test_input_filter_previous_values_return_latest_for_single_reading() -> None:
+    previous = input_filter_previous_values([181.0], input_filters_enabled=True)
+
+    assert previous.latest == 181.0
+    assert previous.previous is None
+
+
+def test_input_filter_previous_values_return_latest_and_previous_readings() -> None:
+    previous = input_filter_previous_values([176.0, 181.0], input_filters_enabled=True)
+
+    assert previous.latest == 181.0
+    assert previous.previous == 176.0
 
 
 def test_pid_process_value_uses_smoothed_bt_for_default_sources() -> None:

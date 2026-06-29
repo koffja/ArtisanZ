@@ -18,6 +18,12 @@ class BackfillUpdate:
     value: float
 
 
+@dataclass(frozen=True)
+class PreviousReadings:
+    latest: float | None
+    previous: float | None
+
+
 def decay_weight_sequence(curve_filter: int) -> tuple[int, ...]:
     if curve_filter <= 0:
         return (1,)
@@ -74,6 +80,16 @@ def input_filter_backfill_updates(
             previous_previous != raw_values[-2]):
         updates.append(BackfillUpdate(-2, raw_values[-2]))
     return tuple(updates)
+
+
+def input_filter_previous_values(
+        readings: Sequence[float],
+        input_filters_enabled: bool) -> PreviousReadings:
+    if not input_filters_enabled:
+        return PreviousReadings(None, None)
+    latest = readings[-1] if len(readings) > 0 else None
+    previous = readings[-2] if len(readings) > 1 else None
+    return PreviousReadings(latest, previous)
 
 
 def pid_process_value(
@@ -402,7 +418,9 @@ __all__ = [
     'delta_smoothing_filter_size',
     'displayed_ror_value',
     'input_filter_backfill_updates',
+    'input_filter_previous_values',
     'pid_process_value',
+    'PreviousReadings',
     'relative_alarm_index',
     'ror_curve_window',
     'smoothing_weights_for_recent_readings',
