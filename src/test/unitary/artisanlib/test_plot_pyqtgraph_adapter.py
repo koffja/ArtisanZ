@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import sys
 
 import pytest
@@ -9,14 +10,14 @@ from artisanlib.plot_snapshot import AxisSnapshot, CurveSnapshot, EventMarkerSna
 
 
 class FakePlotDataItem:
-    def __init__(self, x: tuple[float, ...], y: tuple[float | None, ...], pen: object, name: str) -> None:
+    def __init__(self, x: tuple[float, ...], y: tuple[float, ...], pen: object, name: str) -> None:
         self.x = x
         self.y = y
         self.pen = pen
         self.name = name
         self.visible = True
 
-    def setData(self, x: tuple[float, ...], y: tuple[float | None, ...]) -> None:  # noqa: N802
+    def setData(self, x: tuple[float, ...], y: tuple[float, ...]) -> None:  # noqa: N802
         self.x = x
         self.y = y
 
@@ -50,7 +51,7 @@ class FakePlot:
     def plot(
             self,
             x: tuple[float, ...],
-            y: tuple[float | None, ...],
+            y: tuple[float, ...],
             *,
             pen: object,
             name: str) -> FakePlotDataItem:
@@ -88,10 +89,18 @@ def _snapshot(
     )
 
 
+def _fake_pen_factory(curve: CurveSnapshot) -> dict[str, object]:
+    return {'color': curve.color, 'width': curve.line_width, 'style': curve.line_style}
+
+
 def test_set_snapshot_creates_curve_items_and_applies_ranges() -> None:
     temperature_plot = FakePlot()
     ror_plot = FakePlot()
-    renderer = PyQtGraphSnapshotRenderer(temperature_plot=temperature_plot, ror_plot=ror_plot)
+    renderer = PyQtGraphSnapshotRenderer(
+        temperature_plot=temperature_plot,
+        ror_plot=ror_plot,
+        pen_factory=_fake_pen_factory,
+    )
 
     renderer.set_snapshot(_snapshot(
         CurveSnapshot.from_sequences(
@@ -117,7 +126,8 @@ def test_set_snapshot_creates_curve_items_and_applies_ranges() -> None:
     assert temperature_plot.items[0].x == (0.0, 1.0)
     assert temperature_plot.items[0].y == (140.0, 142.0)
     assert temperature_plot.items[0].pen == {'color': '#4E7180', 'width': 2.5, 'style': '--'}
-    assert ror_plot.items[0].y == (None, 5.5)
+    assert math.isnan(ror_plot.items[0].y[0])
+    assert ror_plot.items[0].y[1] == 5.5
     assert temperature_plot.x_range == (-1.0, 12.0)
     assert temperature_plot.y_range == (70.0, 270.0)
     assert ror_plot.x_range == (-1.0, 12.0)
@@ -129,7 +139,11 @@ def test_set_snapshot_creates_curve_items_and_applies_ranges() -> None:
 def test_update_live_frame_reuses_items_and_hides_missing_curves_without_resetting_view() -> None:
     temperature_plot = FakePlot()
     ror_plot = FakePlot()
-    renderer = PyQtGraphSnapshotRenderer(temperature_plot=temperature_plot, ror_plot=ror_plot)
+    renderer = PyQtGraphSnapshotRenderer(
+        temperature_plot=temperature_plot,
+        ror_plot=ror_plot,
+        pen_factory=_fake_pen_factory,
+    )
     renderer.set_snapshot(_snapshot(
         CurveSnapshot.from_sequences(name='BT', x=[0], y=[140], color='#4E7180'),
         CurveSnapshot.from_sequences(name='Delta BT', x=[0], y=[None], color='#78905D', y_axis='ror'),
@@ -152,7 +166,11 @@ def test_update_live_frame_reuses_items_and_hides_missing_curves_without_resetti
 def test_export_view_state_reads_plot_ranges_when_available() -> None:
     temperature_plot = FakePlot()
     ror_plot = FakePlot()
-    renderer = PyQtGraphSnapshotRenderer(temperature_plot=temperature_plot, ror_plot=ror_plot)
+    renderer = PyQtGraphSnapshotRenderer(
+        temperature_plot=temperature_plot,
+        ror_plot=ror_plot,
+        pen_factory=_fake_pen_factory,
+    )
 
     renderer.reset_view(RendererViewState(
         time_axis=AxisSnapshot(minimum=3.0, maximum=9.0, label='Time'),
@@ -184,6 +202,7 @@ def test_set_snapshot_renders_and_replaces_event_items() -> None:
         temperature_plot=temperature_plot,
         event_line_factory=event_line_factory,
         event_label_factory=event_label_factory,
+        pen_factory=_fake_pen_factory,
     )
 
     renderer.set_snapshot(_snapshot(events=(

@@ -105,6 +105,7 @@ from matplotlib.colors import to_hex, to_rgba # type:ignore[untyped-import,unuse
 
 from artisanlib.performance import gui_perf_count, gui_perf_tracked
 from artisanlib.phidgets import PhidgetManager
+from artisanlib.sample_processing import decay_weight_sequence, smoothing_weights_for_recent_readings
 from Phidget22.VoltageRange import VoltageRange # type: ignore[import-untyped]
 
 try:
@@ -4946,16 +4947,10 @@ class tgraphcanvas(QObject):
                     #we populate the temporary smoothed ET/BT data arrays (with readings cleansed from -1 dropouts)
                     cf = self.curvefilter
                     if self.temp_decay_weights is None or len(self.temp_decay_weights) != cf: # recompute only on changes
-                        self.temp_decay_weights = [int(x) for x in numpy.arange(1,cf+1)]
+                        self.temp_decay_weights = list(decay_weight_sequence(cf))
                     # we don't smooth st'x if last, or butlast temperature value were a drop-out not to confuse the RoR calculation
-                    if -1 in sample_temp1[-(cf+1):]:
-                        dw1 = [1]
-                    else:
-                        dw1 = self.temp_decay_weights
-                    if -1 in sample_temp2[-(cf+1):]:
-                        dw2 = [1]
-                    else:
-                        dw2 = self.temp_decay_weights
+                    dw1 = list(smoothing_weights_for_recent_readings(sample_temp1, self.temp_decay_weights, cf))
+                    dw2 = list(smoothing_weights_for_recent_readings(sample_temp2, self.temp_decay_weights, cf))
                     # average smoothing
                     if len(sample_ctemp1) > 0:
                         st1 = self.decay_average(sample_ctimex1,sample_ctemp1,dw1)

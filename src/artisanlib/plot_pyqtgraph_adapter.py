@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+import math
 from typing import Any
 
 from artisanlib.plot_snapshot import AxisSnapshot, CurveSnapshot, EventMarkerSnapshot, RendererViewState, RoastPlotSnapshot
 
 EventItemFactory = Callable[[EventMarkerSnapshot, RoastPlotSnapshot], object | None]
+CurvePenFactory = Callable[[CurveSnapshot], object]
 
 
 class PyQtGraphSnapshotRenderer:
@@ -15,11 +17,13 @@ class PyQtGraphSnapshotRenderer:
             temperature_plot: object,
             ror_plot: object | None = None,
             event_line_factory: EventItemFactory | None = None,
-            event_label_factory: EventItemFactory | None = None) -> None:
+            event_label_factory: EventItemFactory | None = None,
+            pen_factory: CurvePenFactory | None = None) -> None:
         self._temperature_plot = temperature_plot
         self._ror_plot = ror_plot
         self._event_line_factory = event_line_factory or _default_event_line_factory
         self._event_label_factory = event_label_factory or _default_event_label_factory
+        self._pen_factory = pen_factory or _default_pen_factory
         self._items: dict[str, object] = {}
         self._event_items: list[object] = []
         self._last_view_state = RendererViewState(
@@ -63,8 +67,8 @@ class PyQtGraphSnapshotRenderer:
             if item is None:
                 item = self._create_item(curve)
                 self._items[curve.name] = item
-            _call_if_available(item, 'setData', curve.x, curve.y)
-            _call_if_available(item, 'setPen', _pen_for_curve(curve))
+            _call_if_available(item, 'setData', curve.x, _pyqtgraph_y_values(curve.y))
+            _call_if_available(item, 'setPen', self._pen_factory(curve))
             _call_if_available(item, 'setVisible', curve.visible)
         for name, item in self._items.items():
             if name not in active_names:
@@ -72,7 +76,7 @@ class PyQtGraphSnapshotRenderer:
 
     def _create_item(self, curve: CurveSnapshot) -> object:
         plot = self._plot_for_curve(curve)
-        return plot.plot(curve.x, curve.y, pen=_pen_for_curve(curve), name=curve.name)
+        return plot.plot(curve.x, _pyqtgraph_y_values(curve.y), pen=self._pen_factory(curve), name=curve.name)
 
     def _plot_for_curve(self, curve: CurveSnapshot) -> Any:
         if curve.y_axis == 'ror' and self._ror_plot is not None:
@@ -104,6 +108,29 @@ class PyQtGraphSnapshotRenderer:
 
 def _pen_for_curve(curve: CurveSnapshot) -> dict[str, object]:
     return {'color': curve.color, 'width': curve.line_width, 'style': curve.line_style}
+
+
+def _pyqtgraph_y_values(values: tuple[float | None, ...]) -> tuple[float, ...]:
+    return tuple(math.nan if value is None else value for value in values)
+
+
+def _default_pen_factory(curve: CurveSnapshot) -> object:
+    try:
+        import pyqtgraph as pg  # type: ignore[import-not-found,unused-ignore]
+    except ImportError:
+        return _pen_for_curve(curve)
+    return pg.mkPen(color=curve.color, width=curve.line_width, style=_qt_pen_style(curve.line_style))
+
+
+def _qt_pen_style(line_style: str) -> object:
+    from PyQt6.QtCore import Qt
+
+    return {
+        '-': Qt.PenStyle.SolidLine,
+        '--': Qt.PenStyle.DashLine,
+        ':': Qt.PenStyle.DotLine,
+        '-.': Qt.PenStyle.DashDotLine,
+    }.get(line_style, Qt.PenStyle.SolidLine)
 
 
 def _set_plot_ranges(plot: object, time_axis: AxisSnapshot, value_axis: AxisSnapshot) -> None:
