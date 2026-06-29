@@ -105,7 +105,7 @@ from matplotlib.colors import to_hex, to_rgba # type:ignore[untyped-import,unuse
 
 from artisanlib.performance import gui_perf_count, gui_perf_tracked
 from artisanlib.phidgets import PhidgetManager
-from artisanlib.sample_processing import decay_weight_sequence, smoothing_weights_for_recent_readings
+from artisanlib.sample_processing import decay_weight_sequence, pid_process_value, smoothing_weights_for_recent_readings
 from Phidget22.VoltageRange import VoltageRange # type: ignore[import-untyped]
 
 try:
@@ -4982,21 +4982,13 @@ class tgraphcanvas(QObject):
                     # as now the software PID is also update while the PID is off (if configured).
                     if (self.Controlbuttonflag and \
                             not self.aw.pidcontrol.externalPIDControl()): # any device and + Artisan Software PID lib
-                        process_value:float = 0
-                        if self.aw.pidcontrol.pidSource in {0, 1}:
-                            process_value = st2 # smoothed BT
-                        elif self.aw.pidcontrol.pidSource == 2:
-                            process_value = st1 # smoothed ET
-                        else:
-                            # pidsource = 3 => extra device 1, channel 1 => sample_extratemp1[0]
-                            # pidsource = 4 => extra device 1, channel 2 => sample_extratemp2[0]
-                            # pidsource = 5 => extra device 2, channel 3 => sample_extratemp1[1]
-                            #...
-                            ps = self.aw.pidcontrol.pidSource - 3
-                            if ps % 2 == 0 and len(sample_extratemp1)>(ps // 2) and len(sample_extratemp1[ps // 2])>0:
-                                process_value = sample_extratemp1[ps // 2][-1]
-                            elif len(sample_extratemp1)>(ps // 2) and len(sample_extratemp2[ps // 2])>0:
-                                process_value = sample_extratemp2[ps // 2][-1]
+                        process_value = pid_process_value(
+                            self.aw.pidcontrol.pidSource,
+                            smoothed_et=st1,
+                            smoothed_bt=st2,
+                            extra_temps_1=sample_extratemp1,
+                            extra_temps_2=sample_extratemp2,
+                        )
                         self.pid.update(process_value)
 
                     rateofchange1plot:float|None = None
