@@ -296,6 +296,45 @@ def auto_fcs_event_candidate(
     )
 
 
+def delta_smoothing_filter_size(delta_filter: float, sample_count: int, unfiltered_count: int) -> int | None:
+    if not delta_filter:
+        return None
+    user_filter = int(round(delta_filter / 2.))
+    if user_filter and sample_count > user_filter and unfiltered_count > user_filter:
+        return user_filter
+    return None
+
+
+def displayed_ror_value(
+        rate_of_change: TemperatureValue,
+        ror_limit_enabled: bool,
+        max_ror_limit: float,
+        ror_limit: float,
+        ror_limit_min: float) -> TemperatureValue:
+    if rate_of_change is None or not ror_limit_enabled:
+        return rate_of_change
+    lower_limit = max(-max_ror_limit, ror_limit_min)
+    upper_limit = min(max_ror_limit, ror_limit)
+    if not lower_limit < rate_of_change < upper_limit:
+        return None
+    return rate_of_change
+
+
+def ror_curve_window(
+        charge_index: int,
+        drop_index: int,
+        sample_count: int,
+        delta_filter: float,
+        delta_samples: int) -> tuple[int, int] | None:
+    if charge_index <= -1:
+        return None
+    ror_end = drop_index + 1 if drop_index > 0 else sample_count
+    filter_warmup = int(round(delta_filter / 2.))
+    sample_warmup = max(2, delta_samples + 1)
+    ror_start = max(charge_index, charge_index + filter_warmup + sample_warmup)
+    return ror_start, ror_end
+
+
 __all__ = [
     'alarm_is_eligible_for_evaluation',
     'alarm_source_value',
@@ -306,8 +345,11 @@ __all__ = [
     'auto_dry_event_candidate',
     'auto_fcs_event_candidate',
     'decay_weight_sequence',
+    'delta_smoothing_filter_size',
+    'displayed_ror_value',
     'pid_process_value',
     'relative_alarm_index',
+    'ror_curve_window',
     'smoothing_weights_for_recent_readings',
     'turning_point_check_candidate',
     'turning_point_temperature_is_valid',

@@ -12,8 +12,11 @@ from artisanlib.sample_processing import (
     auto_dry_event_candidate,
     auto_fcs_event_candidate,
     decay_weight_sequence,
+    delta_smoothing_filter_size,
+    displayed_ror_value,
     pid_process_value,
     relative_alarm_index,
+    ror_curve_window,
     smoothing_weights_for_recent_readings,
     turning_point_check_candidate,
     turning_point_temperature_is_valid,
@@ -993,3 +996,115 @@ def test_auto_fcs_event_candidate_uses_tp_truthiness_and_phase_threshold() -> No
         latest_bt=195.9,
         fcs_phase_temperature=196.0,
     )
+
+
+def test_delta_smoothing_filter_size_uses_existing_half_rounding_rule() -> None:
+    assert delta_smoothing_filter_size(delta_filter=4, sample_count=5, unfiltered_count=5) == 2
+    assert delta_smoothing_filter_size(delta_filter=5, sample_count=5, unfiltered_count=5) == 2
+    assert delta_smoothing_filter_size(delta_filter=6, sample_count=5, unfiltered_count=5) == 3
+
+
+def test_delta_smoothing_filter_size_rejects_disabled_or_unready_windows() -> None:
+    assert delta_smoothing_filter_size(delta_filter=0, sample_count=5, unfiltered_count=5) is None
+    assert delta_smoothing_filter_size(delta_filter=1, sample_count=5, unfiltered_count=5) is None
+    assert delta_smoothing_filter_size(delta_filter=4, sample_count=2, unfiltered_count=5) is None
+    assert delta_smoothing_filter_size(delta_filter=4, sample_count=5, unfiltered_count=2) is None
+
+
+def test_displayed_ror_value_passes_through_when_limit_disabled_or_value_missing() -> None:
+    assert displayed_ror_value(
+        12.0,
+        ror_limit_enabled=False,
+        max_ror_limit=30.0,
+        ror_limit=20.0,
+        ror_limit_min=-20.0,
+    ) == 12.0
+    assert displayed_ror_value(
+        None,
+        ror_limit_enabled=True,
+        max_ror_limit=30.0,
+        ror_limit=20.0,
+        ror_limit_min=-20.0,
+    ) is None
+
+
+def test_displayed_ror_value_masks_values_outside_open_limits() -> None:
+    assert displayed_ror_value(
+        19.9,
+        ror_limit_enabled=True,
+        max_ror_limit=30.0,
+        ror_limit=20.0,
+        ror_limit_min=-20.0,
+    ) == 19.9
+    assert displayed_ror_value(
+        20.0,
+        ror_limit_enabled=True,
+        max_ror_limit=30.0,
+        ror_limit=20.0,
+        ror_limit_min=-20.0,
+    ) is None
+    assert displayed_ror_value(
+        -20.0,
+        ror_limit_enabled=True,
+        max_ror_limit=30.0,
+        ror_limit=20.0,
+        ror_limit_min=-20.0,
+    ) is None
+    assert displayed_ror_value(
+        -20.1,
+        ror_limit_enabled=True,
+        max_ror_limit=30.0,
+        ror_limit=20.0,
+        ror_limit_min=-20.0,
+    ) is None
+
+
+def test_displayed_ror_value_combines_global_and_user_limits() -> None:
+    assert displayed_ror_value(
+        25.0,
+        ror_limit_enabled=True,
+        max_ror_limit=30.0,
+        ror_limit=40.0,
+        ror_limit_min=-40.0,
+    ) == 25.0
+    assert displayed_ror_value(
+        30.0,
+        ror_limit_enabled=True,
+        max_ror_limit=30.0,
+        ror_limit=40.0,
+        ror_limit_min=-40.0,
+    ) is None
+    assert displayed_ror_value(
+        -30.0,
+        ror_limit_enabled=True,
+        max_ror_limit=30.0,
+        ror_limit=40.0,
+        ror_limit_min=-40.0,
+    ) is None
+
+
+def test_ror_curve_window_returns_none_before_charge() -> None:
+    assert ror_curve_window(
+        charge_index=-1,
+        drop_index=0,
+        sample_count=20,
+        delta_filter=4,
+        delta_samples=3,
+    ) is None
+
+
+def test_ror_curve_window_skips_charge_warmup_and_stops_after_drop() -> None:
+    assert ror_curve_window(
+        charge_index=5,
+        drop_index=12,
+        sample_count=20,
+        delta_filter=4,
+        delta_samples=3,
+    ) == (11, 13)
+    assert ror_curve_window(
+        charge_index=5,
+        drop_index=0,
+        sample_count=20,
+        delta_filter=0,
+        delta_samples=0,
+    ) == (7, 20)

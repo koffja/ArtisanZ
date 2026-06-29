@@ -115,8 +115,11 @@ from artisanlib.sample_processing import (
     auto_dry_event_candidate,
     auto_fcs_event_candidate,
     decay_weight_sequence,
+    delta_smoothing_filter_size,
+    displayed_ror_value,
     pid_process_value,
     relative_alarm_index,
+    ror_curve_window,
     smoothing_weights_for_recent_readings,
     turning_point_check_candidate,
     turning_point_temperature_is_valid,
@@ -5048,18 +5051,16 @@ class tgraphcanvas(QObject):
 
                         #######   filter deltaBT deltaET
                         # decay smoothing
-                        if self.deltaETfilter:
-                            user_filter = int(round(self.deltaETfilter/2.))
-                            if user_filter and length_of_qmc_timex > user_filter and (len(sample_unfiltereddelta1) > user_filter):
-                                if self.decay_weights is None or len(self.decay_weights) != user_filter: # recompute only on changes
-                                    self.decay_weights = [int(x) for x in numpy.arange(1,user_filter+1)]
-                                self.rateofchange1 = self.decay_average(sample_timex,sample_unfiltereddelta1,self.decay_weights)
-                        if self.deltaBTfilter:
-                            user_filter = int(round(self.deltaBTfilter/2.))
-                            if user_filter and length_of_qmc_timex > user_filter and (len(sample_unfiltereddelta2) > user_filter):
-                                if self.decay_weights is None or len(self.decay_weights) != user_filter: # recompute only on changes
-                                    self.decay_weights = [int(x) for x in numpy.arange(1,user_filter+1)]
-                                self.rateofchange2 = self.decay_average(sample_timex,sample_unfiltereddelta2,self.decay_weights)
+                        user_filter = delta_smoothing_filter_size(self.deltaETfilter, length_of_qmc_timex, len(sample_unfiltereddelta1))
+                        if user_filter is not None:
+                            if self.decay_weights is None or len(self.decay_weights) != user_filter: # recompute only on changes
+                                self.decay_weights = list(decay_weight_sequence(user_filter))
+                            self.rateofchange1 = self.decay_average(sample_timex,sample_unfiltereddelta1,self.decay_weights)
+                        user_filter = delta_smoothing_filter_size(self.deltaBTfilter, length_of_qmc_timex, len(sample_unfiltereddelta2))
+                        if user_filter is not None:
+                            if self.decay_weights is None or len(self.decay_weights) != user_filter: # recompute only on changes
+                                self.decay_weights = list(decay_weight_sequence(user_filter))
+                            self.rateofchange2 = self.decay_average(sample_timex,sample_unfiltereddelta2,self.decay_weights)
                         rateofchange1plot = self.rateofchange1
                         rateofchange2plot = self.rateofchange2
                     else:
@@ -5068,30 +5069,49 @@ class tgraphcanvas(QObject):
                         self.rateofchange1,self.rateofchange2,rateofchange1plot,rateofchange2plot = 0.,0.,0.,0.
 
                     # limit displayed RoR #(only before TP is recognized) # WHY?
-                    if self.RoRlimitFlag: # not self.TPalarmtimeindex and self.RoRlimitFlag:
-                        if rateofchange1plot is not None and (not max(-self.maxRoRlimit,self.RoRlimitm) < rateofchange1plot < min(self.maxRoRlimit,self.RoRlimit)): # type:ignore[redundant-expr]
-                            rateofchange1plot = None
-                        if rateofchange2plot is not None and (not max(-self.maxRoRlimit,self.RoRlimitm) < rateofchange2plot < min(self.maxRoRlimit,self.RoRlimit)): # type:ignore[redundant-expr]
-                            rateofchange2plot = None
+                    rateofchange1plot = displayed_ror_value(
+                        rateofchange1plot,
+                        self.RoRlimitFlag,
+                        self.maxRoRlimit,
+                        self.RoRlimit,
+                        self.RoRlimitm,
+                    )
+                    rateofchange2plot = displayed_ror_value(
+                        rateofchange2plot,
+                        self.RoRlimitFlag,
+                        self.maxRoRlimit,
+                        self.RoRlimit,
+                        self.RoRlimitm,
+                    )
 
                     # append new data to the rateofchange arrays
                     sample_delta1.append(rateofchange1plot)
                     sample_delta2.append(rateofchange2plot)
 
                     if local_flagstart:
-                        ror_start = 0
-                        ror_end = length_of_qmc_timex
-                        if self.timeindex[6] > 0:
-                            ror_end = self.timeindex[6]+1
                         if self.DeltaETflag and self.l_delta1 is not None:
-                            if self.timeindex[0] > -1:
-                                ror_start = max(self.timeindex[0],self.timeindex[0]+int(round(self.deltaETfilter/2.)) + max(2,(self.deltaETsamples + 1)))
+                            ror_window = ror_curve_window(
+                                self.timeindex[0],
+                                self.timeindex[6],
+                                length_of_qmc_timex,
+                                self.deltaETfilter,
+                                self.deltaETsamples,
+                            )
+                            if ror_window is not None:
+                                ror_start, ror_end = ror_window
                                 self.l_delta1.set_data(sample_timex[ror_start:ror_end], numpy.array(sample_delta1[ror_start:ror_end]))
                             else:
                                 self.l_delta1.set_data([], [])
                         if self.DeltaBTflag and self.l_delta2 is not None:
-                            if self.timeindex[0] > -1:
-                                ror_start = max(self.timeindex[0],self.timeindex[0]+int(round(self.deltaBTfilter/2.)) + max(2,(self.deltaBTsamples + 1)))
+                            ror_window = ror_curve_window(
+                                self.timeindex[0],
+                                self.timeindex[6],
+                                length_of_qmc_timex,
+                                self.deltaBTfilter,
+                                self.deltaBTsamples,
+                            )
+                            if ror_window is not None:
+                                ror_start, ror_end = ror_window
                                 self.l_delta2.set_data(sample_timex[ror_start:ror_end], numpy.array(sample_delta2[ror_start:ror_end]))
                             else:
                                 self.l_delta2.set_data([], [])
