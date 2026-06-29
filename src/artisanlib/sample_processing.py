@@ -119,9 +119,66 @@ def alarm_temperature_reaches_limit(
     )
 
 
+def alarm_is_eligible_for_evaluation(
+        aflag: bool,
+        alarm_state: int,
+        alarm_guard: int,
+        alarm_negative_guard: int,
+        alarm_states: Sequence[int],
+        alarm_time: int,
+        local_flagstart: bool,
+        timeindex: Sequence[int],
+        tp_alarm_timeindex: int | None) -> bool:
+    if not aflag or alarm_state != -1:
+        return False
+    if not (alarm_guard < 0 or (0 <= alarm_guard < len(alarm_states) and alarm_states[alarm_guard] != -1)):
+        return False
+    if not (
+            alarm_negative_guard < 0 or
+            (0 <= alarm_negative_guard < len(alarm_states) and alarm_states[alarm_negative_guard] == -1)):
+        return False
+
+    return (
+        alarm_time == 9 or
+        (alarm_time < 0 and local_flagstart) or
+        (local_flagstart and alarm_time == 0 and timeindex[0] > -1) or
+        (local_flagstart and 0 < alarm_time < 8 and timeindex[alarm_time] > 0) or
+        (alarm_time == 10 and alarm_guard != -1) or
+        (local_flagstart and alarm_time == 8 and timeindex[0] > -1 and bool(tp_alarm_timeindex))
+    )
+
+
+def alarm_time_offset_reached(
+        alarm_offset: float,
+        elapsed_time: float,
+        alarm_time: int,
+        local_flagstart: bool,
+        sample_timex: Sequence[float],
+        timeindex: Sequence[int],
+        tp_alarm_timeindex: int | None,
+        alarm_states: Sequence[int],
+        alarm_guard: int) -> bool:
+    if alarm_offset <= 0:
+        return False
+    alarm_time_value = elapsed_time
+    if alarm_time < 0:
+        pass
+    elif local_flagstart and alarm_time == 0 and timeindex[0] > -1:
+        alarm_time_value -= sample_timex[timeindex[0]]
+    elif local_flagstart and alarm_time == 8 and tp_alarm_timeindex:
+        alarm_time_value -= sample_timex[tp_alarm_timeindex]
+    elif local_flagstart and alarm_time < 8 and timeindex[alarm_time] > 0:
+        alarm_time_value -= sample_timex[timeindex[alarm_time]]
+    elif local_flagstart and alarm_time == 10:
+        alarm_time_value -= sample_timex[alarm_states[alarm_guard]]
+    return alarm_time_value >= alarm_offset
+
+
 __all__ = [
+    'alarm_is_eligible_for_evaluation',
     'alarm_source_value',
     'alarm_temperature_reaches_limit',
+    'alarm_time_offset_reached',
     'decay_weight_sequence',
     'pid_process_value',
     'relative_alarm_index',

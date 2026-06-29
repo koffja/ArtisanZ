@@ -106,8 +106,10 @@ from matplotlib.colors import to_hex, to_rgba # type:ignore[untyped-import,unuse
 from artisanlib.performance import gui_perf_count, gui_perf_tracked
 from artisanlib.phidgets import PhidgetManager
 from artisanlib.sample_processing import (
+    alarm_is_eligible_for_evaluation,
     alarm_source_value,
     alarm_temperature_reaches_limit,
+    alarm_time_offset_reached,
     decay_weight_sequence,
     pid_process_value,
     relative_alarm_index,
@@ -5240,34 +5242,29 @@ class tgraphcanvas(QObject):
                             # 4) the alarm From is CHARGE
                             # 5) the alarm From is any other event but TP
                             # 6) the alarm From is TP, it is CHARGED and the TP pattern is recognized
-                            if aflag \
-                              and self.alarmstate[i] == -1 \
-                              and (self.alarmguard[i] < 0 or (0 <= self.alarmguard[i] < len(self.alarmstate) and self.alarmstate[self.alarmguard[i]] != -1)) \
-                              and (self.alarmnegguard[i] < 0 or (0 <= self.alarmnegguard[i] < len(self.alarmstate) and self.alarmstate[self.alarmnegguard[i]] == -1)) \
-                              and ((self.alarmtime[i] == 9) or (self.alarmtime[i] < 0 and local_flagstart) \
-                                or (local_flagstart and self.alarmtime[i] == 0 and self.timeindex[0] > -1) \
-                                or (local_flagstart and self.alarmtime[i] > 0 and self.alarmtime[i] < 8 and self.timeindex[self.alarmtime[i]] > 0) \
-                                or (self.alarmtime[i] == 10 and self.alarmguard[i] != -1)  \
-                                or (local_flagstart and self.alarmtime[i] == 8 and self.timeindex[0] > -1 \
-                                    and self.TPalarmtimeindex)):
+                            if alarm_is_eligible_for_evaluation(
+                                    aflag,
+                                    self.alarmstate[i],
+                                    self.alarmguard[i],
+                                    self.alarmnegguard[i],
+                                    self.alarmstate,
+                                    self.alarmtime[i],
+                                    local_flagstart,
+                                    self.timeindex,
+                                    self.TPalarmtimeindex):
                                 #########
                                 # check alarmoffset (time after From event):
-                                if self.alarmoffset[i] > 0:
-                                    alarm_time = self.timeclock.elapsed()/1000.
-                                    if self.alarmtime[i] < 0: # time after START
-                                        pass # the alarm_time is the clock time
-                                    elif local_flagstart and self.alarmtime[i] == 0 and self.timeindex[0] > -1: # time after CHARGE
-                                        alarm_time = alarm_time - sample_timex[self.timeindex[0]]
-                                    elif local_flagstart and self.alarmtime[i] == 8 and self.TPalarmtimeindex: # time after TP
-                                        alarm_time = alarm_time - sample_timex[self.TPalarmtimeindex]
-                                    elif local_flagstart and self.alarmtime[i] < 8 and self.timeindex[self.alarmtime[i]] > 0: # time after any other event
-                                        alarm_time = alarm_time - sample_timex[self.timeindex[self.alarmtime[i]]]
-                                    elif local_flagstart and self.alarmtime[i] == 10: # time or temp after the trigger of the alarmguard (if one is set)
-                                        # we know here that the alarmstate of the guard is valid as it has triggered
-                                        alarm_time = alarm_time - sample_timex[self.alarmstate[self.alarmguard[i]]]
-
-                                    if alarm_time >= self.alarmoffset[i]:
-                                        alarm_ready = True
+                                if alarm_time_offset_reached(
+                                        self.alarmoffset[i],
+                                        self.timeclock.elapsed()/1000.,
+                                        self.alarmtime[i],
+                                        local_flagstart,
+                                        sample_timex,
+                                        self.timeindex,
+                                        self.TPalarmtimeindex,
+                                        self.alarmstate,
+                                        self.alarmguard[i]):
+                                    alarm_ready = True
                                 #########
                                 # check alarmtemp:
                                 alarm_idx:int|None = None

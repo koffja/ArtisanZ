@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from artisanlib.sample_processing import (
+    alarm_is_eligible_for_evaluation,
     alarm_source_value,
     alarm_temperature_reaches_limit,
+    alarm_time_offset_reached,
     decay_weight_sequence,
     pid_process_value,
     relative_alarm_index,
@@ -247,3 +249,310 @@ def test_alarm_temperature_reaches_limit_rejects_missing_and_dropout_values() ->
     assert not alarm_temperature_reaches_limit(None, alarm_cond=1, alarm_limit=180.0, alarm_index=None)
     assert not alarm_temperature_reaches_limit(-1.0, alarm_cond=1, alarm_limit=180.0, alarm_index=None)
     assert not alarm_temperature_reaches_limit(179.0, alarm_cond=1, alarm_limit=180.0, alarm_index=None)
+
+
+def test_alarm_is_eligible_requires_active_and_untriggered_alarm() -> None:
+    assert not alarm_is_eligible_for_evaluation(
+        aflag=False,
+        alarm_state=-1,
+        alarm_guard=-1,
+        alarm_negative_guard=-1,
+        alarm_states=[],
+        alarm_time=9,
+        local_flagstart=False,
+        timeindex=[-1, 0, 0],
+        tp_alarm_timeindex=None,
+    )
+    assert not alarm_is_eligible_for_evaluation(
+        aflag=True,
+        alarm_state=3,
+        alarm_guard=-1,
+        alarm_negative_guard=-1,
+        alarm_states=[],
+        alarm_time=9,
+        local_flagstart=False,
+        timeindex=[-1, 0, 0],
+        tp_alarm_timeindex=None,
+    )
+
+
+def test_alarm_is_eligible_applies_positive_and_negative_guards() -> None:
+    alarm_states = [-1, 4]
+    assert not alarm_is_eligible_for_evaluation(
+        aflag=True,
+        alarm_state=-1,
+        alarm_guard=0,
+        alarm_negative_guard=-1,
+        alarm_states=alarm_states,
+        alarm_time=9,
+        local_flagstart=False,
+        timeindex=[-1, 0, 0],
+        tp_alarm_timeindex=None,
+    )
+    assert not alarm_is_eligible_for_evaluation(
+        aflag=True,
+        alarm_state=-1,
+        alarm_guard=-1,
+        alarm_negative_guard=1,
+        alarm_states=alarm_states,
+        alarm_time=9,
+        local_flagstart=False,
+        timeindex=[-1, 0, 0],
+        tp_alarm_timeindex=None,
+    )
+    assert alarm_is_eligible_for_evaluation(
+        aflag=True,
+        alarm_state=-1,
+        alarm_guard=1,
+        alarm_negative_guard=0,
+        alarm_states=alarm_states,
+        alarm_time=9,
+        local_flagstart=False,
+        timeindex=[-1, 0, 0],
+        tp_alarm_timeindex=None,
+    )
+
+
+def test_alarm_is_eligible_applies_alarm_time_gates() -> None:
+    alarm_states = [-1]
+    assert alarm_is_eligible_for_evaluation(
+        aflag=True,
+        alarm_state=-1,
+        alarm_guard=-1,
+        alarm_negative_guard=-1,
+        alarm_states=alarm_states,
+        alarm_time=9,
+        local_flagstart=False,
+        timeindex=[-1, 0, 0],
+        tp_alarm_timeindex=None,
+    )
+    assert not alarm_is_eligible_for_evaluation(
+        aflag=True,
+        alarm_state=-1,
+        alarm_guard=-1,
+        alarm_negative_guard=-1,
+        alarm_states=alarm_states,
+        alarm_time=-1,
+        local_flagstart=False,
+        timeindex=[-1, 0, 0],
+        tp_alarm_timeindex=None,
+    )
+    assert alarm_is_eligible_for_evaluation(
+        aflag=True,
+        alarm_state=-1,
+        alarm_guard=-1,
+        alarm_negative_guard=-1,
+        alarm_states=alarm_states,
+        alarm_time=-1,
+        local_flagstart=True,
+        timeindex=[-1, 0, 0],
+        tp_alarm_timeindex=None,
+    )
+    assert alarm_is_eligible_for_evaluation(
+        aflag=True,
+        alarm_state=-1,
+        alarm_guard=-1,
+        alarm_negative_guard=-1,
+        alarm_states=alarm_states,
+        alarm_time=0,
+        local_flagstart=True,
+        timeindex=[3, 0, 0],
+        tp_alarm_timeindex=None,
+    )
+    assert alarm_is_eligible_for_evaluation(
+        aflag=True,
+        alarm_state=-1,
+        alarm_guard=-1,
+        alarm_negative_guard=-1,
+        alarm_states=alarm_states,
+        alarm_time=2,
+        local_flagstart=True,
+        timeindex=[3, 0, 5],
+        tp_alarm_timeindex=None,
+    )
+    assert not alarm_is_eligible_for_evaluation(
+        aflag=True,
+        alarm_state=-1,
+        alarm_guard=-1,
+        alarm_negative_guard=-1,
+        alarm_states=alarm_states,
+        alarm_time=8,
+        local_flagstart=True,
+        timeindex=[3, 0, 5],
+        tp_alarm_timeindex=None,
+    )
+    assert alarm_is_eligible_for_evaluation(
+        aflag=True,
+        alarm_state=-1,
+        alarm_guard=-1,
+        alarm_negative_guard=-1,
+        alarm_states=alarm_states,
+        alarm_time=8,
+        local_flagstart=True,
+        timeindex=[3, 0, 5],
+        tp_alarm_timeindex=7,
+    )
+
+
+def test_alarm_is_eligible_for_if_alarm_requires_guard() -> None:
+    assert not alarm_is_eligible_for_evaluation(
+        aflag=True,
+        alarm_state=-1,
+        alarm_guard=-1,
+        alarm_negative_guard=-1,
+        alarm_states=[4],
+        alarm_time=10,
+        local_flagstart=False,
+        timeindex=[-1, 0, 0],
+        tp_alarm_timeindex=None,
+    )
+    assert alarm_is_eligible_for_evaluation(
+        aflag=True,
+        alarm_state=-1,
+        alarm_guard=0,
+        alarm_negative_guard=-1,
+        alarm_states=[4],
+        alarm_time=10,
+        local_flagstart=False,
+        timeindex=[-1, 0, 0],
+        tp_alarm_timeindex=None,
+    )
+
+
+def test_alarm_is_eligible_rejects_missing_event_boundaries() -> None:
+    alarm_states = [-1]
+    assert not alarm_is_eligible_for_evaluation(
+        aflag=True,
+        alarm_state=-1,
+        alarm_guard=-1,
+        alarm_negative_guard=-1,
+        alarm_states=alarm_states,
+        alarm_time=0,
+        local_flagstart=True,
+        timeindex=[-1, 0, 0],
+        tp_alarm_timeindex=None,
+    )
+    assert not alarm_is_eligible_for_evaluation(
+        aflag=True,
+        alarm_state=-1,
+        alarm_guard=-1,
+        alarm_negative_guard=-1,
+        alarm_states=alarm_states,
+        alarm_time=2,
+        local_flagstart=True,
+        timeindex=[3, 0, 0],
+        tp_alarm_timeindex=None,
+    )
+    assert not alarm_is_eligible_for_evaluation(
+        aflag=True,
+        alarm_state=-1,
+        alarm_guard=-1,
+        alarm_negative_guard=-1,
+        alarm_states=alarm_states,
+        alarm_time=8,
+        local_flagstart=False,
+        timeindex=[3, 0, 0],
+        tp_alarm_timeindex=7,
+    )
+    assert not alarm_is_eligible_for_evaluation(
+        aflag=True,
+        alarm_state=-1,
+        alarm_guard=-1,
+        alarm_negative_guard=-1,
+        alarm_states=alarm_states,
+        alarm_time=8,
+        local_flagstart=True,
+        timeindex=[-1, 0, 0],
+        tp_alarm_timeindex=7,
+    )
+
+
+def test_alarm_time_offset_reached_uses_elapsed_time_without_event_offset() -> None:
+    assert alarm_time_offset_reached(
+        alarm_offset=30.0,
+        elapsed_time=31.0,
+        alarm_time=9,
+        local_flagstart=False,
+        sample_timex=[0.0],
+        timeindex=[-1],
+        tp_alarm_timeindex=None,
+        alarm_states=[],
+        alarm_guard=-1,
+    )
+    assert not alarm_time_offset_reached(
+        alarm_offset=30.0,
+        elapsed_time=29.0,
+        alarm_time=-1,
+        local_flagstart=True,
+        sample_timex=[0.0],
+        timeindex=[-1],
+        tp_alarm_timeindex=None,
+        alarm_states=[],
+        alarm_guard=-1,
+    )
+
+
+def test_alarm_time_offset_reached_rejects_disabled_offset() -> None:
+    assert not alarm_time_offset_reached(
+        alarm_offset=0.0,
+        elapsed_time=31.0,
+        alarm_time=9,
+        local_flagstart=False,
+        sample_timex=[0.0],
+        timeindex=[-1],
+        tp_alarm_timeindex=None,
+        alarm_states=[],
+        alarm_guard=-1,
+    )
+
+
+def test_alarm_time_offset_reached_subtracts_event_indexes() -> None:
+    sample_timex = [0.0, 10.0, 20.0, 30.0, 40.0]
+    assert alarm_time_offset_reached(
+        alarm_offset=15.0,
+        elapsed_time=31.0,
+        alarm_time=0,
+        local_flagstart=True,
+        sample_timex=sample_timex,
+        timeindex=[1, 0, 3],
+        tp_alarm_timeindex=None,
+        alarm_states=[],
+        alarm_guard=-1,
+    )
+    assert not alarm_time_offset_reached(
+        alarm_offset=15.0,
+        elapsed_time=31.0,
+        alarm_time=2,
+        local_flagstart=True,
+        sample_timex=sample_timex,
+        timeindex=[1, 0, 3],
+        tp_alarm_timeindex=None,
+        alarm_states=[],
+        alarm_guard=-1,
+    )
+
+
+def test_alarm_time_offset_reached_subtracts_tp_and_if_alarm_indexes() -> None:
+    sample_timex = [0.0, 10.0, 20.0, 30.0, 40.0]
+    assert alarm_time_offset_reached(
+        alarm_offset=20.0,
+        elapsed_time=41.0,
+        alarm_time=8,
+        local_flagstart=True,
+        sample_timex=sample_timex,
+        timeindex=[1, 0, 0],
+        tp_alarm_timeindex=2,
+        alarm_states=[3],
+        alarm_guard=0,
+    )
+    assert not alarm_time_offset_reached(
+        alarm_offset=20.0,
+        elapsed_time=41.0,
+        alarm_time=10,
+        local_flagstart=True,
+        sample_timex=sample_timex,
+        timeindex=[1, 0, 0],
+        tp_alarm_timeindex=None,
+        alarm_states=[3],
+        alarm_guard=0,
+    )
