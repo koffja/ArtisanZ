@@ -2,7 +2,7 @@
 
 **Purpose:** Track the multi-phase GUI modernization effort from measurement through visual refresh, plotting improvements, processing decoupling, and optional QML adoption.
 
-**Status:** Phase 0 automated profile redraw baseline and a 20-second internal simulator live-sampling smoke baseline are captured as of 2026-06-29. Phase 1 Widgets visual modernization has a main-screen first pass with LCD spacing corrections. Phase 2 has a renderer snapshot contract, a canvas-like extractor, an unhooked Matplotlib adapter, and an offscreen Agg smoke path; longer simulator/device baselines remain pending before broad threading work.
+**Status:** Phase 0 automated profile redraw baseline and a 20-second internal simulator live-sampling smoke baseline are captured as of 2026-06-29. Phase 1 Widgets visual modernization has a main-screen first pass with LCD spacing and padding corrections. Phase 2 has a renderer snapshot contract, a canvas-like extractor with foreground event markers, an unhooked Matplotlib adapter, and an offscreen Agg smoke path; longer simulator/device baselines remain pending before broad threading work.
 
 **Repository Rules:** Work on the `ArtisanZ` branch. Do not commit or push unless explicitly requested. Preserve upstream compatibility and local ArtisanZ customizations.
 
@@ -32,8 +32,8 @@ Important observations from the code review:
 | Phase | Name | Status | Primary Deliverable | Exit Gate |
 | --- | --- | --- | --- | --- |
 | 0 | Performance Baseline and Risk Map | Profile + simulator smoke baselines captured | Timing probes, benchmark workflow, baseline report | We know whether rendering, GUI-thread processing, locks, or device sampling dominate latency |
-| 1 | Widgets Visual Modernization | Main-screen first pass + LCD spacing corrected | Modern theme tokens and refreshed main roast screen styling | Main screen looks modern while behavior and settings compatibility remain intact |
-| 2 | Plot Renderer Boundary and PyQtGraph POC | Snapshot contract + offscreen Matplotlib smoke | Read-only plot snapshot model, Matplotlib adapter, PyQtGraph live adapter prototype | POC is faster or visually/maintainably superior under Phase 0 benchmarks |
+| 1 | Widgets Visual Modernization | Main-screen first pass + LCD spacing/padding corrected | Modern theme tokens and refreshed main roast screen styling | Main screen looks modern while behavior and settings compatibility remain intact |
+| 2 | Plot Renderer Boundary and PyQtGraph POC | Snapshot contract + event markers + offscreen Matplotlib smoke | Read-only plot snapshot model, Matplotlib adapter, PyQtGraph live adapter prototype | POC is faster or visually/maintainably superior under Phase 0 benchmarks |
 | 3 | Sampling Post-Processing Decoupling | Not started | Pure data pipeline for filtering, RoR, PID inputs, alarm/event decisions | GUI thread consumes snapshots instead of doing heavy processing inline |
 | 4 | Main UI Information Architecture | Not started | Scenario-oriented Roast Control, QC Analysis, and Device Setup workspaces | Users can switch task modes without losing existing expert controls |
 | 5 | Local QML Islands | Not started | A limited Qt Quick panel or dashboard backed by Python state models | QML proves useful without breaking packaging, translations, or Windows portable build |
@@ -89,7 +89,7 @@ Important observations from the code review:
 
 **Goal:** Make the live plot renderer replaceable without forcing a full Matplotlib rewrite.
 
-**Started:** 2026-06-29 with a data-only `plot_snapshot.py` contract, `plot_snapshot_extractor.py` canvas-like snapshot builder, `plot_matplotlib_adapter.py` compatibility adapter, and `plot_matplotlib_smoke.py` offscreen Agg diagnostic path. These do not change runtime plotting behavior yet; they prepare a stable renderer-facing surface before PyQtGraph POC work.
+**Started:** 2026-06-29 with a data-only `plot_snapshot.py` contract, `plot_snapshot_extractor.py` canvas-like snapshot builder with foreground event marker extraction, `plot_matplotlib_adapter.py` compatibility adapter, and `plot_matplotlib_smoke.py` offscreen Agg diagnostic path. These do not change runtime plotting behavior yet; they prepare a stable renderer-facing surface before PyQtGraph POC work.
 
 **Candidate Work:**
 

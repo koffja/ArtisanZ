@@ -8434,7 +8434,7 @@ class ApplicationWindow(QMainWindow):
         LCDhBox.addWidget(lcd)
         LCDbox.addLayout(LCDhBox)
         LCDhBox.setContentsMargins(0, 0, 0, 0)
-        LCDbox.setContentsMargins(0, 0, 0, 0)
+        LCDbox.setContentsMargins(4, 4, 4, 0)
         lcdframe.setContentsMargins(0, 10, 0, 0)
         lcdframe.setLayout(LCDbox)
         return lcdframe

@@ -66,3 +66,9 @@ ARTISANZ_GUI_PERF=1 ARTISANZ_GUI_PERF_AUTORUN=1 ARTISANZ_GUI_PERF_AUTORUN_ITERAT
 - Restored visible spacing between stacked main LCD cards by configuring the parent LCD column layout with 6px vertical spacing.
 - Added `ApplicationWindow.configureLCDColumnLayout()` so the spacing, right gutter, and minimum-size constraint are covered by focused tests instead of living only in the large constructor.
 - Profile-loaded screenshot reviewed at `/tmp/artisanz-lcd-spacing.png`.
+
+## 2026-06-29 LCD Padding Correction
+
+- Added internal padding to LCD numeric displays in both the application stylesheet and dynamic LCD color refresh stylesheet.
+- Added 4px left/right/top content padding inside LCD cards while keeping the bottom padding at 0 so the numeric value surface remains aligned to the outer card bottom.
+- Profile-loaded screenshot reviewed at `/tmp/artisanz-lcd-padding2.png`.

@@ -1757,6 +1757,13 @@ class TestMakeLCDbox:
         # Assert
         assert lcdframe.layout() is not None
         # Layout should be configured with proper spacing and margins
+        layout = lcdframe.layout()
+        margins = layout.contentsMargins()
+        assert margins.left() == 4
+        assert margins.top() == 4
+        assert margins.right() == 4
+        assert margins.bottom() == 0
+        assert layout.spacing() == 0
 
     def test_configure_lcd_column_layout_adds_vertical_item_spacing(self) -> None:
         """Test LCD column layout keeps visible space between stacked cards."""

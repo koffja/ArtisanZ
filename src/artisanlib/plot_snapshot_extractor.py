@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from artisanlib.plot_snapshot import AxisSnapshot, CurveSnapshot, RoastPlotSnapshot, YAxisName
+from artisanlib.plot_snapshot import AxisSnapshot, CurveSnapshot, EventMarkerSnapshot, RoastPlotSnapshot, YAxisName
 
 _DEFAULT_COLORS = {
     'bt': '#4E7180',
@@ -36,6 +36,7 @@ def build_roast_plot_snapshot(source: object) -> RoastPlotSnapshot:
         time_axis=_time_axis(source),
         temperature_axis=_temperature_axis(source),
         ror_axis=_ror_axis(source),
+        events=_event_markers(source),
     )
 
 
@@ -90,6 +91,65 @@ def _palette_color(source: object, color_key: str) -> str:
         if isinstance(color, str):
             return color
     return _DEFAULT_COLORS[color_key]
+
+
+def _event_markers(source: object) -> tuple[EventMarkerSnapshot, ...]:
+    timex = _sequence(source, 'timex')
+    specialevents = _sequence(source, 'specialevents')
+    event_types = _sequence(source, 'specialeventstype')
+    event_values = _sequence(source, 'specialeventsvalue')
+    event_labels = _sequence(source, 'specialeventsStrings')
+    limit = min(len(specialevents), len(event_types), len(event_values))
+    markers: list[EventMarkerSnapshot] = []
+    for i in range(limit):
+        event_type = int(event_types[i])
+        if not _event_type_visible(source, event_type):
+            continue
+        event_index = int(specialevents[i])
+        if event_index < 0 or event_index >= len(timex):
+            continue
+        markers.append(EventMarkerSnapshot(
+            time=float(timex[event_index]),
+            label=_event_label(source, event_type, event_labels, i),
+            event_type=event_type,
+            color=_event_color(source, event_type),
+            value=None if event_values[i] is None else float(event_values[i]),
+        ))
+    return tuple(markers)
+
+
+def _event_type_visible(source: object, event_type: int) -> bool:
+    show_types = _sequence(source, 'showEtypes')
+    if 0 <= event_type < len(show_types):
+        return bool(show_types[event_type])
+    return True
+
+
+def _event_label(source: object, event_type: int, event_labels: list[Any], event_index: int) -> str:
+    if event_index < len(event_labels):
+        label = event_labels[event_index]
+        if isinstance(label, str) and label.strip():
+            return label.strip()
+    etypes = _sequence(source, 'etypes')
+    if 0 <= event_type < len(etypes):
+        label = etypes[event_type]
+        if isinstance(label, str) and label.strip():
+            return label.strip()
+    return f'Event {event_type}'
+
+
+def _event_color(source: object, event_type: int) -> str:
+    event_colors = _sequence(source, 'EvalueColor')
+    if 0 <= event_type < len(event_colors):
+        color = event_colors[event_type]
+        if isinstance(color, str):
+            return color
+    palette = getattr(source, 'palette', {})
+    if isinstance(palette, dict):
+        color = palette.get('specialeventtext')
+        if isinstance(color, str):
+            return color
+    return '#ffffff'
 
 
 def _sequence(source: object, attr_name: str) -> list[Any]:
