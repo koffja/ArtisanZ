@@ -87,6 +87,7 @@ ARTISANZ_GUI_PERF_AUTORUN=1 \
 ARTISANZ_GUI_PERF_AUTORUN_ITERATIONS=16 \
 ARTISANZ_GUI_PERF_AUTORUN_INTERVAL_MS=50 \
 ARTISANZ_GUI_PERF_FILE=/tmp/artisanz-gui-perf.jsonl \
+ARTISANZ_GUI_PERF_SCREENSHOT_FILE=/tmp/artisanz-phase1.png \
 QT_QPA_PLATFORM=offscreen \
 QTWEBENGINE_DISABLE_SANDBOX=1 \
 QTWEBENGINE_CHROMIUM_FLAGS="--disable-gpu --disable-software-rasterizer" \
@@ -103,6 +104,8 @@ QTWEBENGINE_CHROMIUM_FLAGS="--disable-gpu --disable-software-rasterizer" \
 | 2026-06-29 | ArtisanZ | First manual run follow-up | Not recorded | Not recorded | No metrics file found | Default path and `ARTISANZ_GUI_PERF_FILE` search found no ArtisanZ JSONL; capture flow hardened with default temp export and `atexit` fallback |
 | 2026-06-29 | ArtisanZ | Automated profile redraw baseline | N/A | Historical profile `profile1.alog` | `redraw max=106.627ms avg=75.284ms`; `redraw_keep_view max=103.192ms avg=73.427ms`; `updateBackground max=85.556ms avg=57.277ms`; `updategraphics max=0.006ms avg=0.002ms` | Baseline before Phase 1 stylesheet |
 | 2026-06-29 | ArtisanZ | Automated profile redraw after Phase 1 stylesheet | N/A | Historical profile `profile1.alog` | `redraw max=110.339ms avg=76.577ms`; `redraw_keep_view max=108.581ms avg=74.567ms`; `updateBackground max=80.033ms avg=56.631ms`; `updategraphics max=0.005ms avg=0.002ms` | Visual stylesheet did not materially worsen measured redraw path |
+| 2026-06-29 | ArtisanZ | Automated profile redraw after event/LCD styling | N/A | Historical profile `profile1.alog` | `redraw max=138.665ms avg=84.735ms`; `redraw_keep_view max=127.508ms avg=81.386ms`; `updateBackground max=156.639ms avg=65.746ms`; `updategraphics max=0.007ms avg=0.002ms` | Screenshot: `/tmp/artisanz-phase1.png`; event buttons flattened; LCD surfaces styled; one higher `updateBackground` max observed in offscreen run, but live update path stayed negligible |
+| 2026-06-29 | ArtisanZ | Automated OFF screenshot smoke after event/LCD styling | N/A | Empty main graph | `redraw max=95.335ms avg=81.990ms`; `redraw_keep_view max=76.211ms avg=73.894ms`; `updateBackground max=83.124ms avg=55.925ms`; `updategraphics max=0.006ms avg=0.002ms` | Screenshot: `/tmp/artisanz-phase1-off.png`; no obvious overlap or text clipping in 800x533 offscreen capture |
 
 ## Decision Log
 
@@ -113,7 +116,7 @@ Record decisions after benchmark runs:
 - If `canvas.redraw` dominates only during settings/profile actions, prioritize full-redraw reduction but keep live renderer scope narrow.
 - If lock skip counters rise under normal sampling, prioritize signal scheduling and critical-section reduction.
 
-Current automated profile redraw result: `canvas.updateBackground`, `canvas.redraw`, and `canvas.redraw_keep_view` dominate. `canvas.updategraphics` is negligible in this profile-only scenario. This supports low-risk Widgets visual modernization first, while keeping renderer-boundary work focused on full redraw/background refresh.
+Current automated profile redraw result: `canvas.updateBackground`, `canvas.redraw`, and `canvas.redraw_keep_view` dominate. `canvas.updategraphics` is negligible in this profile-only scenario, including after the Phase 1 event/LCD styling pass. This supports keeping renderer-boundary work focused on full redraw/background refresh, while still requiring live sampling measurements before approving Phase 2/3 implementation.
 
 ## Capture Troubleshooting
 

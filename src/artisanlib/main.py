@@ -8413,6 +8413,9 @@ class ApplicationWindow(QMainWindow):
 
     @staticmethod
     def makeLCDbox(label:QLabel, lcd:MyQLCDNumber, lcdframe:QFrame) -> QFrame:
+        label.setProperty('lcdLabel', True)
+        lcd.setProperty('lcdSurface', True)
+        lcdframe.setProperty('lcdSurface', True)
         LCDbox = QVBoxLayout()
         LCDbox.setSizeConstraint(QLayout.SizeConstraint.SetFixedSize)
         LCDbox.setSpacing(0)
@@ -28214,6 +28217,7 @@ def _schedule_gui_perf_autorun(appWindow:'ApplicationWindow') -> None:
             return
 
         try:
+            _save_gui_perf_autorun_screenshot(appWindow)
             export_gui_perf_metrics()
         except Exception as e: # pylint: disable=broad-except
             _log.exception(e)
@@ -28221,6 +28225,17 @@ def _schedule_gui_perf_autorun(appWindow:'ApplicationWindow') -> None:
         appWindow.fileQuit()
 
     QTimer.singleShot(start_delay_ms, run_once)
+
+
+def _save_gui_perf_autorun_screenshot(appWindow:'ApplicationWindow') -> None:
+    screenshot_path = os.environ.get('ARTISANZ_GUI_PERF_SCREENSHOT_FILE', '').strip()
+    if not screenshot_path:
+        return
+    try:
+        Path(screenshot_path).parent.mkdir(parents=True, exist_ok=True)
+        appWindow.grab().save(screenshot_path)
+    except Exception as e: # pylint: disable=broad-except
+        _log.exception(e)
 
 
 def _modern_ui_enabled() -> bool:

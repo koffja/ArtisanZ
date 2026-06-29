@@ -2,7 +2,7 @@
 
 **Purpose:** Track the multi-phase GUI modernization effort from measurement through visual refresh, plotting improvements, processing decoupling, and optional QML adoption.
 
-**Status:** Phase 0 automated profile redraw baseline is captured as of 2026-06-29. Phase 1 Widgets visual modernization has started; live sampling baseline remains pending before Phase 2/3 work.
+**Status:** Phase 0 automated profile redraw baseline is captured as of 2026-06-29. Phase 1 Widgets visual modernization has a main-screen first pass with screenshots; live sampling baseline remains pending before Phase 2/3 work.
 
 **Repository Rules:** Work on the `ArtisanZ` branch. Do not commit or push unless explicitly requested. Preserve upstream compatibility and local ArtisanZ customizations.
 
@@ -32,7 +32,7 @@ Important observations from the code review:
 | Phase | Name | Status | Primary Deliverable | Exit Gate |
 | --- | --- | --- | --- | --- |
 | 0 | Performance Baseline and Risk Map | Profile redraw baseline captured | Timing probes, benchmark workflow, baseline report | We know whether rendering, GUI-thread processing, locks, or device sampling dominate latency |
-| 1 | Widgets Visual Modernization | In progress | Modern theme tokens and refreshed main roast screen styling | Main screen looks modern while behavior and settings compatibility remain intact |
+| 1 | Widgets Visual Modernization | Main-screen first pass captured | Modern theme tokens and refreshed main roast screen styling | Main screen looks modern while behavior and settings compatibility remain intact |
 | 2 | Plot Renderer Boundary and PyQtGraph POC | Not started | Read-only plot snapshot model, Matplotlib adapter, PyQtGraph live adapter prototype | POC is faster or visually/maintainably superior under Phase 0 benchmarks |
 | 3 | Sampling Post-Processing Decoupling | Not started | Pure data pipeline for filtering, RoR, PID inputs, alarm/event decisions | GUI thread consumes snapshots instead of doing heavy processing inline |
 | 4 | Main UI Information Architecture | Not started | Scenario-oriented Roast Control, QC Analysis, and Device Setup workspaces | Users can switch task modes without losing existing expert controls |
@@ -66,7 +66,7 @@ Important observations from the code review:
 
 **Goal:** Deliver a noticeably more modern ArtisanZ main screen while staying inside PyQt6 Widgets.
 
-**Started:** 2026-06-29 with an application-level modern stylesheet and theme token module. `ARTISANZ_LEGACY_UI=1` can be used as an environment fallback.
+**Started:** 2026-06-29 with an application-level modern stylesheet and theme token module. The first main-screen pass now includes flat event button styling, LCD surface/label styling, and offscreen screenshot capture through `ARTISANZ_GUI_PERF_SCREENSHOT_FILE`. `ARTISANZ_LEGACY_UI=1` can be used as an environment fallback.
 
 **Candidate Work:**
 

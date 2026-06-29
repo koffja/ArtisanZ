@@ -70,6 +70,20 @@ def modern_application_stylesheet(theme: ModernTheme | None = None) -> str:
             border-top: 1px solid {t.border};
             color: {t.text_muted};
         }}
+        QFrame[lcdSurface="true"] {{
+            background-color: {t.surface};
+            border: 1px solid {t.border};
+            border-radius: 6px;
+        }}
+        QLCDNumber[lcdSurface="true"] {{
+            border: 1px solid {t.border};
+            border-radius: 6px;
+            padding: 2px;
+        }}
+        QLabel[lcdLabel="true"] {{
+            color: {t.text_muted};
+            font-weight: 600;
+        }}
         QGroupBox {{
             border: 1px solid {t.border};
             border-radius: 6px;

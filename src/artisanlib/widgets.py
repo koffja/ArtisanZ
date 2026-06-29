@@ -19,7 +19,7 @@ from contextlib import contextmanager
 from collections.abc import Generator
 from typing import override, Any, TYPE_CHECKING
 
-from artisanlib.util import stringtoseconds, createGradient
+from artisanlib.util import stringtoseconds
 
 if TYPE_CHECKING:
     from PyQt6.QtCore import QCoreApplication, QObject # pylint: disable=unused-import
@@ -447,7 +447,7 @@ class EventPushButton(QPushButton):
         self.default_style = pushButtonColorStyle('*',
             selector='[Selected=false]',
             state=':!flat:!hover:!pressed',
-            background=createGradient(background_color))
+            background=background_color)
         self.setStyleSheet(self.default_style)
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))

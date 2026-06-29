@@ -8,6 +8,9 @@ def test_modern_application_stylesheet_contains_core_surfaces() -> None:
     assert 'QToolBar' in stylesheet
     assert 'QMenuBar' in stylesheet
     assert 'QPushButton' in stylesheet
+    assert 'QLCDNumber[lcdSurface="true"]' in stylesheet
+    assert 'QFrame[lcdSurface="true"]' in stylesheet
+    assert 'QLabel[lcdLabel="true"]' in stylesheet
 
 
 def test_modern_application_stylesheet_uses_supplied_theme() -> None:
