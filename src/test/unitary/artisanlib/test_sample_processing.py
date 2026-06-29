@@ -1,15 +1,35 @@
 from __future__ import annotations
 
+from collections.abc import Iterator, Sequence
+
 from artisanlib.sample_processing import (
     alarm_is_eligible_for_evaluation,
     alarm_source_value,
     alarm_temperature_reaches_limit,
     alarm_time_offset_reached,
+    auto_charge_event_candidate,
+    auto_drop_event_candidate,
+    auto_dry_event_candidate,
+    auto_fcs_event_candidate,
     decay_weight_sequence,
     pid_process_value,
     relative_alarm_index,
     smoothing_weights_for_recent_readings,
+    turning_point_check_candidate,
+    turning_point_temperature_is_valid,
+    turning_point_timeout_index,
 )
+
+
+class ExplodingSequence(Sequence[float]):
+    def __getitem__(self, index: int) -> float:
+        raise AssertionError(f'unexpected sample time access at {index}')
+
+    def __len__(self) -> int:
+        return 10
+
+    def __iter__(self) -> Iterator[float]:
+        raise AssertionError('unexpected sample time iteration')
 
 
 def test_decay_weight_sequence_uses_one_based_linear_weights() -> None:
@@ -555,4 +575,421 @@ def test_alarm_time_offset_reached_subtracts_tp_and_if_alarm_indexes() -> None:
         tp_alarm_timeindex=None,
         alarm_states=[3],
         alarm_guard=0,
+    )
+
+
+def test_auto_charge_event_candidate_applies_celsius_and_fahrenheit_thresholds() -> None:
+    assert auto_charge_event_candidate(
+        auto_charge_idx=0,
+        auto_charge_flag=True,
+        auto_charge_enabled=True,
+        charge_index=-1,
+        sample_count=5,
+        mode='C',
+        latest_bt=77.1,
+    )
+    assert auto_charge_event_candidate(
+        auto_charge_idx=0,
+        auto_charge_flag=True,
+        auto_charge_enabled=True,
+        charge_index=-1,
+        sample_count=5,
+        mode='F',
+        latest_bt=170.1,
+    )
+    assert not auto_charge_event_candidate(
+        auto_charge_idx=0,
+        auto_charge_flag=True,
+        auto_charge_enabled=True,
+        charge_index=-1,
+        sample_count=5,
+        mode='C',
+        latest_bt=77.0,
+    )
+    assert not auto_charge_event_candidate(
+        auto_charge_idx=0,
+        auto_charge_flag=True,
+        auto_charge_enabled=True,
+        charge_index=-1,
+        sample_count=5,
+        mode='F',
+        latest_bt=170.0,
+    )
+
+
+def test_auto_charge_event_candidate_rejects_disabled_or_already_charged_state() -> None:
+    assert not auto_charge_event_candidate(
+        auto_charge_idx=1,
+        auto_charge_flag=True,
+        auto_charge_enabled=True,
+        charge_index=-1,
+        sample_count=5,
+        mode='C',
+        latest_bt=90.0,
+    )
+    assert not auto_charge_event_candidate(
+        auto_charge_idx=0,
+        auto_charge_flag=False,
+        auto_charge_enabled=True,
+        charge_index=-1,
+        sample_count=5,
+        mode='C',
+        latest_bt=90.0,
+    )
+    assert not auto_charge_event_candidate(
+        auto_charge_idx=0,
+        auto_charge_flag=True,
+        auto_charge_enabled=False,
+        charge_index=-1,
+        sample_count=5,
+        mode='C',
+        latest_bt=90.0,
+    )
+    assert not auto_charge_event_candidate(
+        auto_charge_idx=0,
+        auto_charge_flag=True,
+        auto_charge_enabled=True,
+        charge_index=0,
+        sample_count=5,
+        mode='C',
+        latest_bt=90.0,
+    )
+    assert not auto_charge_event_candidate(
+        auto_charge_idx=0,
+        auto_charge_flag=True,
+        auto_charge_enabled=True,
+        charge_index=-1,
+        sample_count=4,
+        mode='C',
+        latest_bt=90.0,
+    )
+
+
+def test_turning_point_timeout_index_returns_current_index_after_max_roast_time() -> None:
+    assert turning_point_timeout_index(
+        tp_alarm_timeindex=None,
+        charge_index=1,
+        sample_times=[0.0, 10.0, 80.1],
+        tp_max_roast_time=70.0,
+        sample_count=3,
+    ) == 2
+    assert turning_point_timeout_index(
+        tp_alarm_timeindex=None,
+        charge_index=1,
+        sample_times=[0.0, 10.0, 80.0],
+        tp_max_roast_time=70.0,
+        sample_count=3,
+    ) is None
+    assert turning_point_timeout_index(
+        tp_alarm_timeindex=2,
+        charge_index=1,
+        sample_times=[0.0, 10.0, 90.0],
+        tp_max_roast_time=70.0,
+        sample_count=3,
+    ) is None
+
+
+def test_turning_point_check_candidate_applies_charge_dry_and_sample_count_gates() -> None:
+    assert turning_point_check_candidate(
+        tp_alarm_timeindex=None,
+        charge_index=1,
+        dry_index=0,
+        bt_sample_count=10,
+    )
+    assert not turning_point_check_candidate(
+        tp_alarm_timeindex=2,
+        charge_index=1,
+        dry_index=0,
+        bt_sample_count=10,
+    )
+    assert not turning_point_check_candidate(
+        tp_alarm_timeindex=None,
+        charge_index=-1,
+        dry_index=0,
+        bt_sample_count=10,
+    )
+    assert not turning_point_check_candidate(
+        tp_alarm_timeindex=None,
+        charge_index=1,
+        dry_index=1,
+        bt_sample_count=10,
+    )
+    assert not turning_point_check_candidate(
+        tp_alarm_timeindex=None,
+        charge_index=1,
+        dry_index=0,
+        bt_sample_count=9,
+    )
+
+
+def test_turning_point_temperature_is_valid_applies_celsius_and_fahrenheit_ranges() -> None:
+    assert turning_point_temperature_is_valid('C', 100.0)
+    assert not turning_point_temperature_is_valid('C', 50.0)
+    assert not turning_point_temperature_is_valid('C', 150.0)
+    assert turning_point_temperature_is_valid('F', 200.0)
+    assert not turning_point_temperature_is_valid('F', 100.0)
+    assert not turning_point_temperature_is_valid('F', 300.0)
+
+
+def test_auto_drop_event_candidate_applies_thresholds_and_roast_elapsed_time() -> None:
+    assert auto_drop_event_candidate(
+        auto_drop_idx=0,
+        auto_drop_flag=True,
+        auto_drop_enabled=True,
+        charge_index=1,
+        drop_index=0,
+        sample_count=5,
+        mode='C',
+        latest_bt=160.1,
+        sample_times=[0.0, 10.0, 431.0],
+    )
+    assert auto_drop_event_candidate(
+        auto_drop_idx=0,
+        auto_drop_flag=True,
+        auto_drop_enabled=True,
+        charge_index=1,
+        drop_index=0,
+        sample_count=5,
+        mode='F',
+        latest_bt=320.1,
+        sample_times=[0.0, 10.0, 431.0],
+    )
+    assert not auto_drop_event_candidate(
+        auto_drop_idx=0,
+        auto_drop_flag=True,
+        auto_drop_enabled=True,
+        charge_index=1,
+        drop_index=0,
+        sample_count=5,
+        mode='C',
+        latest_bt=160.0,
+        sample_times=[0.0, 10.0, 431.0],
+    )
+    assert not auto_drop_event_candidate(
+        auto_drop_idx=0,
+        auto_drop_flag=True,
+        auto_drop_enabled=True,
+        charge_index=1,
+        drop_index=0,
+        sample_count=5,
+        mode='F',
+        latest_bt=320.0,
+        sample_times=[0.0, 10.0, 431.0],
+    )
+    assert not auto_drop_event_candidate(
+        auto_drop_idx=0,
+        auto_drop_flag=True,
+        auto_drop_enabled=True,
+        charge_index=1,
+        drop_index=0,
+        sample_count=5,
+        mode='C',
+        latest_bt=170.0,
+        sample_times=[0.0, 10.0, 430.0],
+    )
+
+
+def test_auto_drop_event_candidate_rejects_disabled_or_unready_state() -> None:
+    assert not auto_drop_event_candidate(
+        auto_drop_idx=1,
+        auto_drop_flag=True,
+        auto_drop_enabled=True,
+        charge_index=1,
+        drop_index=0,
+        sample_count=5,
+        mode='C',
+        latest_bt=170.0,
+        sample_times=ExplodingSequence(),
+    )
+    assert not auto_drop_event_candidate(
+        auto_drop_idx=0,
+        auto_drop_flag=True,
+        auto_drop_enabled=True,
+        charge_index=1,
+        drop_index=0,
+        sample_count=5,
+        mode='C',
+        latest_bt=160.0,
+        sample_times=ExplodingSequence(),
+    )
+    assert not auto_drop_event_candidate(
+        auto_drop_idx=0,
+        auto_drop_flag=False,
+        auto_drop_enabled=True,
+        charge_index=1,
+        drop_index=0,
+        sample_count=5,
+        mode='C',
+        latest_bt=170.0,
+        sample_times=ExplodingSequence(),
+    )
+    assert not auto_drop_event_candidate(
+        auto_drop_idx=0,
+        auto_drop_flag=True,
+        auto_drop_enabled=False,
+        charge_index=1,
+        drop_index=0,
+        sample_count=5,
+        mode='C',
+        latest_bt=170.0,
+        sample_times=ExplodingSequence(),
+    )
+    assert not auto_drop_event_candidate(
+        auto_drop_idx=0,
+        auto_drop_flag=True,
+        auto_drop_enabled=True,
+        charge_index=-1,
+        drop_index=0,
+        sample_count=5,
+        mode='C',
+        latest_bt=170.0,
+        sample_times=ExplodingSequence(),
+    )
+    assert not auto_drop_event_candidate(
+        auto_drop_idx=0,
+        auto_drop_flag=True,
+        auto_drop_enabled=True,
+        charge_index=1,
+        drop_index=2,
+        sample_count=5,
+        mode='C',
+        latest_bt=170.0,
+        sample_times=ExplodingSequence(),
+    )
+    assert not auto_drop_event_candidate(
+        auto_drop_idx=0,
+        auto_drop_flag=True,
+        auto_drop_enabled=True,
+        charge_index=1,
+        drop_index=0,
+        sample_count=4,
+        mode='C',
+        latest_bt=170.0,
+        sample_times=ExplodingSequence(),
+    )
+
+
+def test_auto_dry_event_candidate_uses_tp_truthiness_and_phase_threshold() -> None:
+    assert auto_dry_event_candidate(
+        auto_dry_flag=True,
+        auto_dry_enabled=True,
+        tp_alarm_timeindex=7,
+        charge_index=1,
+        dry_index=0,
+        fcs_index=0,
+        latest_bt=151.0,
+        dry_phase_temperature=150.0,
+    )
+    assert not auto_dry_event_candidate(
+        auto_dry_flag=True,
+        auto_dry_enabled=True,
+        tp_alarm_timeindex=0,
+        charge_index=1,
+        dry_index=0,
+        fcs_index=0,
+        latest_bt=151.0,
+        dry_phase_temperature=150.0,
+    )
+    assert not auto_dry_event_candidate(
+        auto_dry_flag=True,
+        auto_dry_enabled=False,
+        tp_alarm_timeindex=7,
+        charge_index=1,
+        dry_index=0,
+        fcs_index=0,
+        latest_bt=151.0,
+        dry_phase_temperature=150.0,
+    )
+    assert not auto_dry_event_candidate(
+        auto_dry_flag=True,
+        auto_dry_enabled=True,
+        tp_alarm_timeindex=7,
+        charge_index=1,
+        dry_index=2,
+        fcs_index=0,
+        latest_bt=151.0,
+        dry_phase_temperature=150.0,
+    )
+    assert not auto_dry_event_candidate(
+        auto_dry_flag=True,
+        auto_dry_enabled=True,
+        tp_alarm_timeindex=7,
+        charge_index=1,
+        dry_index=0,
+        fcs_index=2,
+        latest_bt=151.0,
+        dry_phase_temperature=150.0,
+    )
+    assert not auto_dry_event_candidate(
+        auto_dry_flag=True,
+        auto_dry_enabled=True,
+        tp_alarm_timeindex=7,
+        charge_index=1,
+        dry_index=0,
+        fcs_index=0,
+        latest_bt=149.9,
+        dry_phase_temperature=150.0,
+    )
+
+
+def test_auto_fcs_event_candidate_uses_tp_truthiness_and_phase_threshold() -> None:
+    assert auto_fcs_event_candidate(
+        auto_fcs_flag=True,
+        auto_fcs_enabled=True,
+        tp_alarm_timeindex=7,
+        charge_index=1,
+        fcs_index=0,
+        fce_index=0,
+        latest_bt=196.0,
+        fcs_phase_temperature=196.0,
+    )
+    assert not auto_fcs_event_candidate(
+        auto_fcs_flag=True,
+        auto_fcs_enabled=True,
+        tp_alarm_timeindex=0,
+        charge_index=1,
+        fcs_index=0,
+        fce_index=0,
+        latest_bt=196.0,
+        fcs_phase_temperature=196.0,
+    )
+    assert not auto_fcs_event_candidate(
+        auto_fcs_flag=True,
+        auto_fcs_enabled=False,
+        tp_alarm_timeindex=7,
+        charge_index=1,
+        fcs_index=0,
+        fce_index=0,
+        latest_bt=196.0,
+        fcs_phase_temperature=196.0,
+    )
+    assert not auto_fcs_event_candidate(
+        auto_fcs_flag=True,
+        auto_fcs_enabled=True,
+        tp_alarm_timeindex=7,
+        charge_index=1,
+        fcs_index=2,
+        fce_index=0,
+        latest_bt=196.0,
+        fcs_phase_temperature=196.0,
+    )
+    assert not auto_fcs_event_candidate(
+        auto_fcs_flag=True,
+        auto_fcs_enabled=True,
+        tp_alarm_timeindex=7,
+        charge_index=1,
+        fcs_index=0,
+        fce_index=2,
+        latest_bt=196.0,
+        fcs_phase_temperature=196.0,
+    )
+    assert not auto_fcs_event_candidate(
+        auto_fcs_flag=True,
+        auto_fcs_enabled=True,
+        tp_alarm_timeindex=7,
+        charge_index=1,
+        fcs_index=0,
+        fce_index=0,
+        latest_bt=195.9,
+        fcs_phase_temperature=196.0,
     )

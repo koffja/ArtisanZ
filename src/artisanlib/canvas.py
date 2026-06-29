@@ -110,10 +110,17 @@ from artisanlib.sample_processing import (
     alarm_source_value,
     alarm_temperature_reaches_limit,
     alarm_time_offset_reached,
+    auto_charge_event_candidate,
+    auto_drop_event_candidate,
+    auto_dry_event_candidate,
+    auto_fcs_event_candidate,
     decay_weight_sequence,
     pid_process_value,
     relative_alarm_index,
     smoothing_weights_for_recent_readings,
+    turning_point_check_candidate,
+    turning_point_temperature_is_valid,
+    turning_point_timeout_index,
 )
 from Phidget22.VoltageRange import VoltageRange # type: ignore[import-untyped]
 
@@ -5103,29 +5110,45 @@ class tgraphcanvas(QObject):
 
                         # autodetect CHARGE event
                         # only if BT > 77C/170F
-                        if self.autoChargeIdx == 0 and self.autoChargeFlag and self.autoCHARGEenabled and self.timeindex[0] < 0 and length_of_qmc_timex >= 5 and \
-                            ((self.mode == 'C' and sample_temp2[-1] > 77) or (self.mode == 'F' and sample_temp2[-1] > 170)):
+                        tp_timeout_index = turning_point_timeout_index(
+                            self.TPalarmtimeindex,
+                            self.timeindex[0],
+                            sample_timex,
+                            self.TP_max_roasttime,
+                            length_of_qmc_timex,
+                        )
+                        if auto_charge_event_candidate(
+                                self.autoChargeIdx,
+                                self.autoChargeFlag,
+                                self.autoCHARGEenabled,
+                                self.timeindex[0],
+                                length_of_qmc_timex,
+                                self.mode,
+                                sample_temp2[-1]):
                             b = self.aw.BTbreak(length_of_qmc_timex - 1,event='CHARGE') # call BTbreak with last index
                             if b > 0:
                                 # we found a BT break at the current index minus b
                                 self.autoChargeIdx = length_of_qmc_timex - b
                                 self.markChargeSignal.emit(False) # this queues an event which forces a realignment/redraw by resetting the cache ax_background and fires the CHARGE action
 
-                        elif self.TPalarmtimeindex is None and self.timeindex[0] > -1 and len(sample_timex)>0 and ((sample_timex[-1] - sample_timex[self.timeindex[0]]) > self.TP_max_roasttime):
+                        elif tp_timeout_index is not None:
                             try:
                                 # if 2:00min (self.TP_max_roasttime) into the roast and TPalarmtimeindex alarmindex not yet set,
                                 # we place the TPalarmtimeindex at the current index to enable in airoasters without TP the autoDRY and autoFCs functions and activate the TP Phases LCDs
-                                self.TPalarmtimeindex = length_of_qmc_timex - 1
+                                self.TPalarmtimeindex = tp_timeout_index
                             except Exception as e: # pylint: disable=broad-except
                                 _log.exception(e)
 
                         # check for TP event if already CHARGEed and not yet recognized (earliest in the next call to sample())
-                        elif self.TPalarmtimeindex is None and self.timeindex[0] > -1 and not self.timeindex[1] and self.timeindex[0]+8 < len(sample_temp2) and self.checkTPalarmtime():
+                        elif turning_point_check_candidate(
+                                self.TPalarmtimeindex,
+                                self.timeindex[0],
+                                self.timeindex[1],
+                                len(sample_temp2)) and self.checkTPalarmtime():
                             try:
                                 tp = self.aw.findTP()
 
-                                if ((self.mode == 'C' and sample_temp2[tp] > 50 and sample_temp2[tp] < 150) or \
-                                    (self.mode == 'F' and sample_temp2[tp] > 100 and sample_temp2[tp] < 300)): # only mark TP if not an error value!
+                                if turning_point_temperature_is_valid(self.mode, sample_temp2[tp]): # only mark TP if not an error value!
                                     self.TPalarmtimeindex = tp
                                     self.markTPSignal.emit() # queued
                             except Exception as e: # pylint: disable=broad-except
@@ -5133,20 +5156,43 @@ class tgraphcanvas(QObject):
 
                         # autodetect DROP event
                         # only if 7min into roast and BT>160C/320F
-                        if self.autoDropIdx == 0 and self.autoDropFlag and self.autoDROPenabled and self.timeindex[0] > -1 and self.timeindex[6] == 0 and \
-                            length_of_qmc_timex >= 5 and ((self.mode == 'C' and sample_temp2[-1] > 160) or (self.mode == 'F' and sample_temp2[-1] > 320)) and\
-                            ((sample_timex[-1] - sample_timex[self.timeindex[0]]) > 7*60):
+                        if auto_drop_event_candidate(
+                                self.autoDropIdx,
+                                self.autoDropFlag,
+                                self.autoDROPenabled,
+                                self.timeindex[0],
+                                self.timeindex[6],
+                                length_of_qmc_timex,
+                                self.mode,
+                                sample_temp2[-1],
+                                sample_timex):
                             b = self.aw.BTbreak(length_of_qmc_timex - 1,event='DROP') # call BTbreak with last index
                             if b > 0:
                                 # we found a BT break at the current index minus b
                                 self.autoDropIdx = length_of_qmc_timex - b
                                 self.markDropSignal.emit(False)
                         #check for autoDRY: # only after CHARGE and TP and before FCs if not yet set
-                        if self.autoDRYflag and self.autoDRYenabled and self.TPalarmtimeindex and self.timeindex[0] > -1 and not self.timeindex[1] and not self.timeindex[2] and sample_temp2[-1] >= self.phases[1]:
+                        if auto_dry_event_candidate(
+                                self.autoDRYflag,
+                                self.autoDRYenabled,
+                                self.TPalarmtimeindex,
+                                self.timeindex[0],
+                                self.timeindex[1],
+                                self.timeindex[2],
+                                sample_temp2[-1],
+                                self.phases[1]):
                             # if DRY event not yet set check for BT exceeding Dry-max as specified in the phases dialog
                             self.markDRYSignal.emit(False) # queued
                         #check for autoFCs: # only after CHARGE and TP and before FCe if not yet set
-                        if self.autoFCsFlag and self.autoFCsenabled and self.TPalarmtimeindex and self.timeindex[0] > -1 and not self.timeindex[2] and not self.timeindex[3] and sample_temp2[-1] >= self.phases[2]:
+                        if auto_fcs_event_candidate(
+                                self.autoFCsFlag,
+                                self.autoFCsenabled,
+                                self.TPalarmtimeindex,
+                                self.timeindex[0],
+                                self.timeindex[2],
+                                self.timeindex[3],
+                                sample_temp2[-1],
+                                self.phases[2]):
                             # after DRY (if FCs event not yet set) check for BT exceeding FC-min as specified in the phases dialog
                             self.markFCsSignal.emit(False) # queued
 

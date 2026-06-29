@@ -174,13 +174,142 @@ def alarm_time_offset_reached(
     return alarm_time_value >= alarm_offset
 
 
+def _bt_above_event_threshold(mode: str, latest_bt: float, celsius_threshold: float, fahrenheit_threshold: float) -> bool:
+    return (
+        (mode == 'C' and latest_bt > celsius_threshold) or
+        (mode == 'F' and latest_bt > fahrenheit_threshold)
+    )
+
+
+def auto_charge_event_candidate(
+        auto_charge_idx: int,
+        auto_charge_flag: bool,
+        auto_charge_enabled: bool,
+        charge_index: int,
+        sample_count: int,
+        mode: str,
+        latest_bt: float) -> bool:
+    return (
+        auto_charge_idx == 0 and
+        auto_charge_flag and
+        auto_charge_enabled and
+        charge_index < 0 and
+        sample_count >= 5 and
+        _bt_above_event_threshold(mode, latest_bt, 77, 170)
+    )
+
+
+def turning_point_timeout_index(
+        tp_alarm_timeindex: int | None,
+        charge_index: int,
+        sample_times: Sequence[float],
+        tp_max_roast_time: float,
+        sample_count: int) -> int | None:
+    if (
+            tp_alarm_timeindex is None and
+            charge_index > -1 and
+            len(sample_times) > 0 and
+            (sample_times[-1] - sample_times[charge_index]) > tp_max_roast_time):
+        return sample_count - 1
+    return None
+
+
+def turning_point_check_candidate(
+        tp_alarm_timeindex: int | None,
+        charge_index: int,
+        dry_index: int,
+        bt_sample_count: int) -> bool:
+    return (
+        tp_alarm_timeindex is None and
+        charge_index > -1 and
+        not dry_index and
+        charge_index + 8 < bt_sample_count
+    )
+
+
+def turning_point_temperature_is_valid(mode: str, bt_at_turning_point: float) -> bool:
+    return (
+        (mode == 'C' and 50 < bt_at_turning_point < 150) or
+        (mode == 'F' and 100 < bt_at_turning_point < 300)
+    )
+
+
+def auto_drop_event_candidate(
+        auto_drop_idx: int,
+        auto_drop_flag: bool,
+        auto_drop_enabled: bool,
+        charge_index: int,
+        drop_index: int,
+        sample_count: int,
+        mode: str,
+        latest_bt: float,
+        sample_times: Sequence[float]) -> bool:
+    if not (
+            auto_drop_idx == 0 and
+            auto_drop_flag and
+            auto_drop_enabled and
+            charge_index > -1 and
+            drop_index == 0 and
+            sample_count >= 5 and
+            _bt_above_event_threshold(mode, latest_bt, 160, 320)):
+        return False
+    return (sample_times[-1] - sample_times[charge_index]) > 7 * 60
+
+
+def auto_dry_event_candidate(
+        auto_dry_flag: bool,
+        auto_dry_enabled: bool,
+        tp_alarm_timeindex: int | None,
+        charge_index: int,
+        dry_index: int,
+        fcs_index: int,
+        latest_bt: float,
+        dry_phase_temperature: float) -> bool:
+    return (
+        auto_dry_flag and
+        auto_dry_enabled and
+        bool(tp_alarm_timeindex) and
+        charge_index > -1 and
+        not dry_index and
+        not fcs_index and
+        latest_bt >= dry_phase_temperature
+    )
+
+
+def auto_fcs_event_candidate(
+        auto_fcs_flag: bool,
+        auto_fcs_enabled: bool,
+        tp_alarm_timeindex: int | None,
+        charge_index: int,
+        fcs_index: int,
+        fce_index: int,
+        latest_bt: float,
+        fcs_phase_temperature: float) -> bool:
+    return (
+        auto_fcs_flag and
+        auto_fcs_enabled and
+        bool(tp_alarm_timeindex) and
+        charge_index > -1 and
+        not fcs_index and
+        not fce_index and
+        latest_bt >= fcs_phase_temperature
+    )
+
+
 __all__ = [
     'alarm_is_eligible_for_evaluation',
     'alarm_source_value',
     'alarm_temperature_reaches_limit',
     'alarm_time_offset_reached',
+    'auto_charge_event_candidate',
+    'auto_drop_event_candidate',
+    'auto_dry_event_candidate',
+    'auto_fcs_event_candidate',
     'decay_weight_sequence',
     'pid_process_value',
     'relative_alarm_index',
     'smoothing_weights_for_recent_readings',
+    'turning_point_check_candidate',
+    'turning_point_temperature_is_valid',
+    'turning_point_timeout_index',
 ]
