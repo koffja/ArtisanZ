@@ -3807,9 +3807,7 @@ class ApplicationWindow(QMainWindow):
         self.EventsGroupLayout.setVisible(False)
 
         LCDlayout = QVBoxLayout()
-        LCDlayout.setSpacing(0)
-        LCDlayout.setContentsMargins(0,0,5,0)
-        LCDlayout.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
+        self.configureLCDColumnLayout(LCDlayout)
 
         #place control buttons + LCDs inside vertical button layout manager
         self.LCD2frame:ClickableLCDFrame = ClickableLCDFrame()
@@ -8415,6 +8413,12 @@ class ApplicationWindow(QMainWindow):
             _log.exception(e)
             _, _, exc_tb = sys.exc_info()
             self.qmc.adderror((QApplication.translate('Error Message','Exception:') + ' updatePhasesLCDs() {0}').format(str(e)),getattr(exc_tb, 'tb_lineno', '?'))
+
+    @staticmethod
+    def configureLCDColumnLayout(layout:QVBoxLayout) -> None:
+        layout.setSpacing(6)
+        layout.setContentsMargins(0,0,5,0)
+        layout.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
 
     @staticmethod
     def makeLCDbox(label:QLabel, lcd:MyQLCDNumber, lcdframe:QFrame) -> QFrame:

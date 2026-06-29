@@ -170,6 +170,7 @@ try:
         QLineEdit,
         QSlider,
         QTableWidget,
+        QVBoxLayout,
         QWidget,
     )
 except ImportError as exc:
@@ -1756,6 +1757,20 @@ class TestMakeLCDbox:
         # Assert
         assert lcdframe.layout() is not None
         # Layout should be configured with proper spacing and margins
+
+    def test_configure_lcd_column_layout_adds_vertical_item_spacing(self) -> None:
+        """Test LCD column layout keeps visible space between stacked cards."""
+        layout = QVBoxLayout()
+
+        ApplicationWindow.configureLCDColumnLayout(layout)
+
+        assert layout.spacing() == 6
+        margins = layout.contentsMargins()
+        assert margins.left() == 0
+        assert margins.top() == 0
+        assert margins.right() == 5
+        assert margins.bottom() == 0
+        assert layout.sizeConstraint() == QLayout.SizeConstraint.SetMinimumSize
 
 
 class TestSetSliderNumber:

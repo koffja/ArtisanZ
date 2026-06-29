@@ -60,3 +60,9 @@ ARTISANZ_GUI_PERF=1 ARTISANZ_GUI_PERF_AUTORUN=1 ARTISANZ_GUI_PERF_AUTORUN_ITERAT
 - Aligned the inner LCD value display with the bottom of the outer LCD frame by removing the frame's bottom content gap.
 - Added `lcd_value_stylesheet()` and focused tests to prevent the older `border-radius:4` inline LCD styles from returning in color refresh paths.
 - START-state screenshot reviewed at `/tmp/artisanz-lcd-fix.png`.
+
+## 2026-06-29 LCD Column Spacing Correction
+
+- Restored visible spacing between stacked main LCD cards by configuring the parent LCD column layout with 6px vertical spacing.
+- Added `ApplicationWindow.configureLCDColumnLayout()` so the spacing, right gutter, and minimum-size constraint are covered by focused tests instead of living only in the large constructor.
+- Profile-loaded screenshot reviewed at `/tmp/artisanz-lcd-spacing.png`.
