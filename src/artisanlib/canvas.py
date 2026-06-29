@@ -105,7 +105,14 @@ from matplotlib.colors import to_hex, to_rgba # type:ignore[untyped-import,unuse
 
 from artisanlib.performance import gui_perf_count, gui_perf_tracked
 from artisanlib.phidgets import PhidgetManager
-from artisanlib.sample_processing import decay_weight_sequence, pid_process_value, smoothing_weights_for_recent_readings
+from artisanlib.sample_processing import (
+    alarm_source_value,
+    alarm_temperature_reaches_limit,
+    decay_weight_sequence,
+    pid_process_value,
+    relative_alarm_index,
+    smoothing_weights_for_recent_readings,
+)
 from Phidget22.VoltageRange import VoltageRange # type: ignore[import-untyped]
 
 try:
@@ -5263,57 +5270,31 @@ class tgraphcanvas(QObject):
                                         alarm_ready = True
                                 #########
                                 # check alarmtemp:
-                                alarm_temp:float|None = None
                                 alarm_idx:int|None = None
                                 if self.alarmtime[i] == 10: # IF ALARM and only during recording as otherwise no data to refer to is available
                                     # and this is a conditional alarm with alarm_time set to IF ALARM
                                     if_alarm_state = self.alarmstate[self.alarmguard[i]] # reading when the IF ALARM triggered
-                                    if if_alarm_state != -1:
-                                        if if_alarm_state < len(sample_timex):
-                                            alarm_idx = if_alarm_state
-                                        else:
-                                            alarm_idx = -1
+                                    alarm_idx = relative_alarm_index(self.alarmtime[i], if_alarm_state, len(sample_timex))
                                     # we subtract the reading at alarm_idx from the current reading of the channel determined by alarmsource
-                                else:
-                                    alarm_idx = None
-                                if self.alarmsource[i] == -2 and sample_delta1[-1] is not None:  #check DeltaET (might be None)
-                                    alarm_temp = sample_delta1[-1]
-                                    if alarm_idx is not None:
-                                        sd1 = sample_delta1[alarm_idx]
-                                        if sd1 is not None and alarm_temp is not None:
-                                            alarm_temp -= sd1 # subtract the reading at alarm_idx for IF ALARMs
-                                elif self.alarmsource[i] == -1 and sample_delta2[-1] is not None: #check DeltaBT (might be None
-                                    alarm_temp = sample_delta2[-1]
-                                    if alarm_idx is not None:
-                                        sd2 = sample_delta2[alarm_idx]
-                                        if sd2 is not None and alarm_temp is not None:
-                                            alarm_temp -= sd2 # subtract the reading at alarm_idx for IF ALARMs
-                                elif self.alarmsource[i] == 0:                      #check ET
-                                    alarm_temp = sample_temp1[-1]
-                                    if alarm_idx is not None:
-                                        alarm_temp -= sample_temp1[alarm_idx] # subtract the reading at alarm_idx for IF ALARMs
-                                elif self.alarmsource[i] == 1:                      #check BT
-                                    alarm_temp = sample_temp2[-1]
-                                    if alarm_idx is not None:
-                                        alarm_temp -= sample_temp2[alarm_idx] # subtract the reading at alarm_idx for IF ALARMs
-                                elif self.alarmsource[i] > 1 and ((self.alarmsource[i] - 2) < (2*len(self.extradevices))):
-                                    if (self.alarmsource[i])%2==0:
-                                        alarm_temp = sample_extratemp1[(self.alarmsource[i] - 2)//2][-1]
-                                        if alarm_idx is not None:
-                                            alarm_temp -= sample_extratemp1[(self.alarmsource[i] - 2)//2][alarm_idx] # subtract the reading at alarm_idx for IF ALARMs
-                                    else:
-                                        alarm_temp = sample_extratemp2[(self.alarmsource[i] - 2)//2][-1]
-                                        if alarm_idx is not None:
-                                            alarm_temp -= sample_extratemp2[(self.alarmsource[i] - 2)//2][alarm_idx] # subtract the reading at alarm_idx for IF ALARMs
+                                alarm_temp = alarm_source_value(
+                                    self.alarmsource[i],
+                                    alarm_index=alarm_idx,
+                                    sample_delta1=sample_delta1,
+                                    sample_delta2=sample_delta2,
+                                    sample_temp1=sample_temp1,
+                                    sample_temp2=sample_temp2,
+                                    sample_extratemp1=sample_extratemp1,
+                                    sample_extratemp2=sample_extratemp2,
+                                    extra_device_count=len(self.extradevices),
+                                )
 
                                 alarm_limit = self.alarmtemperature[i]
 
-                                if alarm_temp is not None and alarm_temp != -1 and (
-                                        (self.alarmcond[i] == 1 and alarm_temp > alarm_limit) or
-                                        (self.alarmcond[i] == 0 and alarm_temp < alarm_limit) or
-                                        (self.alarmcond[i] == 2 and alarm_temp == alarm_limit) or
-                                        (self.alarmcond[i] == 3 and alarm_temp != alarm_limit) or
-                                        (alarm_idx is not None and alarm_temp == alarm_limit)): # for relative IF_ALARMS we include the equality
+                                if alarm_temperature_reaches_limit(
+                                        alarm_temp,
+                                        self.alarmcond[i],
+                                        alarm_limit,
+                                        alarm_idx):
                                     alarm_ready = True
                             if alarm_ready:
                                 # fire alarm i
