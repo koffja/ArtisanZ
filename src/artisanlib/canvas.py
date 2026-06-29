@@ -110,25 +110,18 @@ from artisanlib.sample_processing import (
     alarm_source_value,
     alarm_temperature_reaches_limit,
     alarm_time_offset_reached,
-    auto_charge_event_candidate,
-    auto_drop_event_candidate,
-    auto_dry_event_candidate,
-    auto_fcs_event_candidate,
+    build_live_processed_sample_frame,
     connected_curve_point,
     decay_weight_sequence,
     delta_smoothing_filter_size,
-    displayed_ror_value,
     input_filter_backfill_updates,
     input_filter_previous_values,
-    live_x_axis_extension_end,
     manual_x_axis_extension_end,
+    phase_event_candidates_after_turning_point,
     pid_process_value,
     relative_alarm_index,
-    ror_curve_window,
     smoothing_weights_for_recent_readings,
-    turning_point_check_candidate,
     turning_point_temperature_is_valid,
-    turning_point_timeout_index,
 )
 from Phidget22.VoltageRange import VoltageRange # type: ignore[import-untyped]
 
@@ -4989,6 +4982,7 @@ class tgraphcanvas(QObject):
 
                     #NOTE: the following is no longer restricted to self.aw.pidcontrol.pidActive==True
                     # as now the software PID is also update while the PID is off (if configured).
+                    process_value:float|None = None
                     if (self.Controlbuttonflag and \
                             not self.aw.pidcontrol.externalPIDControl()): # any device and + Artisan Software PID lib
                         process_value = pid_process_value(
@@ -5058,21 +5052,44 @@ class tgraphcanvas(QObject):
                         sample_unfiltereddelta2.append(0.)
                         self.rateofchange1,self.rateofchange2,rateofchange1plot,rateofchange2plot = 0.,0.,0.,0.
 
-                    # limit displayed RoR #(only before TP is recognized) # WHY?
-                    rateofchange1plot = displayed_ror_value(
-                        rateofchange1plot,
-                        self.RoRlimitFlag,
-                        self.maxRoRlimit,
-                        self.RoRlimit,
-                        self.RoRlimitm,
+                    processed_frame = build_live_processed_sample_frame(
+                        timestamp=tx,
+                        sample_count=length_of_qmc_timex,
+                        latest_et=t1_final,
+                        latest_bt=t2_final,
+                        smoothed_et=st1,
+                        smoothed_bt=st2,
+                        pid_process_value=process_value,
+                        raw_delta_et=rateofchange1plot,
+                        raw_delta_bt=rateofchange2plot,
+                        ror_limit_enabled=self.RoRlimitFlag,
+                        max_ror_limit=self.maxRoRlimit,
+                        ror_limit=self.RoRlimit,
+                        ror_limit_min=self.RoRlimitm,
+                        charge_index=self.timeindex[0] if local_flagstart else -1,
+                        dry_index=self.timeindex[1] if local_flagstart else 0,
+                        drop_index=self.timeindex[6] if local_flagstart else 0,
+                        delta_et_filter=self.deltaETfilter,
+                        delta_bt_filter=self.deltaBTfilter,
+                        delta_et_samples=self.deltaETsamples,
+                        delta_bt_samples=self.deltaBTsamples,
+                        fix_max_time=self.fixmaxtime or not local_flagstart,
+                        lock_time_x=self.locktimex,
+                        sample_times=sample_timex,
+                        start_of_x=self.startofx,
+                        end_of_x=self.endofx,
+                        tp_alarm_timeindex=self.TPalarmtimeindex if local_flagstart else None,
+                        tp_max_roast_time=self.TP_max_roasttime,
+                        auto_charge_idx=self.autoChargeIdx,
+                        auto_charge_flag=local_flagstart and self.autoChargeFlag,
+                        auto_charge_enabled=self.autoCHARGEenabled,
+                        auto_drop_idx=self.autoDropIdx,
+                        auto_drop_flag=local_flagstart and self.autoDropFlag,
+                        auto_drop_enabled=self.autoDROPenabled,
+                        mode=self.mode,
                     )
-                    rateofchange2plot = displayed_ror_value(
-                        rateofchange2plot,
-                        self.RoRlimitFlag,
-                        self.maxRoRlimit,
-                        self.RoRlimit,
-                        self.RoRlimitm,
-                    )
+                    rateofchange1plot = processed_frame.displayed_delta_et
+                    rateofchange2plot = processed_frame.displayed_delta_bt
 
                     # append new data to the rateofchange arrays
                     sample_delta1.append(rateofchange1plot)
@@ -5080,41 +5097,20 @@ class tgraphcanvas(QObject):
 
                     if local_flagstart:
                         if self.DeltaETflag and self.l_delta1 is not None:
-                            ror_window = ror_curve_window(
-                                self.timeindex[0],
-                                self.timeindex[6],
-                                length_of_qmc_timex,
-                                self.deltaETfilter,
-                                self.deltaETsamples,
-                            )
-                            if ror_window is not None:
-                                ror_start, ror_end = ror_window
+                            if processed_frame.delta_et_window is not None:
+                                ror_start, ror_end = processed_frame.delta_et_window
                                 self.l_delta1.set_data(sample_timex[ror_start:ror_end], numpy.array(sample_delta1[ror_start:ror_end]))
                             else:
                                 self.l_delta1.set_data([], [])
                         if self.DeltaBTflag and self.l_delta2 is not None:
-                            ror_window = ror_curve_window(
-                                self.timeindex[0],
-                                self.timeindex[6],
-                                length_of_qmc_timex,
-                                self.deltaBTfilter,
-                                self.deltaBTsamples,
-                            )
-                            if ror_window is not None:
-                                ror_start, ror_end = ror_window
+                            if processed_frame.delta_bt_window is not None:
+                                ror_start, ror_end = processed_frame.delta_bt_window
                                 self.l_delta2.set_data(sample_timex[ror_start:ror_end], numpy.array(sample_delta2[ror_start:ror_end]))
                             else:
                                 self.l_delta2.set_data([], [])
 
                         #readjust xlimit of plot if needed
-                        extended_end = live_x_axis_extension_end(
-                            self.fixmaxtime,
-                            self.locktimex,
-                            self.timeindex[0],
-                            sample_timex,
-                            self.startofx,
-                            self.endofx,
-                        )
+                        extended_end = processed_frame.live_x_axis_extension_end
                         if extended_end is not None:
                             self.endofx = extended_end
                             self.xaxistosm()
@@ -5123,41 +5119,23 @@ class tgraphcanvas(QObject):
 
                         # autodetect CHARGE event
                         # only if BT > 77C/170F
-                        tp_timeout_index = turning_point_timeout_index(
-                            self.TPalarmtimeindex,
-                            self.timeindex[0],
-                            sample_timex,
-                            self.TP_max_roasttime,
-                            length_of_qmc_timex,
-                        )
-                        if auto_charge_event_candidate(
-                                self.autoChargeIdx,
-                                self.autoChargeFlag,
-                                self.autoCHARGEenabled,
-                                self.timeindex[0],
-                                length_of_qmc_timex,
-                                self.mode,
-                                sample_temp2[-1]):
+                        if processed_frame.events.charge_candidate:
                             b = self.aw.BTbreak(length_of_qmc_timex - 1,event='CHARGE') # call BTbreak with last index
                             if b > 0:
                                 # we found a BT break at the current index minus b
                                 self.autoChargeIdx = length_of_qmc_timex - b
                                 self.markChargeSignal.emit(False) # this queues an event which forces a realignment/redraw by resetting the cache ax_background and fires the CHARGE action
 
-                        elif tp_timeout_index is not None:
+                        elif processed_frame.events.turning_point_timeout_index is not None:
                             try:
                                 # if 2:00min (self.TP_max_roasttime) into the roast and TPalarmtimeindex alarmindex not yet set,
                                 # we place the TPalarmtimeindex at the current index to enable in airoasters without TP the autoDRY and autoFCs functions and activate the TP Phases LCDs
-                                self.TPalarmtimeindex = tp_timeout_index
+                                self.TPalarmtimeindex = processed_frame.events.turning_point_timeout_index
                             except Exception as e: # pylint: disable=broad-except
                                 _log.exception(e)
 
                         # check for TP event if already CHARGEed and not yet recognized (earliest in the next call to sample())
-                        elif turning_point_check_candidate(
-                                self.TPalarmtimeindex,
-                                self.timeindex[0],
-                                self.timeindex[1],
-                                len(sample_temp2)) and self.checkTPalarmtime():
+                        elif processed_frame.events.turning_point_check_candidate and self.checkTPalarmtime():
                             try:
                                 tp = self.aw.findTP()
 
@@ -5169,43 +5147,32 @@ class tgraphcanvas(QObject):
 
                         # autodetect DROP event
                         # only if 7min into roast and BT>160C/320F
-                        if auto_drop_event_candidate(
-                                self.autoDropIdx,
-                                self.autoDropFlag,
-                                self.autoDROPenabled,
-                                self.timeindex[0],
-                                self.timeindex[6],
-                                length_of_qmc_timex,
-                                self.mode,
-                                sample_temp2[-1],
-                                sample_timex):
+                        if processed_frame.events.drop_candidate:
                             b = self.aw.BTbreak(length_of_qmc_timex - 1,event='DROP') # call BTbreak with last index
                             if b > 0:
                                 # we found a BT break at the current index minus b
                                 self.autoDropIdx = length_of_qmc_timex - b
                                 self.markDropSignal.emit(False)
+                        phase_events = phase_event_candidates_after_turning_point(
+                            self.autoDRYflag,
+                            self.autoDRYenabled,
+                            self.autoFCsFlag,
+                            self.autoFCsenabled,
+                            self.TPalarmtimeindex,
+                            self.timeindex[0],
+                            self.timeindex[1],
+                            self.timeindex[2],
+                            self.timeindex[3],
+                            sample_temp2[-1],
+                            self.phases[1],
+                            self.phases[2],
+                        )
                         #check for autoDRY: # only after CHARGE and TP and before FCs if not yet set
-                        if auto_dry_event_candidate(
-                                self.autoDRYflag,
-                                self.autoDRYenabled,
-                                self.TPalarmtimeindex,
-                                self.timeindex[0],
-                                self.timeindex[1],
-                                self.timeindex[2],
-                                sample_temp2[-1],
-                                self.phases[1]):
+                        if phase_events.dry_candidate:
                             # if DRY event not yet set check for BT exceeding Dry-max as specified in the phases dialog
                             self.markDRYSignal.emit(False) # queued
                         #check for autoFCs: # only after CHARGE and TP and before FCe if not yet set
-                        if auto_fcs_event_candidate(
-                                self.autoFCsFlag,
-                                self.autoFCsenabled,
-                                self.TPalarmtimeindex,
-                                self.timeindex[0],
-                                self.timeindex[2],
-                                self.timeindex[3],
-                                sample_temp2[-1],
-                                self.phases[2]):
+                        if phase_events.fcs_candidate:
                             # after DRY (if FCs event not yet set) check for BT exceeding FC-min as specified in the phases dialog
                             self.markFCsSignal.emit(False) # queued
 

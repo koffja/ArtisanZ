@@ -11,6 +11,7 @@ from artisanlib.sample_processing import (
     auto_drop_event_candidate,
     auto_dry_event_candidate,
     auto_fcs_event_candidate,
+    build_live_processed_sample_frame,
     connected_curve_point,
     decay_weight_sequence,
     delta_smoothing_filter_size,
@@ -19,6 +20,7 @@ from artisanlib.sample_processing import (
     input_filter_previous_values,
     live_x_axis_extension_end,
     manual_x_axis_extension_end,
+    phase_event_candidates_after_turning_point,
     pid_process_value,
     relative_alarm_index,
     ror_curve_window,
@@ -1336,3 +1338,169 @@ def test_ror_curve_window_skips_charge_warmup_and_stops_after_drop() -> None:
         delta_filter=0,
         delta_samples=0,
     ) == (7, 20)
+
+
+def test_build_live_processed_sample_frame_collects_display_axis_and_event_decisions() -> None:
+    sample_times = [0.0, 100.0, 180.0, 240.0, 300.0, 360.0, 420.0, 480.0, 540.0, 600.0, 660.0, 721.0]
+    frame = build_live_processed_sample_frame(
+        timestamp=721.0,
+        sample_count=len(sample_times),
+        latest_et=180.0,
+        latest_bt=201.0,
+        smoothed_et=179.0,
+        smoothed_bt=200.0,
+        pid_process_value=200.0,
+        raw_delta_et=25.0,
+        raw_delta_bt=19.0,
+        ror_limit_enabled=True,
+        max_ror_limit=30.0,
+        ror_limit=20.0,
+        ror_limit_min=-20.0,
+        charge_index=1,
+        dry_index=0,
+        drop_index=0,
+        delta_et_filter=4.0,
+        delta_bt_filter=0.0,
+        delta_et_samples=3,
+        delta_bt_samples=0,
+        fix_max_time=False,
+        lock_time_x=False,
+        sample_times=sample_times,
+        start_of_x=0.0,
+        end_of_x=660.0,
+        tp_alarm_timeindex=7,
+        tp_max_roast_time=120.0,
+        auto_charge_idx=0,
+        auto_charge_flag=True,
+        auto_charge_enabled=True,
+        auto_drop_idx=0,
+        auto_drop_flag=True,
+        auto_drop_enabled=True,
+        mode='C',
+    )
+
+    assert frame.timestamp == 721.0
+    assert frame.sample_count == len(sample_times)
+    assert frame.latest_et == 180.0
+    assert frame.latest_bt == 201.0
+    assert frame.smoothed_et == 179.0
+    assert frame.smoothed_bt == 200.0
+    assert frame.pid_process_value == 200.0
+    assert frame.displayed_delta_et is None
+    assert frame.displayed_delta_bt == 19.0
+    assert frame.delta_et_window == (7, 12)
+    assert frame.delta_bt_window == (3, 12)
+    assert frame.live_x_axis_extension_end == 781.0
+    assert not frame.events.charge_candidate
+    assert frame.events.turning_point_timeout_index is None
+    assert not frame.events.turning_point_check_candidate
+    assert frame.events.drop_candidate
+
+
+def test_build_live_processed_sample_frame_avoids_sample_access_when_gates_are_closed() -> None:
+    frame = build_live_processed_sample_frame(
+        timestamp=12.0,
+        sample_count=4,
+        latest_et=80.0,
+        latest_bt=90.0,
+        smoothed_et=79.0,
+        smoothed_bt=89.0,
+        pid_process_value=None,
+        raw_delta_et=None,
+        raw_delta_bt=None,
+        ror_limit_enabled=True,
+        max_ror_limit=30.0,
+        ror_limit=20.0,
+        ror_limit_min=-20.0,
+        charge_index=-1,
+        dry_index=0,
+        drop_index=0,
+        delta_et_filter=4.0,
+        delta_bt_filter=4.0,
+        delta_et_samples=3,
+        delta_bt_samples=3,
+        fix_max_time=True,
+        lock_time_x=False,
+        sample_times=NoAccessSequence(),
+        start_of_x=0.0,
+        end_of_x=660.0,
+        tp_alarm_timeindex=None,
+        tp_max_roast_time=120.0,
+        auto_charge_idx=1,
+        auto_charge_flag=True,
+        auto_charge_enabled=True,
+        auto_drop_idx=0,
+        auto_drop_flag=True,
+        auto_drop_enabled=True,
+        mode='C',
+    )
+
+    assert frame.displayed_delta_et is None
+    assert frame.displayed_delta_bt is None
+    assert frame.delta_et_window is None
+    assert frame.delta_bt_window is None
+    assert frame.live_x_axis_extension_end is None
+    assert not frame.events.charge_candidate
+    assert frame.events.turning_point_timeout_index is None
+    assert not frame.events.turning_point_check_candidate
+    assert not frame.events.drop_candidate
+
+
+def test_phase_event_candidates_are_evaluated_after_turning_point_timeout_state() -> None:
+    sample_times = [0.0, 10.0, 131.0]
+    frame = build_live_processed_sample_frame(
+        timestamp=131.0,
+        sample_count=len(sample_times),
+        latest_et=180.0,
+        latest_bt=201.0,
+        smoothed_et=179.0,
+        smoothed_bt=200.0,
+        pid_process_value=200.0,
+        raw_delta_et=5.0,
+        raw_delta_bt=6.0,
+        ror_limit_enabled=False,
+        max_ror_limit=30.0,
+        ror_limit=20.0,
+        ror_limit_min=-20.0,
+        charge_index=1,
+        dry_index=0,
+        drop_index=0,
+        delta_et_filter=0.0,
+        delta_bt_filter=0.0,
+        delta_et_samples=0,
+        delta_bt_samples=0,
+        fix_max_time=True,
+        lock_time_x=False,
+        sample_times=sample_times,
+        start_of_x=0.0,
+        end_of_x=660.0,
+        tp_alarm_timeindex=None,
+        tp_max_roast_time=120.0,
+        auto_charge_idx=1,
+        auto_charge_flag=True,
+        auto_charge_enabled=True,
+        auto_drop_idx=0,
+        auto_drop_flag=False,
+        auto_drop_enabled=True,
+        mode='C',
+    )
+
+    assert frame.events.turning_point_timeout_index == 2
+
+    phase_events = phase_event_candidates_after_turning_point(
+        auto_dry_flag=True,
+        auto_dry_enabled=True,
+        auto_fcs_flag=True,
+        auto_fcs_enabled=True,
+        tp_alarm_timeindex=frame.events.turning_point_timeout_index,
+        charge_index=1,
+        dry_index=0,
+        fcs_index=0,
+        fce_index=0,
+        latest_bt=201.0,
+        dry_phase_temperature=150.0,
+        fcs_phase_temperature=196.0,
+    )
+
+    assert phase_events.dry_candidate
+    assert phase_events.fcs_candidate

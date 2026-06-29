@@ -24,6 +24,37 @@ class PreviousReadings:
     previous: float | None
 
 
+@dataclass(frozen=True)
+class AutoEventDecisions:
+    charge_candidate: bool
+    turning_point_timeout_index: int | None
+    turning_point_check_candidate: bool
+    drop_candidate: bool
+
+
+@dataclass(frozen=True)
+class PhaseEventDecisions:
+    dry_candidate: bool
+    fcs_candidate: bool
+
+
+@dataclass(frozen=True)
+class ProcessedSampleFrame:
+    timestamp: float
+    sample_count: int
+    latest_et: float
+    latest_bt: float
+    smoothed_et: TemperatureValue
+    smoothed_bt: TemperatureValue
+    pid_process_value: TemperatureValue
+    displayed_delta_et: TemperatureValue
+    displayed_delta_bt: TemperatureValue
+    delta_et_window: tuple[int, int] | None
+    delta_bt_window: tuple[int, int] | None
+    live_x_axis_extension_end: float | None
+    events: AutoEventDecisions
+
+
 def decay_weight_sequence(curve_filter: int) -> tuple[int, ...]:
     if curve_filter <= 0:
         return (1,)
@@ -434,16 +465,174 @@ def ror_curve_window(
     return ror_start, ror_end
 
 
+def build_live_processed_sample_frame(
+        timestamp: float,
+        sample_count: int,
+        latest_et: float,
+        latest_bt: float,
+        smoothed_et: TemperatureValue,
+        smoothed_bt: TemperatureValue,
+        pid_process_value: TemperatureValue,
+        raw_delta_et: TemperatureValue,
+        raw_delta_bt: TemperatureValue,
+        ror_limit_enabled: bool,
+        max_ror_limit: float,
+        ror_limit: float,
+        ror_limit_min: float,
+        charge_index: int,
+        dry_index: int,
+        drop_index: int,
+        delta_et_filter: float,
+        delta_bt_filter: float,
+        delta_et_samples: int,
+        delta_bt_samples: int,
+        fix_max_time: bool,
+        lock_time_x: bool,
+        sample_times: Sequence[float],
+        start_of_x: float,
+        end_of_x: float,
+        tp_alarm_timeindex: int | None,
+        tp_max_roast_time: float,
+        auto_charge_idx: int,
+        auto_charge_flag: bool,
+        auto_charge_enabled: bool,
+        auto_drop_idx: int,
+        auto_drop_flag: bool,
+        auto_drop_enabled: bool,
+        mode: str,
+        ) -> ProcessedSampleFrame:
+    events = AutoEventDecisions(
+        charge_candidate=auto_charge_event_candidate(
+            auto_charge_idx,
+            auto_charge_flag,
+            auto_charge_enabled,
+            charge_index,
+            sample_count,
+            mode,
+            latest_bt,
+        ),
+        turning_point_timeout_index=turning_point_timeout_index(
+            tp_alarm_timeindex,
+            charge_index,
+            sample_times,
+            tp_max_roast_time,
+            sample_count,
+        ),
+        turning_point_check_candidate=turning_point_check_candidate(
+            tp_alarm_timeindex,
+            charge_index,
+            dry_index,
+            sample_count,
+        ),
+        drop_candidate=auto_drop_event_candidate(
+            auto_drop_idx,
+            auto_drop_flag,
+            auto_drop_enabled,
+            charge_index,
+            drop_index,
+            sample_count,
+            mode,
+            latest_bt,
+            sample_times,
+        ),
+    )
+    return ProcessedSampleFrame(
+        timestamp=timestamp,
+        sample_count=sample_count,
+        latest_et=latest_et,
+        latest_bt=latest_bt,
+        smoothed_et=smoothed_et,
+        smoothed_bt=smoothed_bt,
+        pid_process_value=pid_process_value,
+        displayed_delta_et=displayed_ror_value(
+            raw_delta_et,
+            ror_limit_enabled,
+            max_ror_limit,
+            ror_limit,
+            ror_limit_min,
+        ),
+        displayed_delta_bt=displayed_ror_value(
+            raw_delta_bt,
+            ror_limit_enabled,
+            max_ror_limit,
+            ror_limit,
+            ror_limit_min,
+        ),
+        delta_et_window=ror_curve_window(
+            charge_index,
+            drop_index,
+            sample_count,
+            delta_et_filter,
+            delta_et_samples,
+        ),
+        delta_bt_window=ror_curve_window(
+            charge_index,
+            drop_index,
+            sample_count,
+            delta_bt_filter,
+            delta_bt_samples,
+        ),
+        live_x_axis_extension_end=live_x_axis_extension_end(
+            fix_max_time,
+            lock_time_x,
+            charge_index,
+            sample_times,
+            start_of_x,
+            end_of_x,
+        ),
+        events=events,
+    )
+
+
+def phase_event_candidates_after_turning_point(
+        auto_dry_flag: bool,
+        auto_dry_enabled: bool,
+        auto_fcs_flag: bool,
+        auto_fcs_enabled: bool,
+        tp_alarm_timeindex: int | None,
+        charge_index: int,
+        dry_index: int,
+        fcs_index: int,
+        fce_index: int,
+        latest_bt: float,
+        dry_phase_temperature: float,
+        fcs_phase_temperature: float) -> PhaseEventDecisions:
+    return PhaseEventDecisions(
+        dry_candidate=auto_dry_event_candidate(
+            auto_dry_flag,
+            auto_dry_enabled,
+            tp_alarm_timeindex,
+            charge_index,
+            dry_index,
+            fcs_index,
+            latest_bt,
+            dry_phase_temperature,
+        ),
+        fcs_candidate=auto_fcs_event_candidate(
+            auto_fcs_flag,
+            auto_fcs_enabled,
+            tp_alarm_timeindex,
+            charge_index,
+            fcs_index,
+            fce_index,
+            latest_bt,
+            fcs_phase_temperature,
+        ),
+    )
+
+
 __all__ = [
     'alarm_is_eligible_for_evaluation',
     'alarm_source_value',
     'alarm_temperature_reaches_limit',
     'alarm_time_offset_reached',
+    'AutoEventDecisions',
     'auto_charge_event_candidate',
     'auto_drop_event_candidate',
     'auto_dry_event_candidate',
     'auto_fcs_event_candidate',
     'BackfillUpdate',
+    'build_live_processed_sample_frame',
     'connected_curve_point',
     'ConnectedCurvePoint',
     'decay_weight_sequence',
@@ -453,8 +642,11 @@ __all__ = [
     'input_filter_previous_values',
     'live_x_axis_extension_end',
     'manual_x_axis_extension_end',
+    'PhaseEventDecisions',
+    'phase_event_candidates_after_turning_point',
     'pid_process_value',
     'PreviousReadings',
+    'ProcessedSampleFrame',
     'relative_alarm_index',
     'ror_curve_window',
     'smoothing_weights_for_recent_readings',
