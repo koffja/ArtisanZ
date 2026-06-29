@@ -33,7 +33,7 @@ Important observations from the code review:
 | --- | --- | --- | --- | --- |
 | 0 | Performance Baseline and Risk Map | Profile + simulator smoke baselines captured | Timing probes, benchmark workflow, baseline report | We know whether rendering, GUI-thread processing, locks, or device sampling dominate latency |
 | 1 | Widgets Visual Modernization | Main-screen first pass captured | Modern theme tokens and refreshed main roast screen styling | Main screen looks modern while behavior and settings compatibility remain intact |
-| 2 | Plot Renderer Boundary and PyQtGraph POC | Not started | Read-only plot snapshot model, Matplotlib adapter, PyQtGraph live adapter prototype | POC is faster or visually/maintainably superior under Phase 0 benchmarks |
+| 2 | Plot Renderer Boundary and PyQtGraph POC | Boundary contract started | Read-only plot snapshot model, Matplotlib adapter, PyQtGraph live adapter prototype | POC is faster or visually/maintainably superior under Phase 0 benchmarks |
 | 3 | Sampling Post-Processing Decoupling | Not started | Pure data pipeline for filtering, RoR, PID inputs, alarm/event decisions | GUI thread consumes snapshots instead of doing heavy processing inline |
 | 4 | Main UI Information Architecture | Not started | Scenario-oriented Roast Control, QC Analysis, and Device Setup workspaces | Users can switch task modes without losing existing expert controls |
 | 5 | Local QML Islands | Not started | A limited Qt Quick panel or dashboard backed by Python state models | QML proves useful without breaking packaging, translations, or Windows portable build |
@@ -88,6 +88,8 @@ Important observations from the code review:
 ## Phase 2: Plot Renderer Boundary and PyQtGraph POC
 
 **Goal:** Make the live plot renderer replaceable without forcing a full Matplotlib rewrite.
+
+**Started:** 2026-06-29 with a data-only `plot_snapshot.py` contract. This does not change runtime plotting behavior yet; it prepares a stable renderer-facing surface before Matplotlib adapter or PyQtGraph POC work.
 
 **Candidate Work:**
 
