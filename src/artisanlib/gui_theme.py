@@ -21,6 +21,23 @@ class ModernTheme:
     success: str = '#4f7f58'
 
 
+def lcd_value_stylesheet(text_color: str, background_color: str) -> str:
+    return (
+        'QLCDNumber { '
+        'border-width: 0px; '
+        'border-style: solid; '
+        'border-color: transparent; '
+        'border-radius: 0px; '
+        'border-top-left-radius: 0px; '
+        'border-top-right-radius: 0px; '
+        'border-bottom-left-radius: 5px; '
+        'border-bottom-right-radius: 5px; '
+        f'color: {text_color}; '
+        f'background-color: {background_color};'
+        '}'
+    )
+
+
 def modern_application_stylesheet(theme: ModernTheme | None = None) -> str:
     t = ModernTheme() if theme is None else theme
     return f"""
@@ -75,10 +92,17 @@ def modern_application_stylesheet(theme: ModernTheme | None = None) -> str:
             border: 1px solid {t.border};
             border-radius: 6px;
         }}
-        QLCDNumber[lcdSurface="true"] {{
-            border: 1px solid {t.border};
-            border-radius: 6px;
+        QLCDNumber[lcdValue="true"] {{
+            border-width: 0px;
+            border-style: solid;
+            border-color: transparent;
+            border-radius: 0px;
+            border-top-left-radius: 0px;
+            border-top-right-radius: 0px;
+            border-bottom-left-radius: 5px;
+            border-bottom-right-radius: 5px;
             padding: 2px;
+            margin-bottom: 0px;
         }}
         QLabel[lcdLabel="true"] {{
             color: {t.text_muted};

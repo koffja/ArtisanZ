@@ -53,3 +53,10 @@ ARTISANZ_GUI_PERF=1 ARTISANZ_GUI_PERF_AUTORUN=1 ARTISANZ_GUI_PERF_AUTORUN_ITERAT
 - Profile-loaded metrics after event/LCD styling: `updateBackground max=156.639ms avg=65.746ms`; `redraw max=138.665ms avg=84.735ms`; `redraw_keep_view max=127.508ms avg=81.386ms`; `updategraphics max=0.007ms avg=0.002ms`.
 - OFF metrics: `redraw max=95.335ms avg=81.990ms`; `updateBackground max=83.124ms avg=55.925ms`; `redraw_keep_view max=76.211ms avg=73.894ms`; `updategraphics max=0.006ms avg=0.002ms`.
 - Screenshot review: no obvious overlap or text clipping in the 800x533 offscreen main-window capture. Event buttons use flat states; LCD side panels have clearer surface boundaries.
+
+## 2026-06-29 LCD Value Surface Correction
+
+- Fixed nested LCD value surfaces so the inner numeric display uses square top corners and rounded bottom corners.
+- Aligned the inner LCD value display with the bottom of the outer LCD frame by removing the frame's bottom content gap.
+- Added `lcd_value_stylesheet()` and focused tests to prevent the older `border-radius:4` inline LCD styles from returning in color refresh paths.
+- START-state screenshot reviewed at `/tmp/artisanz-lcd-fix.png`.

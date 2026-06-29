@@ -1738,7 +1738,10 @@ class TestMakeLCDbox:
         assert margins.left() == 0
         assert margins.top() == 10
         assert margins.right() == 0
-        assert margins.bottom() == 3
+        assert margins.bottom() == 0
+        assert label.property('lcdLabel') is True
+        assert lcd.property('lcdValue') is True
+        assert lcdframe.property('lcdSurface') is True
 
     def test_makeLCDbox_layout_properties(self) -> None:
         """Test makeLCDbox sets correct layout properties."""

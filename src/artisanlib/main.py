@@ -24,7 +24,7 @@ startup_time = libtime.process_time()
 from artisanlib import __version__, __revision__, __build__, __signature__, __release_sponsor_name__
 from artisanlib.charge_manager import ChargeTargetManager
 from artisanlib.charge_dialog import ChargeTempRorDlg
-from artisanlib.gui_theme import modern_application_stylesheet
+from artisanlib.gui_theme import lcd_value_stylesheet, modern_application_stylesheet
 from artisanlib.performance import export_gui_perf_metrics
 
 
@@ -3426,13 +3426,13 @@ class ApplicationWindow(QMainWindow):
         self.lcd6.display(zz)
         self.lcd7.display(zz)
 
-        self.lcd1.setStyleSheet(f"QLCDNumber {{ border-radius: 4; color: {rgba_colorname2argb_colorname(self.lcdpaletteF['timer'])}; background-color: {rgba_colorname2argb_colorname(self.lcdpaletteB['timer'])};}}")
-        self.lcd2.setStyleSheet(f"QLCDNumber {{ border-radius: 4; color: {rgba_colorname2argb_colorname(self.lcdpaletteF['et'])}; background-color: {rgba_colorname2argb_colorname(self.lcdpaletteB['et'])};}}")
-        self.lcd3.setStyleSheet(f"QLCDNumber {{ border-radius: 4; color: {rgba_colorname2argb_colorname(self.lcdpaletteF['bt'])}; background-color: {rgba_colorname2argb_colorname(self.lcdpaletteB['bt'])};}}")
-        self.lcd4.setStyleSheet(f"QLCDNumber {{ border-radius: 4; color: {rgba_colorname2argb_colorname(self.lcdpaletteF['deltaet'])}; background-color: {rgba_colorname2argb_colorname(self.lcdpaletteB['deltaet'])};}}")
-        self.lcd5.setStyleSheet(f"QLCDNumber {{ border-radius: 4; color: {rgba_colorname2argb_colorname(self.lcdpaletteF['deltabt'])}; background-color: {rgba_colorname2argb_colorname(self.lcdpaletteB['deltabt'])};}}")
-        self.lcd6.setStyleSheet(f"QLCDNumber {{ border-radius: 4; color: {rgba_colorname2argb_colorname(self.lcdpaletteF['sv'])}; background-color: {rgba_colorname2argb_colorname(self.lcdpaletteB['sv'])};}}")
-        self.lcd7.setStyleSheet(f"QLCDNumber {{ border-radius: 4; color: {rgba_colorname2argb_colorname(self.lcdpaletteF['sv'])}; background-color: {rgba_colorname2argb_colorname(self.lcdpaletteB['sv'])};}}")
+        self.lcd1.setStyleSheet(self.lcdValueStyle('timer'))
+        self.lcd2.setStyleSheet(self.lcdValueStyle('et'))
+        self.lcd3.setStyleSheet(self.lcdValueStyle('bt'))
+        self.lcd4.setStyleSheet(self.lcdValueStyle('deltaet'))
+        self.lcd5.setStyleSheet(self.lcdValueStyle('deltabt'))
+        self.lcd6.setStyleSheet(self.lcdValueStyle('sv'))
+        self.lcd7.setStyleSheet(self.lcdValueStyle('sv'))
 
         self.lcd1.setToolTip(QApplication.translate('Tooltip', 'Timer'))
         self.lcd2.setToolTip(QApplication.translate('Tooltip', 'ET Temperature'))
@@ -3517,8 +3517,8 @@ class ApplicationWindow(QMainWindow):
             self.extraLCDframe2[i].customContextMenuRequested.connect(self.setTare_slot)
             self.extraLCDframe2[i].left_clicked.connect(self.toggleExtraCurve2)
             self.extraLCDframe2[i].setVisible(False)
-            self.extraLCD1[i].setStyleSheet(f"QLCDNumber {{ border-radius: 4; color: {rgba_colorname2argb_colorname(self.lcdpaletteF['sv'])}; background-color: {rgba_colorname2argb_colorname(self.lcdpaletteB['sv'])};}}")
-            self.extraLCD2[i].setStyleSheet(f"QLCDNumber {{ border-radius: 4; color: {rgba_colorname2argb_colorname(self.lcdpaletteF['sv'])}; background-color: {rgba_colorname2argb_colorname(self.lcdpaletteB['sv'])};}}")
+            self.extraLCD1[i].setStyleSheet(self.lcdValueStyle('sv'))
+            self.extraLCD2[i].setStyleSheet(self.lcdValueStyle('sv'))
             #configure Labels
             self.extraLCDlabel1[i].setSizePolicy(QSizePolicy.Policy.Preferred,QSizePolicy.Policy.Preferred)
             self.extraLCDlabel2[i].setSizePolicy(QSizePolicy.Policy.Preferred,QSizePolicy.Policy.Preferred)
@@ -4748,7 +4748,7 @@ class ApplicationWindow(QMainWindow):
     # timer_color one of "timer" (black), "slowcoolingtimer" (red), "rstimer" (blue)
     @pyqtSlot(str)
     def setTimerColor(self, timer_color:str) -> None:
-        self.lcd1.setStyleSheet(f'QLCDNumber {{ border-radius: 4; color: {rgba_colorname2argb_colorname(self.lcdpaletteF[timer_color])}; background-color: {rgba_colorname2argb_colorname(self.lcdpaletteB[timer_color])};}}')
+        self.lcd1.setStyleSheet(self.lcdValueStyle(timer_color))
         self.qmc.setTimerLargeLCDcolorSignal.emit(self.lcdpaletteF[timer_color], self.lcdpaletteB[timer_color])
 
     @override
@@ -6465,17 +6465,17 @@ class ApplicationWindow(QMainWindow):
         self.lcdpaletteB['slowcoolingtimer'] = '#000000'
         self.lcdpaletteF['slowcoolingtimer'] = '#ffffff'
         self.setTimerColorSignal.emit('timer')
-        self.lcd2.setStyleSheet(f"QLCDNumber {{ border-radius: 4; color: {rgba_colorname2argb_colorname(self.lcdpaletteF['et'])}; background-color: {rgba_colorname2argb_colorname(self.lcdpaletteB['et'])};}}")
+        self.lcd2.setStyleSheet(self.lcdValueStyle('et'))
         self.setLabelColor(self.label2,self.qmc.palette['et'], self.qmc.ETcurve)
-        self.lcd3.setStyleSheet(f"QLCDNumber {{ border-radius: 4; color: {rgba_colorname2argb_colorname(self.lcdpaletteF['bt'])}; background-color: {rgba_colorname2argb_colorname(self.lcdpaletteB['bt'])};}}")
+        self.lcd3.setStyleSheet(self.lcdValueStyle('bt'))
         self.setLabelColor(self.label3,self.qmc.palette['bt'], self.qmc.BTcurve)
-        self.lcd4.setStyleSheet(f"QLCDNumber {{ border-radius: 4; color: {rgba_colorname2argb_colorname(self.lcdpaletteF['deltaet'])}; background-color: {rgba_colorname2argb_colorname(self.lcdpaletteB['deltaet'])};}}")
+        self.lcd4.setStyleSheet(self.lcdValueStyle('deltaet'))
         self.setLabelColor(self.label4,self.qmc.palette['deltaet'],self.qmc.DeltaETflag)
-        self.lcd5.setStyleSheet(f"QLCDNumber {{ border-radius: 4; color: {rgba_colorname2argb_colorname(self.lcdpaletteF['deltabt'])}; background-color: {rgba_colorname2argb_colorname(self.lcdpaletteB['deltabt'])};}}")
+        self.lcd5.setStyleSheet(self.lcdValueStyle('deltabt'))
         self.setLabelColor(self.label5,self.qmc.palette['deltabt'],self.qmc.DeltaBTflag)
-        self.lcd6.setStyleSheet(f"QLCDNumber {{ border-radius: 4; color: {rgba_colorname2argb_colorname(self.lcdpaletteF['sv'])}; background-color: {rgba_colorname2argb_colorname(self.lcdpaletteB['sv'])};}}")
+        self.lcd6.setStyleSheet(self.lcdValueStyle('sv'))
         # label always black?
-        self.lcd7.setStyleSheet(f"QLCDNumber {{ border-radius: 4; color: {rgba_colorname2argb_colorname(self.lcdpaletteF['sv'])}; background-color: {rgba_colorname2argb_colorname(self.lcdpaletteB['sv'])};}}")
+        self.lcd7.setStyleSheet(self.lcdValueStyle('sv'))
         self.updateLCDproperties()
 
     # switches slider layout to its alternative layout if 'alternativeLayout' is True,
@@ -7766,6 +7766,11 @@ class ApplicationWindow(QMainWindow):
             lcd.setMaximumWidth(3*x)
         return lcd
 
+    def lcdValueStyle(self, palette_key:str) -> str:
+        return lcd_value_stylesheet(
+            rgba_colorname2argb_colorname(self.lcdpaletteF[palette_key]),
+            rgba_colorname2argb_colorname(self.lcdpaletteB[palette_key]))
+
     def releaseSliderFocus(self) -> None:
         for s in [self.slider1,self.slider2,self.slider3,self.slider4]:
             s.releaseKeyboard()
@@ -8414,7 +8419,7 @@ class ApplicationWindow(QMainWindow):
     @staticmethod
     def makeLCDbox(label:QLabel, lcd:MyQLCDNumber, lcdframe:QFrame) -> QFrame:
         label.setProperty('lcdLabel', True)
-        lcd.setProperty('lcdSurface', True)
+        lcd.setProperty('lcdValue', True)
         lcdframe.setProperty('lcdSurface', True)
         LCDbox = QVBoxLayout()
         LCDbox.setSizeConstraint(QLayout.SizeConstraint.SetFixedSize)
@@ -8426,7 +8431,7 @@ class ApplicationWindow(QMainWindow):
         LCDbox.addLayout(LCDhBox)
         LCDhBox.setContentsMargins(0, 0, 0, 0)
         LCDbox.setContentsMargins(0, 0, 0, 0)
-        lcdframe.setContentsMargins(0, 10, 0, 3)
+        lcdframe.setContentsMargins(0, 10, 0, 0)
         lcdframe.setLayout(LCDbox)
         return lcdframe
 
@@ -12088,13 +12093,13 @@ class ApplicationWindow(QMainWindow):
                     l1 = '<b>' + self.qmc.device_name_subst(self.qmc.extraname1[i]) + '</b>'
                     self.extraLCDlabel1[i].setText(l1)
                     self.setLabelColor(self.extraLCDlabel1[i],self.qmc.extradevicecolor1[i], self.extraCurveVisibility1[i])
-                self.extraLCD1[i].setStyleSheet(f"QLCDNumber {{ border-radius:4; color: {rgba_colorname2argb_colorname(self.lcdpaletteF['sv'])}; background-color: {rgba_colorname2argb_colorname(self.lcdpaletteB['sv'])};}}")
+                self.extraLCD1[i].setStyleSheet(self.lcdValueStyle('sv'))
                 self.extraLCDframe2[i].setVisible(bool(self.extraLCDvisibility2[i]))
                 if i < len(self.qmc.extraname2):
                     l2 = '<b>' + self.qmc.device_name_subst(self.qmc.extraname2[i]) + '</b>'
                     self.extraLCDlabel2[i].setText(l2)
                     self.setLabelColor(self.extraLCDlabel2[i],self.qmc.extradevicecolor2[i], self.extraCurveVisibility2[i])
-                self.extraLCD2[i].setStyleSheet(f"QLCDNumber {{ border-radius:4; color: {rgba_colorname2argb_colorname(self.lcdpaletteF['sv'])}; background-color: {rgba_colorname2argb_colorname(self.lcdpaletteB['sv'])};}}")
+                self.extraLCD2[i].setStyleSheet(self.lcdValueStyle('sv'))
         #hide the rest (just in case)
         for i in range(ndev,self.nLCDS):
             self.extraLCDframe1[i].setVisible(False)
@@ -18499,13 +18504,13 @@ class ApplicationWindow(QMainWindow):
                 for (k, v) in list(settings.value('Alphas').items()):
                     self.qmc.alpha[str(k)] = v
             #restore colors
-            self.lcd1.setStyleSheet(f"QLCDNumber {{ border-radius:4; color: {rgba_colorname2argb_colorname(self.lcdpaletteF['timer'])}; background: {rgba_colorname2argb_colorname(self.lcdpaletteB['timer'])};}}")
-            self.lcd2.setStyleSheet(f"QLCDNumber {{ border-radius:4; color: {rgba_colorname2argb_colorname(self.lcdpaletteF['et'])}; background: {rgba_colorname2argb_colorname(self.lcdpaletteB['et'])};}}")
-            self.lcd3.setStyleSheet(f"QLCDNumber {{ border-radius:4; color: {rgba_colorname2argb_colorname(self.lcdpaletteF['bt'])}; background: {rgba_colorname2argb_colorname(self.lcdpaletteB['bt'])};}}")
-            self.lcd4.setStyleSheet(f"QLCDNumber {{ border-radius:4; color: {rgba_colorname2argb_colorname(self.lcdpaletteF['deltaet'])}; background: {rgba_colorname2argb_colorname(self.lcdpaletteB['deltaet'])};}}")
-            self.lcd5.setStyleSheet(f"QLCDNumber {{ border-radius:4; color: {rgba_colorname2argb_colorname(self.lcdpaletteF['deltabt'])}; background: {rgba_colorname2argb_colorname(self.lcdpaletteB['deltabt'])};}}")
-            self.lcd6.setStyleSheet(f"QLCDNumber {{ border-radius:4; color: {rgba_colorname2argb_colorname(self.lcdpaletteF['sv'])}; background: {rgba_colorname2argb_colorname(self.lcdpaletteB['sv'])};}}")
-            self.lcd7.setStyleSheet(f"QLCDNumber {{ border-radius:4; color: {rgba_colorname2argb_colorname(self.lcdpaletteF['sv'])}; background: {rgba_colorname2argb_colorname(self.lcdpaletteB['sv'])};}}")
+            self.lcd1.setStyleSheet(self.lcdValueStyle('timer'))
+            self.lcd2.setStyleSheet(self.lcdValueStyle('et'))
+            self.lcd3.setStyleSheet(self.lcdValueStyle('bt'))
+            self.lcd4.setStyleSheet(self.lcdValueStyle('deltaet'))
+            self.lcd5.setStyleSheet(self.lcdValueStyle('deltabt'))
+            self.lcd6.setStyleSheet(self.lcdValueStyle('sv'))
+            self.lcd7.setStyleSheet(self.lcdValueStyle('sv'))
             self.readingslcdsflags = [toInt(x) for x in toList(settings.value('readingslcdsflags',self.readingslcdsflags))]
             self.controlsflags = [toInt(x) for x in toList(settings.value('controlsflags',self.controlsflags))]
             #restore flavors
