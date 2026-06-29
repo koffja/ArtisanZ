@@ -7,6 +7,7 @@ from artisanlib.sample_processing import (
     alarm_source_value,
     alarm_temperature_reaches_limit,
     alarm_time_offset_reached,
+    evaluate_alarm_triggers,
     auto_charge_event_candidate,
     auto_drop_event_candidate,
     auto_dry_event_candidate,
@@ -809,6 +810,125 @@ def test_alarm_time_offset_reached_subtracts_tp_and_if_alarm_indexes() -> None:
         alarm_states=[3],
         alarm_guard=0,
     )
+
+
+def test_evaluate_alarm_triggers_updates_guard_state_between_rules() -> None:
+    alarm_states = [-1, -1]
+
+    triggers = evaluate_alarm_triggers(
+        alarm_flags=[True, True],
+        alarm_states=alarm_states,
+        alarm_guards=[-1, 0],
+        alarm_negative_guards=[-1, -1],
+        alarm_times=[9, 10],
+        alarm_offsets=[1.0, 0.0],
+        alarm_sources=[0, 0],
+        alarm_conditions=[1, 2],
+        alarm_temperatures=[999.0, 0.0],
+        local_flagstart=False,
+        timeindex=[-1, 0, 0],
+        tp_alarm_timeindex=None,
+        elapsed_time=2.0,
+        sample_timex=[0.0, 10.0, 20.0],
+        sample_delta1=[],
+        sample_delta2=[],
+        sample_temp1=[100.0, 120.0, 150.0],
+        sample_temp2=[101.0, 121.0, 151.0],
+        sample_extratemp1=[],
+        sample_extratemp2=[],
+        extra_device_count=0,
+        trigger_state_index=2,
+    )
+
+    assert [(trigger.alarm_index, trigger.state_index) for trigger in triggers] == [(0, 2), (1, 2)]
+    assert alarm_states == [-1, -1]
+
+
+def test_evaluate_alarm_triggers_returns_temperature_and_extra_device_triggers() -> None:
+    triggers = evaluate_alarm_triggers(
+        alarm_flags=[1, 1],
+        alarm_states=[-1, -1],
+        alarm_guards=[-1, -1],
+        alarm_negative_guards=[-1, -1],
+        alarm_times=[9, 9],
+        alarm_offsets=[0.0, 0.0],
+        alarm_sources=[1, 3],
+        alarm_conditions=[1, 1],
+        alarm_temperatures=[180.0, 250.0],
+        local_flagstart=False,
+        timeindex=[-1, 0, 0],
+        tp_alarm_timeindex=None,
+        elapsed_time=0.0,
+        sample_timex=[0.0],
+        sample_delta1=[],
+        sample_delta2=[],
+        sample_temp1=[160.0],
+        sample_temp2=[181.0],
+        sample_extratemp1=[[240.0]],
+        sample_extratemp2=[[251.0]],
+        extra_device_count=1,
+        trigger_state_index=-4,
+    )
+
+    assert [(trigger.alarm_index, trigger.state_index) for trigger in triggers] == [(0, 0), (1, 0)]
+
+
+def test_evaluate_alarm_triggers_keeps_earlier_trigger_when_later_row_is_incomplete() -> None:
+    triggers = evaluate_alarm_triggers(
+        alarm_flags=[1, 1],
+        alarm_states=[-1, -1],
+        alarm_guards=[-1],
+        alarm_negative_guards=[-1, -1],
+        alarm_times=[9, 9],
+        alarm_offsets=[1.0, 0.0],
+        alarm_sources=[0, 0],
+        alarm_conditions=[1, 1],
+        alarm_temperatures=[999.0, 0.0],
+        local_flagstart=False,
+        timeindex=[-1, 0, 0],
+        tp_alarm_timeindex=None,
+        elapsed_time=2.0,
+        sample_timex=[0.0],
+        sample_delta1=[],
+        sample_delta2=[],
+        sample_temp1=[150.0],
+        sample_temp2=[151.0],
+        sample_extratemp1=[],
+        sample_extratemp2=[],
+        extra_device_count=0,
+        trigger_state_index=3,
+    )
+
+    assert [(trigger.alarm_index, trigger.state_index) for trigger in triggers] == [(0, 3)]
+
+
+def test_evaluate_alarm_triggers_applies_negative_guard_after_same_pass_trigger() -> None:
+    triggers = evaluate_alarm_triggers(
+        alarm_flags=[1, 1],
+        alarm_states=[-1, -1],
+        alarm_guards=[-1, -1],
+        alarm_negative_guards=[-1, 0],
+        alarm_times=[9, 9],
+        alarm_offsets=[1.0, 1.0],
+        alarm_sources=[0, 0],
+        alarm_conditions=[1, 1],
+        alarm_temperatures=[999.0, 999.0],
+        local_flagstart=False,
+        timeindex=[-1, 0, 0],
+        tp_alarm_timeindex=None,
+        elapsed_time=2.0,
+        sample_timex=[0.0],
+        sample_delta1=[],
+        sample_delta2=[],
+        sample_temp1=[150.0],
+        sample_temp2=[151.0],
+        sample_extratemp1=[],
+        sample_extratemp2=[],
+        extra_device_count=0,
+        trigger_state_index=4,
+    )
+
+    assert [(trigger.alarm_index, trigger.state_index) for trigger in triggers] == [(0, 4)]
 
 
 def test_auto_charge_event_candidate_applies_celsius_and_fahrenheit_thresholds() -> None:

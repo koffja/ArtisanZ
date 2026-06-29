@@ -25,6 +25,12 @@ class PreviousReadings:
 
 
 @dataclass(frozen=True)
+class AlarmTrigger:
+    alarm_index: int
+    state_index: int
+
+
+@dataclass(frozen=True)
 class AutoEventDecisions:
     charge_candidate: bool
     turning_point_timeout_index: int | None
@@ -302,6 +308,120 @@ def alarm_time_offset_reached(
     elif local_flagstart and alarm_time == 10:
         alarm_time_value -= sample_timex[alarm_states[alarm_guard]]
     return alarm_time_value >= alarm_offset
+
+
+def evaluate_alarm_triggers(
+        alarm_flags: Sequence[int | bool],
+        alarm_states: Sequence[int],
+        alarm_guards: Sequence[int],
+        alarm_negative_guards: Sequence[int],
+        alarm_times: Sequence[int],
+        alarm_offsets: Sequence[float],
+        alarm_sources: Sequence[int],
+        alarm_conditions: Sequence[int],
+        alarm_temperatures: Sequence[float],
+        local_flagstart: bool,
+        timeindex: Sequence[int],
+        tp_alarm_timeindex: int | None,
+        elapsed_time: float,
+        sample_timex: Sequence[float],
+        sample_delta1: Sequence[TemperatureValue],
+        sample_delta2: Sequence[TemperatureValue],
+        sample_temp1: Sequence[float],
+        sample_temp2: Sequence[float],
+        sample_extratemp1: Sequence[Sequence[float]],
+        sample_extratemp2: Sequence[Sequence[float]],
+        extra_device_count: int,
+        trigger_state_index: int) -> tuple[AlarmTrigger, ...]:
+    current_states = list(alarm_states)
+    state_index = max(0, trigger_state_index)
+    triggers: list[AlarmTrigger] = []
+
+    for i, aflag in enumerate(alarm_flags):
+        if not _alarm_row_is_complete(
+                i,
+                current_states,
+                alarm_guards,
+                alarm_negative_guards,
+                alarm_times,
+                alarm_offsets,
+                alarm_sources,
+                alarm_conditions,
+                alarm_temperatures):
+            continue
+        alarm_ready = False
+        if alarm_is_eligible_for_evaluation(
+                aflag,
+                current_states[i],
+                alarm_guards[i],
+                alarm_negative_guards[i],
+                current_states,
+                alarm_times[i],
+                local_flagstart,
+                timeindex,
+                tp_alarm_timeindex):
+            if alarm_time_offset_reached(
+                    alarm_offsets[i],
+                    elapsed_time,
+                    alarm_times[i],
+                    local_flagstart,
+                    sample_timex,
+                    timeindex,
+                    tp_alarm_timeindex,
+                    current_states,
+                    alarm_guards[i]):
+                alarm_ready = True
+
+            alarm_idx: int | None = None
+            if alarm_times[i] == 10:
+                if_alarm_state = current_states[alarm_guards[i]]
+                alarm_idx = relative_alarm_index(alarm_times[i], if_alarm_state, len(sample_timex))
+
+            alarm_temp = alarm_source_value(
+                alarm_sources[i],
+                alarm_index=alarm_idx,
+                sample_delta1=sample_delta1,
+                sample_delta2=sample_delta2,
+                sample_temp1=sample_temp1,
+                sample_temp2=sample_temp2,
+                sample_extratemp1=sample_extratemp1,
+                sample_extratemp2=sample_extratemp2,
+                extra_device_count=extra_device_count,
+            )
+            if alarm_temperature_reaches_limit(
+                    alarm_temp,
+                    alarm_conditions[i],
+                    alarm_temperatures[i],
+                    alarm_idx):
+                alarm_ready = True
+
+        if alarm_ready:
+            current_states[i] = state_index
+            triggers.append(AlarmTrigger(i, state_index))
+
+    return tuple(triggers)
+
+
+def _alarm_row_is_complete(
+        index: int,
+        alarm_states: Sequence[int],
+        alarm_guards: Sequence[int],
+        alarm_negative_guards: Sequence[int],
+        alarm_times: Sequence[int],
+        alarm_offsets: Sequence[float],
+        alarm_sources: Sequence[int],
+        alarm_conditions: Sequence[int],
+        alarm_temperatures: Sequence[float]) -> bool:
+    return (
+        index < len(alarm_states) and
+        index < len(alarm_guards) and
+        index < len(alarm_negative_guards) and
+        index < len(alarm_times) and
+        index < len(alarm_offsets) and
+        index < len(alarm_sources) and
+        index < len(alarm_conditions) and
+        index < len(alarm_temperatures)
+    )
 
 
 def _bt_above_event_threshold(mode: str, latest_bt: float, celsius_threshold: float, fahrenheit_threshold: float) -> bool:
@@ -626,6 +746,7 @@ __all__ = [
     'alarm_source_value',
     'alarm_temperature_reaches_limit',
     'alarm_time_offset_reached',
+    'AlarmTrigger',
     'AutoEventDecisions',
     'auto_charge_event_candidate',
     'auto_drop_event_candidate',
@@ -638,6 +759,7 @@ __all__ = [
     'decay_weight_sequence',
     'delta_smoothing_filter_size',
     'displayed_ror_value',
+    'evaluate_alarm_triggers',
     'input_filter_backfill_updates',
     'input_filter_previous_values',
     'live_x_axis_extension_end',

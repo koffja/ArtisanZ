@@ -106,20 +106,16 @@ from matplotlib.colors import to_hex, to_rgba # type:ignore[untyped-import,unuse
 from artisanlib.performance import gui_perf_count, gui_perf_tracked
 from artisanlib.phidgets import PhidgetManager
 from artisanlib.sample_processing import (
-    alarm_is_eligible_for_evaluation,
-    alarm_source_value,
-    alarm_temperature_reaches_limit,
-    alarm_time_offset_reached,
     build_live_processed_sample_frame,
     connected_curve_point,
     decay_weight_sequence,
     delta_smoothing_filter_size,
+    evaluate_alarm_triggers,
     input_filter_backfill_updates,
     input_filter_previous_values,
     manual_x_axis_extension_end,
     phase_event_candidates_after_turning_point,
     pid_process_value,
-    relative_alarm_index,
     smoothing_weights_for_recent_readings,
     turning_point_temperature_is_valid,
 )
@@ -5245,88 +5241,38 @@ class tgraphcanvas(QObject):
                     #check for each alarm that was not yet triggered
                     try:
                         self.alarmSemaphore.acquire(1)
-                        for i, aflag in enumerate(self.alarmflag):
-                            alarm_ready:bool = False # set to true if alarm i is ready to be fired by either criteria, time or temp
-                            #if alarm on, and not triggered, and time is after set time:
-                            # menu: 0:ON, 1:START, 2:CHARGE, 3:TP, 4:DRY, 5:FCs, 6:FCe, 7:SCs, 8:SCe, 9:DROP, 10:COOL
-                            # qmc.alarmtime = -1 (None == START)
-                            # qmc.alarmtime = 0 (CHARGE)
-                            # qmc.alarmtime = 1 (DRY)
-                            # qmc.alarmtime = 2 (FCs)
-                            # qmc.alarmtime = 3 (FCe)
-                            # qmc.alarmtime = 4 (SCs)
-                            # qmc.alarmtime = 5 (SCe)
-                            # qmc.alarmtime = 6 (DROP)
-                            # qmc.alarmtime = 7 (COOL)
-                            # qmc.alarmtime = 8 (TP)
-                            # qmc.alarmtime = 9 (ON)
-                            # qmc.alamrtime = 10 (If Alarm)
-                            # Cases: (only between CHARGE and DRY we check for TP if alarmtime[i]=8)
-                            # 1) the alarm From is START
-                            # 2) the alarm was not triggered yet
-                            # 3) the alarm From is ON
-                            # 4) the alarm From is CHARGE
-                            # 5) the alarm From is any other event but TP
-                            # 6) the alarm From is TP, it is CHARGED and the TP pattern is recognized
-                            if alarm_is_eligible_for_evaluation(
-                                    aflag,
-                                    self.alarmstate[i],
-                                    self.alarmguard[i],
-                                    self.alarmnegguard[i],
-                                    self.alarmstate,
-                                    self.alarmtime[i],
-                                    local_flagstart,
-                                    self.timeindex,
-                                    self.TPalarmtimeindex):
-                                #########
-                                # check alarmoffset (time after From event):
-                                if alarm_time_offset_reached(
-                                        self.alarmoffset[i],
-                                        self.timeclock.elapsed()/1000.,
-                                        self.alarmtime[i],
-                                        local_flagstart,
-                                        sample_timex,
-                                        self.timeindex,
-                                        self.TPalarmtimeindex,
-                                        self.alarmstate,
-                                        self.alarmguard[i]):
-                                    alarm_ready = True
-                                #########
-                                # check alarmtemp:
-                                alarm_idx:int|None = None
-                                if self.alarmtime[i] == 10: # IF ALARM and only during recording as otherwise no data to refer to is available
-                                    # and this is a conditional alarm with alarm_time set to IF ALARM
-                                    if_alarm_state = self.alarmstate[self.alarmguard[i]] # reading when the IF ALARM triggered
-                                    alarm_idx = relative_alarm_index(self.alarmtime[i], if_alarm_state, len(sample_timex))
-                                    # we subtract the reading at alarm_idx from the current reading of the channel determined by alarmsource
-                                alarm_temp = alarm_source_value(
-                                    self.alarmsource[i],
-                                    alarm_index=alarm_idx,
-                                    sample_delta1=sample_delta1,
-                                    sample_delta2=sample_delta2,
-                                    sample_temp1=sample_temp1,
-                                    sample_temp2=sample_temp2,
-                                    sample_extratemp1=sample_extratemp1,
-                                    sample_extratemp2=sample_extratemp2,
-                                    extra_device_count=len(self.extradevices),
-                                )
-
-                                alarm_limit = self.alarmtemperature[i]
-
-                                if alarm_temperature_reaches_limit(
-                                        alarm_temp,
-                                        self.alarmcond[i],
-                                        alarm_limit,
-                                        alarm_idx):
-                                    alarm_ready = True
-                            if alarm_ready:
-                                # fire alarm i
-                                self.alarmstate[i] = max(0,len(self.timex) - 1) # we have to ensure that alarmstate of triggered alarms is never negative
-                                alarm_beep = len(self.alarmbeep) > i and self.alarmbeep[i] # beep?
-                                alarm_action = self.alarmaction[i]
-                                alarm_string = self.alarmstrings[i]
-                                self.processAlarmSignal.emit(i+1,alarm_beep,alarm_action,alarm_string)
-                                _log.debug('alarm %s fired',i+1)
+                        alarm_triggers = evaluate_alarm_triggers(
+                            self.alarmflag,
+                            self.alarmstate,
+                            self.alarmguard,
+                            self.alarmnegguard,
+                            self.alarmtime,
+                            self.alarmoffset,
+                            self.alarmsource,
+                            self.alarmcond,
+                            self.alarmtemperature,
+                            local_flagstart,
+                            self.timeindex,
+                            self.TPalarmtimeindex,
+                            self.timeclock.elapsed()/1000.,
+                            sample_timex,
+                            sample_delta1,
+                            sample_delta2,
+                            sample_temp1,
+                            sample_temp2,
+                            sample_extratemp1,
+                            sample_extratemp2,
+                            len(self.extradevices),
+                            len(self.timex) - 1,
+                        )
+                        for alarm_trigger in alarm_triggers:
+                            i = alarm_trigger.alarm_index
+                            self.alarmstate[i] = alarm_trigger.state_index # we have to ensure that alarmstate of triggered alarms is never negative
+                            alarm_beep = len(self.alarmbeep) > i and self.alarmbeep[i] # beep?
+                            alarm_action = self.alarmaction[i]
+                            alarm_string = self.alarmstrings[i]
+                            self.processAlarmSignal.emit(i+1,alarm_beep,alarm_action,alarm_string)
+                            _log.debug('alarm %s fired',i+1)
                     except Exception as e: # pylint: disable=broad-except
                         _log.exception(e)
                     finally:
