@@ -11,6 +11,7 @@ from artisanlib.sample_processing import (
     auto_drop_event_candidate,
     auto_dry_event_candidate,
     auto_fcs_event_candidate,
+    connected_curve_point,
     decay_weight_sequence,
     delta_smoothing_filter_size,
     displayed_ror_value,
@@ -54,6 +55,32 @@ def test_smoothing_weights_disable_smoothing_when_recent_window_has_dropout() ->
 
 def test_smoothing_weights_keep_decay_weights_for_empty_readings() -> None:
     assert smoothing_weights_for_recent_readings([], (1, 2), 2) == (1, 2)
+
+
+def test_connected_curve_point_appends_valid_reading() -> None:
+    point = connected_curve_point(181.5, [178.0, 181.5], interpolate_max=2)
+
+    assert point.should_append
+    assert point.value == 181.5
+
+
+def test_connected_curve_point_skips_short_dropout_gap() -> None:
+    point = connected_curve_point(-1.0, [178.0, -1.0, -1.0], interpolate_max=2)
+
+    assert not point.should_append
+    assert point.value is None
+
+
+def test_connected_curve_point_appends_disconnect_marker_after_long_dropout_gap() -> None:
+    point = connected_curve_point(-1.0, [178.0, -1.0, -1.0, -1.0], interpolate_max=2)
+
+    assert point.should_append
+    assert point.value is None
+
+
+def test_connected_curve_point_matches_post_append_readings_semantics() -> None:
+    assert connected_curve_point(-1.0, [100.0, -1.0, -1.0], interpolate_max=1).should_append
+    assert not connected_curve_point(-1.0, [-1.0, -1.0], interpolate_max=1).should_append
 
 
 def test_pid_process_value_uses_smoothed_bt_for_default_sources() -> None:

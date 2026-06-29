@@ -114,6 +114,7 @@ from artisanlib.sample_processing import (
     auto_drop_event_candidate,
     auto_dry_event_candidate,
     auto_fcs_event_candidate,
+    connected_curve_point,
     decay_weight_sequence,
     delta_smoothing_filter_size,
     displayed_ror_value,
@@ -4852,18 +4853,14 @@ class tgraphcanvas(QObject):
                                 sample_extratemp2[i].append(float(extrat2))
 
                                 # gaps larger than self.interpolatemax readings are not connected in the graph (as util.py:fill_gaps() is not interpolating them)
-                                if extrat1 != -1:
+                                extra_point1 = connected_curve_point(float(extrat1), sample_extratemp1[i], self.interpolatemax)
+                                if extra_point1.should_append:
                                     sample_extractimex1[i].append(float(extratx))
-                                    sample_extractemp1[i].append(float(extrat1))
-                                elif len(sample_extratemp1[i])>(self.interpolatemax+1) and all(v == -1 for v in sample_extratemp1[i][-(self.interpolatemax+1):]):
-                                    sample_extractimex1[i].append(float(extratx))
-                                    sample_extractemp1[i].append(None)
-                                if extrat2 != -1:
+                                    sample_extractemp1[i].append(extra_point1.value)
+                                extra_point2 = connected_curve_point(float(extrat2), sample_extratemp2[i], self.interpolatemax)
+                                if extra_point2.should_append:
                                     sample_extractimex2[i].append(float(extratx))
-                                    sample_extractemp2[i].append(float(extrat2))
-                                elif len(sample_extratemp2[i])>(self.interpolatemax+1) and all(v == -1 for v in sample_extratemp2[i][-(self.interpolatemax+1):]):
-                                    sample_extractimex2[i].append(float(extratx))
-                                    sample_extractemp2[i].append(None)
+                                    sample_extractemp2[i].append(extra_point2.value)
 
                                 # update extra lines
                                 if local_flagstart:
@@ -4949,18 +4946,14 @@ class tgraphcanvas(QObject):
                     sample_timex.append(tx)
                     length_of_qmc_timex += 1
 
-                    if t1_final != -1:
+                    connected_point1 = connected_curve_point(t1_final, sample_temp1, self.interpolatemax)
+                    if connected_point1.should_append:
                         sample_ctimex1.append(tx)
-                        sample_ctemp1.append(t1_final)
-                    elif len(sample_temp1)>(self.interpolatemax+1) and all(v == -1 for v in sample_temp1[-(self.interpolatemax+1):]):
-                        sample_ctimex1.append(tx)
-                        sample_ctemp1.append(None)
-                    if t2_final != -1:
+                        sample_ctemp1.append(connected_point1.value)
+                    connected_point2 = connected_curve_point(t2_final, sample_temp2, self.interpolatemax)
+                    if connected_point2.should_append:
                         sample_ctimex2.append(tx)
-                        sample_ctemp2.append(t2_final)
-                    elif len(sample_temp2)>(self.interpolatemax+1) and all(v == -1 for v in sample_temp2[-(self.interpolatemax+1):]):
-                        sample_ctimex2.append(tx)
-                        sample_ctemp2.append(None)
+                        sample_ctemp2.append(connected_point2.value)
 
 
                     #we populate the temporary smoothed ET/BT data arrays (with readings cleansed from -1 dropouts)

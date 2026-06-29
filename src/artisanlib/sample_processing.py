@@ -1,8 +1,15 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import dataclass
 
 TemperatureValue = float | None
+
+
+@dataclass(frozen=True)
+class ConnectedCurvePoint:
+    should_append: bool
+    value: TemperatureValue
 
 
 def decay_weight_sequence(curve_filter: int) -> tuple[int, ...]:
@@ -23,6 +30,18 @@ def smoothing_weights_for_recent_readings(
     if len(decay_weights) == curve_filter:
         return tuple(int(weight) for weight in decay_weights)
     return decay_weight_sequence(curve_filter)
+
+
+def connected_curve_point(
+        reading: float,
+        readings: Sequence[float],
+        interpolate_max: int) -> ConnectedCurvePoint:
+    if reading != -1:
+        return ConnectedCurvePoint(True, reading)
+    dropout_window = interpolate_max + 1
+    if len(readings) > dropout_window and all(value == -1 for value in readings[-dropout_window:]):
+        return ConnectedCurvePoint(True, None)
+    return ConnectedCurvePoint(False, None)
 
 
 def pid_process_value(
@@ -344,6 +363,8 @@ __all__ = [
     'auto_drop_event_candidate',
     'auto_dry_event_candidate',
     'auto_fcs_event_candidate',
+    'connected_curve_point',
+    'ConnectedCurvePoint',
     'decay_weight_sequence',
     'delta_smoothing_filter_size',
     'displayed_ror_value',
