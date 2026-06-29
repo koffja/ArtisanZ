@@ -24,7 +24,7 @@ startup_time = libtime.process_time()
 from artisanlib import __version__, __revision__, __build__, __signature__, __release_sponsor_name__
 from artisanlib.charge_manager import ChargeTargetManager
 from artisanlib.charge_dialog import ChargeTempRorDlg
-from artisanlib.gui_theme import lcd_value_stylesheet, modern_application_stylesheet
+from artisanlib.gui_theme import lcd_label_stylesheet, lcd_value_stylesheet, modern_application_stylesheet
 from artisanlib.performance import export_gui_perf_metrics
 
 
@@ -115,7 +115,7 @@ from PyQt6.QtWidgets import (QApplication, QWidget, QMessageBox, QLabel, QMainWi
                          QLCDNumber, QSpinBox, QComboBox,
                          QSlider,
                          QColorDialog, QFrame, QScrollArea, QProgressDialog,
-                         QStyleFactory, QMenuBar, QMenu, QLayout, QDockWidget)
+                         QStyleFactory, QMenuBar, QMenu, QLayout, QDockWidget, QWIDGETSIZE_MAX)
 from PyQt6.QtGui import (QScreen, QPageLayout, QAction, QImageReader, QWindow,
                             QKeySequence, QShortcut,
                             QPixmap,QColor,QDesktopServices,QIcon,
@@ -8424,18 +8424,20 @@ class ApplicationWindow(QMainWindow):
     def makeLCDbox(label:QLabel, lcd:MyQLCDNumber, lcdframe:QFrame) -> QFrame:
         label.setProperty('lcdLabel', True)
         lcd.setProperty('lcdValue', True)
+        lcd.setMaximumWidth(QWIDGETSIZE_MAX)
+        lcd.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         lcdframe.setProperty('lcdSurface', True)
         LCDbox = QVBoxLayout()
         LCDbox.setSizeConstraint(QLayout.SizeConstraint.SetFixedSize)
         LCDbox.setSpacing(0)
         LCDbox.addWidget(label)
         LCDhBox = QHBoxLayout()
-        LCDhBox.addStretch()
-        LCDhBox.addWidget(lcd)
+        LCDhBox.addWidget(lcd, 1)
         LCDbox.addLayout(LCDhBox)
         LCDhBox.setContentsMargins(0, 0, 0, 0)
-        LCDbox.setContentsMargins(4, 4, 4, 0)
-        lcdframe.setContentsMargins(0, 10, 0, 0)
+        LCDhBox.setSpacing(0)
+        LCDbox.setContentsMargins(0, 6, 0, 0)
+        lcdframe.setContentsMargins(0, 0, 0, 0)
         lcdframe.setLayout(LCDbox)
         return lcdframe
 
@@ -8892,7 +8894,10 @@ class ApplicationWindow(QMainWindow):
     @staticmethod
     def setLabelColor(label:QLabel, c:str, enabled:bool = True) -> None:
         color = QColor(c[:7] if enabled else toDim(c[:7])) # we ignore the alpha information
-        label.setStyleSheet(f'QLabel {{ color: {color.name()}; }}')
+        if label.property('lcdLabel') is True:
+            label.setStyleSheet(lcd_label_stylesheet(color.name()))
+        else:
+            label.setStyleSheet(f'QLabel {{ color: {color.name()}; }}')
 
     #adds to serial log
     def addserial(self, serialstring:str) -> None:

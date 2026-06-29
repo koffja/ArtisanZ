@@ -10,10 +10,10 @@ def test_modern_application_stylesheet_contains_core_surfaces() -> None:
     assert 'QMenuBar' in stylesheet
     assert 'QPushButton' in stylesheet
     assert 'QLCDNumber[lcdValue="true"]' in stylesheet
-    assert 'padding: 4px 5px 3px 5px;' in stylesheet
+    assert 'padding: 4px 8px 3px 8px;' in stylesheet
     assert 'QFrame[lcdSurface="true"]' in stylesheet
     assert 'QLabel[lcdLabel="true"]' in stylesheet
-    assert 'padding: 2px 5px 0px 5px;' in stylesheet
+    assert 'padding: 2px 8px 1px 8px;' in stylesheet
 
 
 def test_modern_application_stylesheet_uses_supplied_theme() -> None:
@@ -34,6 +34,6 @@ def test_lcd_value_stylesheet_squares_top_and_rounds_bottom() -> None:
     assert 'border-top-right-radius: 0px' in stylesheet
     assert 'border-bottom-left-radius: 5px' in stylesheet
     assert 'border-bottom-right-radius: 5px' in stylesheet
-    assert 'padding: 4px 5px 3px 5px' in stylesheet
+    assert 'padding: 4px 8px 3px 8px' in stylesheet
     assert 'color: #123456' in stylesheet
     assert 'background-color: #abcdef' in stylesheet

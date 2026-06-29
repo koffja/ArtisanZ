@@ -168,6 +168,7 @@ try:
         QLayout,
         QLCDNumber,
         QLineEdit,
+        QSizePolicy,
         QSlider,
         QTableWidget,
         QVBoxLayout,
@@ -1737,7 +1738,7 @@ class TestMakeLCDbox:
         # Check margins were set
         margins = lcdframe.contentsMargins()
         assert margins.left() == 0
-        assert margins.top() == 10
+        assert margins.top() == 0
         assert margins.right() == 0
         assert margins.bottom() == 0
         assert label.property('lcdLabel') is True
@@ -1759,11 +1760,27 @@ class TestMakeLCDbox:
         # Layout should be configured with proper spacing and margins
         layout = lcdframe.layout()
         margins = layout.contentsMargins()
-        assert margins.left() == 4
-        assert margins.top() == 4
-        assert margins.right() == 4
+        assert margins.left() == 0
+        assert margins.top() == 6
+        assert margins.right() == 0
         assert margins.bottom() == 0
         assert layout.spacing() == 0
+
+    def test_makeLCDbox_value_surface_fills_bottom_row(self) -> None:
+        """Test LCD value surface is not right-floated away from the card edge."""
+        label = QLabel('Test')
+        lcd = MyQLCDNumber()
+        lcdframe = QFrame()
+
+        ApplicationWindow.makeLCDbox(label, lcd, lcdframe)
+
+        layout = lcdframe.layout()
+        assert layout is not None
+        value_row = layout.itemAt(1).layout()
+        assert value_row is not None
+        assert value_row.count() == 1
+        assert value_row.itemAt(0).widget() is lcd
+        assert lcd.sizePolicy().horizontalPolicy() == QSizePolicy.Policy.Expanding
 
     def test_configure_lcd_column_layout_adds_vertical_item_spacing(self) -> None:
         """Test LCD column layout keeps visible space between stacked cards."""
@@ -1909,6 +1926,17 @@ class TestSetLabelColor:
 
             # Assert
             label.setStyleSheet.assert_called()
+
+    def test_setLabelColor_preserves_lcd_label_padding(self) -> None:
+        """Test LCD labels keep visual padding after color updates."""
+        label = QLabel('Test')
+        label.setProperty('lcdLabel', True)
+
+        ApplicationWindow.setLabelColor(label, '#336699')
+
+        style = label.styleSheet()
+        assert 'color: #336699' in style.lower()
+        assert 'padding: 2px 8px 1px 8px' in style
 
 
 class TestCalcEnv:

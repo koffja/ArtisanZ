@@ -32,9 +32,18 @@ def lcd_value_stylesheet(text_color: str, background_color: str) -> str:
         'border-top-right-radius: 0px; '
         'border-bottom-left-radius: 5px; '
         'border-bottom-right-radius: 5px; '
-        'padding: 4px 5px 3px 5px; '
+        'padding: 4px 8px 3px 8px; '
         f'color: {text_color}; '
         f'background-color: {background_color};'
+        '}'
+    )
+
+
+def lcd_label_stylesheet(text_color: str) -> str:
+    return (
+        'QLabel { '
+        f'color: {text_color}; '
+        'padding: 2px 8px 1px 8px;'
         '}'
     )
 
@@ -102,13 +111,13 @@ def modern_application_stylesheet(theme: ModernTheme | None = None) -> str:
             border-top-right-radius: 0px;
             border-bottom-left-radius: 5px;
             border-bottom-right-radius: 5px;
-            padding: 4px 5px 3px 5px;
+            padding: 4px 8px 3px 8px;
             margin-bottom: 0px;
         }}
         QLabel[lcdLabel="true"] {{
             color: {t.text_muted};
             font-weight: 600;
-            padding: 2px 5px 0px 5px;
+            padding: 2px 8px 1px 8px;
         }}
         QGroupBox {{
             border: 1px solid {t.border};
