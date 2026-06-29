@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from artisanlib.plot_snapshot import AxisSnapshot, CurveSnapshot, RendererViewState, RoastPlotSnapshot
+from artisanlib.plot_snapshot import AxisSnapshot, CurveSnapshot, EventMarkerSnapshot, RendererViewState, RoastPlotSnapshot
 
 
 class MatplotlibSnapshotRenderer:
@@ -11,6 +11,7 @@ class MatplotlibSnapshotRenderer:
         self._ror_axis = ror_axis
         self._draw_idle = draw_idle
         self._lines: dict[str, object] = {}
+        self._event_artists: list[object] = []
         self._last_view_state = RendererViewState(
             time_axis=AxisSnapshot(minimum=0.0, maximum=0.0, label='Time'),
             temperature_axis=AxisSnapshot(minimum=0.0, maximum=0.0, label='Temperature'),
@@ -18,11 +19,13 @@ class MatplotlibSnapshotRenderer:
 
     def set_snapshot(self, snapshot: RoastPlotSnapshot) -> None:
         self._apply_curves(snapshot)
+        self._apply_events(snapshot)
         self.reset_view(snapshot.export_view_state())
         self._request_draw_idle()
 
     def update_live_frame(self, snapshot: RoastPlotSnapshot) -> None:
         self._apply_curves(snapshot)
+        self._apply_events(snapshot)
         self._request_draw_idle()
 
     def reset_view(self, view_state: RendererViewState) -> None:
@@ -46,6 +49,9 @@ class MatplotlibSnapshotRenderer:
     def line_for(self, curve_name: str) -> object | None:
         return self._lines.get(curve_name)
 
+    def event_artist_count(self) -> int:
+        return len(self._event_artists)
+
     def _apply_curves(self, snapshot: RoastPlotSnapshot) -> None:
         active_names = {curve.name for curve in snapshot.curves}
         for curve in snapshot.curves:
@@ -61,6 +67,41 @@ class MatplotlibSnapshotRenderer:
         for name, line in self._lines.items():
             if name not in active_names:
                 _call_if_available(line, 'set_visible', False)
+
+    def _apply_events(self, snapshot: RoastPlotSnapshot) -> None:
+        self._clear_event_artists()
+        for event in snapshot.events:
+            self._event_artists.extend(self._create_event_artists(event, snapshot))
+
+    def _clear_event_artists(self) -> None:
+        for artist in self._event_artists:
+            _call_if_available(artist, 'remove')
+        self._event_artists.clear()
+
+    def _create_event_artists(self, event: EventMarkerSnapshot, snapshot: RoastPlotSnapshot) -> list[object]:
+        artists: list[object] = []
+        axvline = getattr(self._temperature_axis, 'axvline', None)
+        if callable(axvline):
+            artists.append(axvline(
+                event.time,
+                color=event.color,
+                linestyle=':',
+                linewidth=0.9,
+                alpha=0.75,
+            ))
+        annotate = getattr(self._temperature_axis, 'annotate', None)
+        if callable(annotate):
+            y_position = snapshot.temperature_axis.maximum
+            artists.append(annotate(
+                event.label,
+                xy=(event.time, y_position),
+                xytext=(event.time, y_position),
+                color=event.color,
+                ha='left',
+                va='top',
+                fontsize='x-small',
+            ))
+        return artists
 
     def _create_line(self, curve: CurveSnapshot) -> object:
         axis = self._axis_for_curve(curve)

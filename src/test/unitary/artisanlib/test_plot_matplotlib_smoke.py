@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from artisanlib.plot_matplotlib_smoke import render_snapshot_to_png_bytes
-from artisanlib.plot_snapshot import AxisSnapshot, CurveSnapshot, RendererViewState, RoastPlotSnapshot
+from artisanlib.plot_snapshot import AxisSnapshot, CurveSnapshot, EventMarkerSnapshot, RendererViewState, RoastPlotSnapshot
 
 
 def test_render_snapshot_to_png_bytes_uses_real_matplotlib_axes() -> None:
@@ -16,6 +16,9 @@ def test_render_snapshot_to_png_bytes_uses_real_matplotlib_axes() -> None:
                 y_axis='ror',
             ),
         ),
+        events=(
+            EventMarkerSnapshot(time=1.5, label='charge', event_type=0, color='#CC0000', value=55.0),
+        ),
         time_axis=AxisSnapshot(minimum=-1.0, maximum=12.0, label='Time'),
         temperature_axis=AxisSnapshot(minimum=70.0, maximum=270.0, label='Temperature'),
         ror_axis=AxisSnapshot(minimum=-15.0, maximum=25.0, label='RoR'),
@@ -25,8 +28,9 @@ def test_render_snapshot_to_png_bytes_uses_real_matplotlib_axes() -> None:
 
     assert result.png_bytes.startswith(b'\x89PNG\r\n\x1a\n')
     assert len(result.png_bytes) > 1000
-    assert result.temperature_line_count == 1
+    assert result.temperature_line_count == 2
     assert result.ror_line_count == 1
+    assert result.event_artist_count == 2
     assert result.view_state == RendererViewState(
         time_axis=AxisSnapshot(minimum=-1.0, maximum=12.0, label='Time'),
         temperature_axis=AxisSnapshot(minimum=70.0, maximum=270.0, label='Temperature'),

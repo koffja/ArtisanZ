@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from artisanlib.plot_matplotlib_adapter import MatplotlibSnapshotRenderer
-from artisanlib.plot_snapshot import AxisSnapshot, CurveSnapshot, RendererViewState, RoastPlotSnapshot
+from artisanlib.plot_snapshot import AxisSnapshot, CurveSnapshot, EventMarkerSnapshot, RendererViewState, RoastPlotSnapshot
 
 
 class FakeCanvas:
@@ -25,7 +25,9 @@ class FakeLine:
         self.label = ''
         self.line_style = ''
         self.line_width = 0.0
+        self.alpha = 1.0
         self.visible = True
+        self.removed = False
 
     def set_data(self, x: tuple[float, ...], y: tuple[float | None, ...]) -> None:
         self.x = x
@@ -40,14 +42,34 @@ class FakeLine:
     def set_linewidth(self, line_width: float) -> None:
         self.line_width = line_width
 
+    def set_alpha(self, alpha: float) -> None:
+        self.alpha = alpha
+
     def set_visible(self, visible: bool) -> None:
         self.visible = visible
+
+    def remove(self) -> None:
+        self.removed = True
+
+
+class FakeAnnotation:
+    def __init__(self, label: str, xy: tuple[float, float], xytext: tuple[float, float], color: str) -> None:
+        self.label = label
+        self.xy = xy
+        self.xytext = xytext
+        self.color = color
+        self.removed = False
+
+    def remove(self) -> None:
+        self.removed = True
 
 
 class FakeAxis:
     def __init__(self) -> None:
         self.figure = FakeFigure()
         self.lines: list[FakeLine] = []
+        self.annotations: list[FakeAnnotation] = []
+        self.event_lines: list[FakeLine] = []
         self.xlim = (0.0, 1.0)
         self.ylim = (0.0, 1.0)
 
@@ -69,6 +91,35 @@ class FakeAxis:
         self.lines.append(line)
         return [line]
 
+    def axvline(
+            self,
+            x: float,
+            *,
+            color: str,
+            linestyle: str,
+            linewidth: float,
+            alpha: float) -> FakeLine:
+        line = FakeLine()
+        line.set_data((x, x), ())
+        line.set_color(color)
+        line.set_linestyle(linestyle)
+        line.set_linewidth(linewidth)
+        line.set_alpha(alpha)
+        self.event_lines.append(line)
+        return line
+
+    def annotate(
+            self,
+            text: str,
+            *,
+            xy: tuple[float, float],
+            xytext: tuple[float, float],
+            color: str,
+            **_: object) -> FakeAnnotation:
+        annotation = FakeAnnotation(text, xy, xytext, color)
+        self.annotations.append(annotation)
+        return annotation
+
     def set_xlim(self, minimum: float, maximum: float) -> None:
         self.xlim = (minimum, maximum)
 
@@ -85,6 +136,16 @@ class FakeAxis:
 def _snapshot(*curves: CurveSnapshot) -> RoastPlotSnapshot:
     return RoastPlotSnapshot(
         curves=curves,
+        time_axis=AxisSnapshot(minimum=-1.0, maximum=12.0, label='Time'),
+        temperature_axis=AxisSnapshot(minimum=70.0, maximum=270.0, label='Temperature'),
+        ror_axis=AxisSnapshot(minimum=-15.0, maximum=25.0, label='RoR'),
+    )
+
+
+def _snapshot_with_events(*events: EventMarkerSnapshot) -> RoastPlotSnapshot:
+    return RoastPlotSnapshot(
+        curves=(),
+        events=events,
         time_axis=AxisSnapshot(minimum=-1.0, maximum=12.0, label='Time'),
         temperature_axis=AxisSnapshot(minimum=70.0, maximum=270.0, label='Temperature'),
         ror_axis=AxisSnapshot(minimum=-15.0, maximum=25.0, label='RoR'),
@@ -170,3 +231,32 @@ def test_reset_and_export_view_state_round_trip_axes() -> None:
         temperature_axis=AxisSnapshot(minimum=100.0, maximum=240.0, label='Temperature'),
         ror_axis=AxisSnapshot(minimum=-8.0, maximum=18.0, label='RoR'),
     )
+
+
+def test_set_snapshot_renders_and_replaces_event_markers() -> None:
+    temperature_axis = FakeAxis()
+    renderer = MatplotlibSnapshotRenderer(temperature_axis=temperature_axis)
+
+    renderer.set_snapshot(_snapshot_with_events(
+        EventMarkerSnapshot(time=4.5, label='charge', event_type=0, color='#CC0000', value=55.0),
+    ))
+
+    assert len(temperature_axis.event_lines) == 1
+    assert len(temperature_axis.annotations) == 1
+    assert temperature_axis.event_lines[0].x == (4.5, 4.5)
+    assert temperature_axis.event_lines[0].color == '#CC0000'
+    assert temperature_axis.event_lines[0].alpha == 0.75
+    assert temperature_axis.annotations[0].label == 'charge'
+    assert temperature_axis.annotations[0].xy == (4.5, 270.0)
+    assert temperature_axis.annotations[0].xytext == (4.5, 270.0)
+    assert temperature_axis.annotations[0].color == '#CC0000'
+    assert renderer.event_artist_count() == 2
+
+    line = temperature_axis.event_lines[0]
+    annotation = temperature_axis.annotations[0]
+
+    renderer.set_snapshot(_snapshot_with_events())
+
+    assert line.removed is True
+    assert annotation.removed is True
+    assert renderer.event_artist_count() == 0
