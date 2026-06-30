@@ -116,6 +116,7 @@ from artisanlib.sample_processing import (
     external_program_output_command,
     input_filter_backfill_updates,
     input_filter_previous_values,
+    manual_turning_point_check_candidate,
     manual_x_axis_extension_end,
     phase_event_candidates_after_turning_point,
     pid_process_value,
@@ -5284,7 +5285,14 @@ class tgraphcanvas(QObject):
                         self.xaxistosm()
                     # also in the manual case we check for TP
                     # check for TP event if already CHARGEed and not yet recognized
-                    if local_flagstart and self.TPalarmtimeindex is None and self.timeindex[0] > -1 and self.timeindex[0]+5 < len(sample_temp2) and self.checkTPalarmtime():
+                    if (
+                            manual_turning_point_check_candidate(
+                                local_flagstart,
+                                self.TPalarmtimeindex,
+                                self.timeindex[0],
+                                len(sample_temp2),
+                            ) and
+                            self.checkTPalarmtime()):
                         self.TPalarmtimeindex = self.aw.findTP()
                         self.markTPSignal.emit()
             except Exception as e: # pylint: disable=broad-except

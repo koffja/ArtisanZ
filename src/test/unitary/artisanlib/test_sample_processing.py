@@ -26,6 +26,7 @@ from artisanlib.sample_processing import (
     input_filter_backfill_updates,
     input_filter_previous_values,
     live_x_axis_extension_end,
+    manual_turning_point_check_candidate,
     manual_x_axis_extension_end,
     phase_event_candidates_after_turning_point,
     pid_process_value,
@@ -545,6 +546,42 @@ def test_manual_x_axis_extension_uses_charge_offset_and_extension_period() -> No
         sample_times=[0.0, 100.0],
         end_of_x=600.0,
     ) == 742.0
+
+
+def test_manual_turning_point_check_candidate_requires_recording_charge_and_missing_tp() -> None:
+    assert not manual_turning_point_check_candidate(
+        recording=False,
+        tp_alarm_timeindex=None,
+        charge_index=2,
+        sample_count=8,
+    )
+    assert not manual_turning_point_check_candidate(
+        recording=True,
+        tp_alarm_timeindex=5,
+        charge_index=2,
+        sample_count=8,
+    )
+    assert not manual_turning_point_check_candidate(
+        recording=True,
+        tp_alarm_timeindex=None,
+        charge_index=-1,
+        sample_count=8,
+    )
+
+
+def test_manual_turning_point_check_candidate_uses_strict_five_sample_gap_after_charge() -> None:
+    assert not manual_turning_point_check_candidate(
+        recording=True,
+        tp_alarm_timeindex=None,
+        charge_index=2,
+        sample_count=7,
+    )
+    assert manual_turning_point_check_candidate(
+        recording=True,
+        tp_alarm_timeindex=None,
+        charge_index=2,
+        sample_count=8,
+    )
 
 
 def test_pid_process_value_uses_smoothed_bt_for_default_sources() -> None:

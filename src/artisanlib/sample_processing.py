@@ -276,6 +276,19 @@ def manual_x_axis_extension_end(
     return None
 
 
+def manual_turning_point_check_candidate(
+        recording: bool,
+        tp_alarm_timeindex: int | None,
+        charge_index: int,
+        sample_count: int) -> bool:
+    return (
+        recording and
+        tp_alarm_timeindex is None and
+        charge_index > -1 and
+        charge_index + 5 < sample_count
+    )
+
+
 def pid_process_value(
         pid_source: int,
         smoothed_et: TemperatureValue,
@@ -946,6 +959,7 @@ __all__ = [
     'input_filter_backfill_updates',
     'input_filter_previous_values',
     'live_x_axis_extension_end',
+    'manual_turning_point_check_candidate',
     'manual_x_axis_extension_end',
     'PhaseEventDecisions',
     'phase_event_candidates_after_turning_point',
