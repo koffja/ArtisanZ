@@ -39,6 +39,7 @@ from artisanlib.sample_processing import (
     relative_alarm_index,
     ror_curve_window,
     rate_of_rise_per_minute,
+    smoothed_rate_of_change_value,
     smoothed_temperature_value,
     smoothing_weights_for_recent_readings,
     simple_rate_of_rise_per_minute,
@@ -1754,6 +1755,33 @@ def test_delta_smoothing_filter_size_rejects_disabled_or_unready_windows() -> No
     assert delta_smoothing_filter_size(delta_filter=1, sample_count=5, unfiltered_count=5) is None
     assert delta_smoothing_filter_size(delta_filter=4, sample_count=2, unfiltered_count=5) is None
     assert delta_smoothing_filter_size(delta_filter=4, sample_count=5, unfiltered_count=2) is None
+
+
+def test_smoothed_rate_of_change_value_falls_back_to_latest_without_usable_weights() -> None:
+    assert smoothed_rate_of_change_value(
+        sample_times=[0.0, 10.0],
+        unfiltered_rates=[5.0, 9.0],
+        decay_weights=None,
+        sample_interval_seconds=10.0,
+    ) == 9.0
+
+
+def test_smoothed_rate_of_change_value_uses_decay_weighted_average() -> None:
+    assert smoothed_rate_of_change_value(
+        sample_times=[0.0, 1.0, 2.0],
+        unfiltered_rates=[10.0, None, 30.0],
+        decay_weights=[1, 2, 3],
+        sample_interval_seconds=1.0,
+    ) == pytest.approx(26.0)
+
+
+def test_smoothed_rate_of_change_value_returns_negative_one_without_rates() -> None:
+    assert smoothed_rate_of_change_value(
+        sample_times=[],
+        unfiltered_rates=[],
+        decay_weights=[1, 2],
+        sample_interval_seconds=1.0,
+    ) == -1
 
 
 def test_simple_rate_of_rise_uses_legacy_left_point_average() -> None:

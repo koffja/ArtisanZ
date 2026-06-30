@@ -735,6 +735,19 @@ def delta_smoothing_filter_size(delta_filter: float, sample_count: int, unfilter
     return None
 
 
+def smoothed_rate_of_change_value(
+        sample_times: Sequence[float],
+        unfiltered_rates: Sequence[TemperatureValue],
+        decay_weights: Sequence[int] | None,
+        sample_interval_seconds: float) -> float:
+    return decay_weighted_average(
+        sample_times,
+        unfiltered_rates,
+        decay_weights,
+        sample_interval_seconds,
+    )
+
+
 def simple_rate_of_rise_per_minute(
         sample_times: Sequence[float],
         temperatures: Sequence[float],
@@ -1029,6 +1042,7 @@ __all__ = [
     'relative_alarm_index',
     'ror_curve_window',
     'simple_rate_of_rise_per_minute',
+    'smoothed_rate_of_change_value',
     'smoothed_temperature_value',
     'smoothing_weights_for_recent_readings',
     'turning_point_check_candidate',

@@ -127,6 +127,7 @@ from artisanlib.sample_processing import (
     PidSvUpdateTarget,
     post_sample_update_decisions,
     rate_of_rise_per_minute,
+    smoothed_rate_of_change_value,
     smoothed_temperature_value,
     smoothing_weights_for_recent_readings,
     simple_rate_of_rise_per_minute,
@@ -4990,12 +4991,22 @@ class tgraphcanvas(QObject):
                         if user_filter is not None:
                             if self.decay_weights is None or len(self.decay_weights) != user_filter: # recompute only on changes
                                 self.decay_weights = list(decay_weight_sequence(user_filter))
-                            self.rateofchange1 = self.decay_average(sample_timex,sample_unfiltereddelta1,self.decay_weights)
+                            self.rateofchange1 = smoothed_rate_of_change_value(
+                                sample_timex,
+                                sample_unfiltereddelta1,
+                                self.decay_weights,
+                                self.delay / 1000.,
+                            )
                         user_filter = delta_smoothing_filter_size(self.deltaBTfilter, length_of_qmc_timex, len(sample_unfiltereddelta2))
                         if user_filter is not None:
                             if self.decay_weights is None or len(self.decay_weights) != user_filter: # recompute only on changes
                                 self.decay_weights = list(decay_weight_sequence(user_filter))
-                            self.rateofchange2 = self.decay_average(sample_timex,sample_unfiltereddelta2,self.decay_weights)
+                            self.rateofchange2 = smoothed_rate_of_change_value(
+                                sample_timex,
+                                sample_unfiltereddelta2,
+                                self.decay_weights,
+                                self.delay / 1000.,
+                            )
                         rateofchange1plot = self.rateofchange1
                         rateofchange2plot = self.rateofchange2
                     else:
