@@ -4446,36 +4446,38 @@ class ApplicationWindow(QMainWindow):
         return roast_menu
 
     def create_config_menu(self, ui_mode:UI_MODE) -> QMenu:
+        workspace_mode = workspace_for_ui_mode_value(int(ui_mode))
+        policy = workspace_policy_for_mode(workspace_mode)
         config_menu = QMenu(f"&{QApplication.translate('Menu', 'Config')}")
-        if ui_mode in {UI_MODE.EXPERT, UI_MODE.DEFAULT}:
+        if policy.show_full_menus:
             config_menu.addMenu(self.machineMenu)
-        if ui_mode is UI_MODE.EXPERT:
+        if policy.show_device_setup_tools:
             config_menu.addAction(self.deviceAction)
             config_menu.addAction(self.commportAction)
             config_menu.addSeparator()
             config_menu.addAction(self.calibrateDelayAction)
             config_menu.addSeparator()
             config_menu.addAction(self.curvesAction)
-        if ui_mode in {UI_MODE.EXPERT, UI_MODE.DEFAULT}:
+        if policy.show_full_menus:
             config_menu.addSeparator()
             config_menu.addAction(self.eventsAction)
             config_menu.addAction(self.alarmAction)
             config_menu.addSeparator()
             config_menu.addAction(self.phasesGraphAction)
-            if ui_mode is UI_MODE.EXPERT:
+            if policy.show_advanced_controls:
                 config_menu.addAction(self.StatisticsAction)
             config_menu.addAction(self.WindowconfigAction)
         config_menu.addSeparator()
-        if ui_mode is UI_MODE.EXPERT:
+        if policy.show_advanced_controls:
             config_menu.addAction(self.colorsAction)
-        if ui_mode in {UI_MODE.EXPERT, UI_MODE.DEFAULT}:
+        if policy.show_full_menus:
             config_menu.addMenu(self.themeMenu)
             config_menu.addSeparator()
             config_menu.addAction(self.autosaveAction)
             config_menu.addAction(self.batchAction)
             config_menu.addSeparator()
             config_menu.addMenu(self.temperatureConfMenu)
-        if ui_mode is not UI_MODE.PRODUCTION:
+        if policy.show_full_menus:
             config_menu.addMenu(self.languageMenu)
         # the UI mode selector should always be present
         config_menu.addSeparator()

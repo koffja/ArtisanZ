@@ -153,6 +153,27 @@ class FakeFileMenuApplicationWindow:
         self.quitAction = 'quit'
 
 
+class FakeConfigMenuApplicationWindow:
+    def __init__(self) -> None:
+        self.machineMenu = 'machine'
+        self.deviceAction = 'device'
+        self.commportAction = 'comm-port'
+        self.calibrateDelayAction = 'calibrate-delay'
+        self.curvesAction = 'curves'
+        self.eventsAction = 'events'
+        self.alarmAction = 'alarm'
+        self.phasesGraphAction = 'phases'
+        self.StatisticsAction = 'statistics'
+        self.WindowconfigAction = 'window-config'
+        self.colorsAction = 'colors'
+        self.themeMenu = 'theme'
+        self.autosaveAction = 'autosave'
+        self.batchAction = 'batch'
+        self.temperatureConfMenu = 'temperature'
+        self.languageMenu = 'language'
+        self.UIModeMenu = 'ui-mode'
+
+
 def test_workspace_for_existing_ui_modes_maps_standard_to_roast_control() -> None:
     workspaces = workspace_module()
 
@@ -459,6 +480,135 @@ def test_application_window_create_file_menu_uses_workspace_policy(
     assert 'save-copy-as' in menu.items
     assert 'export' in menu.items
     assert 'statistics' in menu.items
+
+
+def test_application_window_create_config_menu_preserves_current_policy_visibility(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    main = main_module()
+    monkeypatch.setattr(main, 'QMenu', FakeMenu)
+
+    expected_items = {
+        main.UI_MODE.EXPERT: [
+            'machine',
+            'device',
+            'comm-port',
+            'separator',
+            'calibrate-delay',
+            'separator',
+            'curves',
+            'separator',
+            'events',
+            'alarm',
+            'separator',
+            'phases',
+            'statistics',
+            'window-config',
+            'separator',
+            'colors',
+            'theme',
+            'separator',
+            'autosave',
+            'batch',
+            'separator',
+            'temperature',
+            'language',
+            'separator',
+            'ui-mode',
+        ],
+        main.UI_MODE.DEFAULT: [
+            'machine',
+            'separator',
+            'events',
+            'alarm',
+            'separator',
+            'phases',
+            'window-config',
+            'separator',
+            'theme',
+            'separator',
+            'autosave',
+            'batch',
+            'separator',
+            'temperature',
+            'language',
+            'separator',
+            'ui-mode',
+        ],
+        main.UI_MODE.PRODUCTION: [
+            'separator',
+            'separator',
+            'ui-mode',
+        ],
+    }
+
+    for ui_mode, items in expected_items.items():
+        window = FakeConfigMenuApplicationWindow()
+        menu = main.ApplicationWindow.create_config_menu(window, ui_mode)
+
+        assert menu.items == items
+
+
+def test_application_window_create_config_menu_uses_workspace_policy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    main = main_module()
+    workspaces = workspace_module()
+    monkeypatch.setattr(main, 'QMenu', FakeMenu)
+    production_policy = workspaces.workspace_policy(workspaces.WorkspaceMode.PRODUCTION)
+    expert_like_policy = dataclasses.replace(
+        production_policy,
+        show_full_menus=True,
+        show_advanced_controls=True,
+        show_device_setup_tools=True,
+    )
+
+    def fake_workspace_policy(_mode: object) -> object:
+        return expert_like_policy
+
+    monkeypatch.setattr(main, 'workspace_policy_for_mode', fake_workspace_policy)
+    window = FakeConfigMenuApplicationWindow()
+
+    menu = main.ApplicationWindow.create_config_menu(window, main.UI_MODE.PRODUCTION)
+
+    assert 'machine' in menu.items
+    assert 'device' in menu.items
+    assert 'statistics' in menu.items
+    assert 'colors' in menu.items
+    assert 'language' in menu.items
+
+
+def test_application_window_create_config_menu_separates_device_policy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    main = main_module()
+    workspaces = workspace_module()
+    monkeypatch.setattr(main, 'QMenu', FakeMenu)
+    production_policy = workspaces.workspace_policy(workspaces.WorkspaceMode.PRODUCTION)
+    device_only_policy = dataclasses.replace(
+        production_policy,
+        show_device_setup_tools=True,
+    )
+
+    def fake_workspace_policy(_mode: object) -> object:
+        return device_only_policy
+
+    monkeypatch.setattr(main, 'workspace_policy_for_mode', fake_workspace_policy)
+    window = FakeConfigMenuApplicationWindow()
+
+    menu = main.ApplicationWindow.create_config_menu(window, main.UI_MODE.PRODUCTION)
+
+    assert menu.items == [
+        'device',
+        'comm-port',
+        'separator',
+        'calibrate-delay',
+        'separator',
+        'curves',
+        'separator',
+        'separator',
+        'ui-mode',
+    ]
 
 
 def test_workspace_policy_is_frozen_and_immutable() -> None:
