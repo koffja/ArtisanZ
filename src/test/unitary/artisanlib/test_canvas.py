@@ -267,6 +267,7 @@ def create_test_canvas() -> 'tgraphcanvas':
     canvas.convertTemperature = tgraphcanvas.convertTemperature.__get__(canvas, tgraphcanvas)
     canvas.mark2Cstart = tgraphcanvas.mark2Cstart.__get__(canvas, tgraphcanvas)
     canvas.mark2Cend = tgraphcanvas.mark2Cend.__get__(canvas, tgraphcanvas)
+    canvas.xaxistosm = tgraphcanvas.xaxistosm.__get__(canvas, tgraphcanvas)
     canvas.starteventmessagetimer = tgraphcanvas.starteventmessagetimer.__get__(
         canvas, tgraphcanvas
     )
@@ -1618,6 +1619,82 @@ class TestTime2Index:
 
         # Assert
         assert result == 2
+
+
+class FakeXAxis:
+    def __init__(self) -> None:
+        self.major_locator: Any = None
+        self.major_formatter: Any = None
+        self.minor_locator: Any = None
+        self.minor_ticklines: list[Any] = []
+
+    def set_major_locator(self, locator: Any) -> None:
+        self.major_locator = locator
+
+    def set_major_formatter(self, formatter: Any) -> None:
+        self.major_formatter = formatter
+
+    def set_minor_locator(self, locator: Any) -> None:
+        self.minor_locator = locator
+
+    def get_minorticklines(self) -> list[Any]:
+        return self.minor_ticklines
+
+
+class FakeYAxis:
+    def __init__(self) -> None:
+        self.major_locator: Any = None
+
+    def set_major_locator(self, locator: Any) -> None:
+        self.major_locator = locator
+
+
+class FakeAxisForXRange:
+    def __init__(self) -> None:
+        self.xaxis = FakeXAxis()
+        self.yaxis = FakeYAxis()
+        self.xlim: tuple[float, float] | None = None
+        self.xticks: list[float] | None = None
+
+    def set_xlim(self, minimum: float, maximum: float) -> None:
+        self.xlim = (minimum, maximum)
+
+    def get_xticklines(self) -> list[Any]:
+        return []
+
+    def get_yticklines(self) -> list[Any]:
+        return []
+
+    def set_xticks(self, ticks: list[float]) -> None:
+        self.xticks = ticks
+
+    def minorticks_off(self) -> None:
+        self.xaxis.minor_locator = None
+
+
+class TestXAxisToSM:
+    def test_xaxistosm_applies_charge_offset_before_axis_range_validation(self) -> None:
+        canvas = create_test_canvas()
+        axis = FakeAxisForXRange()
+        canvas.ax = axis
+        canvas.startofx = 120.0
+        canvas.endofx = 90.0
+        canvas.timeindex = [1, 0, 0, 0, 0, 0, 0, 0]
+        canvas.timex = [0.0, 60.0]
+        canvas.xgrid = 60
+        canvas.flagon = True
+        canvas.background = False
+        canvas.timeB = []
+        canvas.LCDdecimalplaces = False
+        canvas.ax_background = Mock()
+        canvas.updateBackground = Mock()
+        canvas.aw = Mock()
+        canvas.aw.comparator = False
+
+        canvas.xaxistosm(redraw=False)
+
+        assert axis.xlim == (120.0, 150.0)
+        assert canvas.ax_background is None
 
 
 class TestEventTypeToArtist:

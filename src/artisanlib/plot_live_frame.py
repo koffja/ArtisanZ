@@ -10,6 +10,20 @@ from artisanlib.plot_snapshot import YAxisName
 
 
 @dataclass(frozen=True, slots=True)
+class LiveAxisRange:
+    minimum: float
+    maximum: float
+
+    @classmethod
+    def from_values(cls, minimum: float, maximum: float) -> LiveAxisRange:
+        minimum_value = float(minimum)
+        maximum_value = float(maximum)
+        if maximum_value < minimum_value:
+            raise ValueError('maximum must be greater than or equal to minimum')
+        return cls(minimum=minimum_value, maximum=maximum_value)
+
+
+@dataclass(frozen=True, slots=True)
 class LiveCurveData:
     name: str
     x: tuple[float, ...]
@@ -62,6 +76,16 @@ def apply_matplotlib_live_frame(
     return tuple(applied)
 
 
+def apply_matplotlib_live_axis_range(axis: object | None, axis_range: LiveAxisRange) -> bool:
+    if axis is None:
+        return False
+    set_xlim = getattr(axis, 'set_xlim', None)
+    if not callable(set_xlim):
+        return False
+    set_xlim(axis_range.minimum, axis_range.maximum)
+    return True
+
+
 def apply_pyqtgraph_live_curve_data(item: object | None, curve: LiveCurveData) -> bool:
     if item is None:
         return False
@@ -87,8 +111,10 @@ def _pyqtgraph_y_values(values: tuple[float | None, ...]) -> tuple[float, ...]:
 
 
 __all__ = [
+    'LiveAxisRange',
     'LiveCurveData',
     'LivePlotFrame',
+    'apply_matplotlib_live_axis_range',
     'apply_matplotlib_live_curve_data',
     'apply_matplotlib_live_frame',
     'apply_pyqtgraph_live_curve_data',

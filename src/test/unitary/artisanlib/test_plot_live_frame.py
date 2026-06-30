@@ -7,8 +7,10 @@ import pytest
 from matplotlib.lines import Line2D
 
 from artisanlib.plot_live_frame import (
+    LiveAxisRange,
     LiveCurveData,
     LivePlotFrame,
+    apply_matplotlib_live_axis_range,
     apply_matplotlib_live_curve_data,
     apply_matplotlib_live_frame,
     apply_pyqtgraph_live_curve_data,
@@ -29,6 +31,20 @@ class FakeLine:
 
 
 class NoSetDataLine:
+    pass
+
+
+class FakeAxis:
+    def __init__(self) -> None:
+        self.xlim: tuple[float, float] | None = None
+        self.calls = 0
+
+    def set_xlim(self, minimum: float, maximum: float) -> None:
+        self.xlim = (minimum, maximum)
+        self.calls += 1
+
+
+class NoSetXLimAxis:
     pass
 
 
@@ -70,6 +86,35 @@ def test_live_plot_frame_exposes_stable_curve_names() -> None:
     ))
 
     assert frame.curve_names() == ('ET', 'BT')
+
+
+def test_live_axis_range_from_values_normalizes_bounds() -> None:
+    axis_range = LiveAxisRange.from_values(1, 12.5)
+
+    assert axis_range.minimum == 1.0
+    assert axis_range.maximum == 12.5
+
+
+def test_live_axis_range_rejects_inverted_bounds() -> None:
+    with pytest.raises(ValueError, match='maximum'):
+        LiveAxisRange.from_values(12.5, 1)
+
+
+def test_apply_matplotlib_live_axis_range_updates_axis() -> None:
+    axis = FakeAxis()
+    axis_range = LiveAxisRange.from_values(0, 15)
+
+    assert apply_matplotlib_live_axis_range(axis, axis_range) is True
+
+    assert axis.xlim == (0.0, 15.0)
+    assert axis.calls == 1
+
+
+def test_apply_matplotlib_live_axis_range_skips_missing_or_incompatible_axis() -> None:
+    axis_range = LiveAxisRange.from_values(0, 15)
+
+    assert apply_matplotlib_live_axis_range(None, axis_range) is False
+    assert apply_matplotlib_live_axis_range(NoSetXLimAxis(), axis_range) is False
 
 
 def test_apply_matplotlib_live_curve_data_updates_line_with_numpy_values() -> None:

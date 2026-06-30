@@ -105,7 +105,12 @@ from matplotlib.colors import to_hex, to_rgba # type:ignore[untyped-import,unuse
 
 from artisanlib.performance import gui_perf_count, gui_perf_tracked
 from artisanlib.phidgets import PhidgetManager
-from artisanlib.plot_live_frame import LiveCurveData, apply_matplotlib_live_curve_data
+from artisanlib.plot_live_frame import (
+    LiveAxisRange,
+    LiveCurveData,
+    apply_matplotlib_live_axis_range,
+    apply_matplotlib_live_curve_data,
+)
 from artisanlib.sample_processing import (
     build_live_processed_sample_frame,
     connected_curve_point,
@@ -5295,8 +5300,6 @@ class tgraphcanvas(QObject):
                     )
                     if extended_end is not None:
                         self.endofx = extended_end
-                        if self.ax is not None:
-                            self.ax.set_xlim(self.startofx,self.endofx)
                         self.xaxistosm()
                     # also in the manual case we check for TP
                     # check for TP event if already CHARGEed and not yet recognized
@@ -7663,7 +7666,10 @@ class tgraphcanvas(QObject):
             endtime = endofx + starttime
 
             if set_xlim:
-                self.ax.set_xlim(startofx,endtime)
+                apply_matplotlib_live_axis_range(
+                    self.ax,
+                    LiveAxisRange.from_values(startofx, endtime),
+                )
 
             if self.xgrid != 0:
 
