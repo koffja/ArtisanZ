@@ -4775,11 +4775,25 @@ class tgraphcanvas(QObject):
                                 if local_flagstart:
                                     if self.aw.extraCurveVisibility1[i] and len(self.extratemp1lines) > xtra_dev_lines1 and self.extratemp1lines[xtra_dev_lines1] is not None:
                                         extra_curve1_data = full_curve_data(sample_extractimex1[i], sample_extractemp1[i])
-                                        self.extratemp1lines[xtra_dev_lines1].set_data(numpy.array(extra_curve1_data.times), numpy.array(extra_curve1_data.values))
+                                        apply_matplotlib_live_curve_data(
+                                            self.extratemp1lines[xtra_dev_lines1],
+                                            LiveCurveData(
+                                                name=f'Extra {i + 1} 1',
+                                                x=extra_curve1_data.times,
+                                                y=extra_curve1_data.values,
+                                            ),
+                                        )
                                         xtra_dev_lines1 = xtra_dev_lines1 + 1
                                     if self.aw.extraCurveVisibility2[i] and len(self.extratemp2lines) > xtra_dev_lines2 and self.extratemp2lines[xtra_dev_lines2] is not None:
                                         extra_curve2_data = full_curve_data(sample_extractimex2[i], sample_extractemp2[i])
-                                        self.extratemp2lines[xtra_dev_lines2].set_data(numpy.array(extra_curve2_data.times), numpy.array(extra_curve2_data.values))
+                                        apply_matplotlib_live_curve_data(
+                                            self.extratemp2lines[xtra_dev_lines2],
+                                            LiveCurveData(
+                                                name=f'Extra {i + 1} 2',
+                                                x=extra_curve2_data.times,
+                                                y=extra_curve2_data.values,
+                                            ),
+                                        )
                                         xtra_dev_lines2 = xtra_dev_lines2 + 1
                         #ERROR FOUND
                         else:
