@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import dataclasses
 import importlib
+from typing import Any
+
+import pytest
 
 
 def workspace_module():
@@ -135,3 +139,101 @@ def test_application_window_set_ui_mode_syncs_workspace_and_toolbar_policy() -> 
         main.UI_MODE.PRODUCTION,
     ]
     assert window.announcements == 3
+
+
+def test_workspace_policy_is_frozen_and_immutable() -> None:
+    workspaces = workspace_module()
+
+    policy = workspaces.workspace_policy(workspaces.WorkspaceMode.EXPERT)
+    mutable_policy: Any = policy
+
+    assert dataclasses.is_dataclass(policy)
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        mutable_policy.show_full_menus = False
+
+
+def test_workspace_policy_returns_policy_for_every_mode() -> None:
+    workspaces = workspace_module()
+
+    for mode in workspaces.WorkspaceMode:
+        policy = workspaces.workspace_policy(mode)
+        assert policy.mode is mode
+
+
+def test_roast_control_policy_hides_expert_tools_and_analysis() -> None:
+    workspaces = workspace_module()
+
+    policy = workspaces.workspace_policy(workspaces.WorkspaceMode.ROAST_CONTROL)
+
+    assert not policy.show_advanced_controls
+    assert not policy.show_analysis_tools
+    assert not policy.show_device_setup_tools
+    assert not policy.compact_chrome
+    assert policy.show_full_menus
+    assert policy.show_full_toolbars
+    assert policy.show_side_panels
+
+
+def test_qc_analysis_policy_includes_analysis_without_expert_tools() -> None:
+    workspaces = workspace_module()
+
+    policy = workspaces.workspace_policy(workspaces.WorkspaceMode.QC_ANALYSIS)
+
+    assert policy.show_analysis_tools
+    assert not policy.show_advanced_controls
+    assert not policy.show_device_setup_tools
+    assert not policy.compact_chrome
+
+
+def test_device_setup_policy_exposes_device_setup_and_advanced_navigation() -> None:
+    workspaces = workspace_module()
+
+    policy = workspaces.workspace_policy(workspaces.WorkspaceMode.DEVICE_SETUP)
+
+    assert policy.show_device_setup_tools
+    assert policy.show_advanced_controls
+    assert not policy.compact_chrome
+
+
+def test_production_policy_uses_compact_chrome_without_expert_tools() -> None:
+    workspaces = workspace_module()
+
+    policy = workspaces.workspace_policy(workspaces.WorkspaceMode.PRODUCTION)
+
+    assert policy.compact_chrome
+    assert not policy.show_advanced_controls
+    assert not policy.show_analysis_tools
+    assert not policy.show_device_setup_tools
+    assert not policy.show_full_menus
+    assert not policy.show_full_toolbars
+    assert not policy.show_side_panels
+
+
+def test_expert_policy_exposes_all_tools_and_surfaces() -> None:
+    workspaces = workspace_module()
+
+    policy = workspaces.workspace_policy(workspaces.WorkspaceMode.EXPERT)
+
+    assert policy.show_advanced_controls
+    assert policy.show_analysis_tools
+    assert policy.show_device_setup_tools
+    assert policy.show_full_menus
+    assert policy.show_full_toolbars
+    assert policy.show_side_panels
+    assert not policy.compact_chrome
+
+
+def test_workspace_policy_compact_chrome_aligns_with_spec() -> None:
+    workspaces = workspace_module()
+
+    for mode in workspaces.WorkspaceMode:
+        spec = workspaces.workspace_spec(mode)
+        policy = workspaces.workspace_policy(mode)
+        assert policy.compact_chrome is spec.compact_chrome, mode
+
+
+def test_workspace_policy_exports_in_all() -> None:
+    workspaces = workspace_module()
+
+    assert 'WorkspacePolicy' in workspaces.__all__
+    assert 'workspace_policy' in workspaces.__all__

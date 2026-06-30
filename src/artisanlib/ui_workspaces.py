@@ -30,6 +30,18 @@ class WorkspaceSpec:
     show_advanced_navigation: bool
 
 
+@dataclass(frozen=True)
+class WorkspacePolicy:
+    mode: WorkspaceMode
+    show_full_menus: bool
+    show_full_toolbars: bool
+    show_side_panels: bool
+    show_advanced_controls: bool
+    show_analysis_tools: bool
+    show_device_setup_tools: bool
+    compact_chrome: bool
+
+
 _ALL_AREAS: tuple[WorkspaceArea, ...] = tuple(WorkspaceArea)
 
 
@@ -98,6 +110,64 @@ def workspace_specs() -> tuple[WorkspaceSpec, ...]:
     return tuple(_WORKSPACE_SPECS[mode] for mode in WorkspaceMode)
 
 
+_WORKSPACE_POLICIES: dict[WorkspaceMode, WorkspacePolicy] = {
+    WorkspaceMode.ROAST_CONTROL: WorkspacePolicy(
+        mode=WorkspaceMode.ROAST_CONTROL,
+        show_full_menus=True,
+        show_full_toolbars=True,
+        show_side_panels=True,
+        show_advanced_controls=False,
+        show_analysis_tools=False,
+        show_device_setup_tools=False,
+        compact_chrome=False,
+    ),
+    WorkspaceMode.QC_ANALYSIS: WorkspacePolicy(
+        mode=WorkspaceMode.QC_ANALYSIS,
+        show_full_menus=True,
+        show_full_toolbars=True,
+        show_side_panels=True,
+        show_advanced_controls=False,
+        show_analysis_tools=True,
+        show_device_setup_tools=False,
+        compact_chrome=False,
+    ),
+    WorkspaceMode.DEVICE_SETUP: WorkspacePolicy(
+        mode=WorkspaceMode.DEVICE_SETUP,
+        show_full_menus=True,
+        show_full_toolbars=True,
+        show_side_panels=True,
+        show_advanced_controls=True,
+        show_analysis_tools=False,
+        show_device_setup_tools=True,
+        compact_chrome=False,
+    ),
+    WorkspaceMode.PRODUCTION: WorkspacePolicy(
+        mode=WorkspaceMode.PRODUCTION,
+        show_full_menus=False,
+        show_full_toolbars=False,
+        show_side_panels=False,
+        show_advanced_controls=False,
+        show_analysis_tools=False,
+        show_device_setup_tools=False,
+        compact_chrome=True,
+    ),
+    WorkspaceMode.EXPERT: WorkspacePolicy(
+        mode=WorkspaceMode.EXPERT,
+        show_full_menus=True,
+        show_full_toolbars=True,
+        show_side_panels=True,
+        show_advanced_controls=True,
+        show_analysis_tools=True,
+        show_device_setup_tools=True,
+        compact_chrome=False,
+    ),
+}
+
+
+def workspace_policy(mode: WorkspaceMode) -> WorkspacePolicy:
+    return _WORKSPACE_POLICIES[mode]
+
+
 def workspace_for_ui_mode_value(ui_mode_value: int) -> WorkspaceMode:
     if ui_mode_value == 1:
         return WorkspaceMode.EXPERT
@@ -109,8 +179,10 @@ def workspace_for_ui_mode_value(ui_mode_value: int) -> WorkspaceMode:
 __all__ = [
     'WorkspaceArea',
     'WorkspaceMode',
+    'WorkspacePolicy',
     'WorkspaceSpec',
     'workspace_for_ui_mode_value',
+    'workspace_policy',
     'workspace_spec',
     'workspace_specs',
 ]
