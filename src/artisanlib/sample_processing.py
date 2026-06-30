@@ -2,11 +2,17 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+from enum import Enum
 import warnings
 
 import numpy
 
 TemperatureValue = float | None
+
+
+class PidSvUpdateTarget(Enum):
+    FUJI = 'fuji'
+    SOFTWARE = 'software'
 
 
 @dataclass(frozen=True)
@@ -149,6 +155,24 @@ def pid_set_value_update(calculated_sv: float | None, current_sv: float | None) 
     if calculated_sv is None or calculated_sv == current_sv:
         return None
     return max(0.0, calculated_sv)
+
+
+def pid_sv_update_target(
+        sampling: bool,
+        device: int,
+        fuji_follow_background: bool,
+        recording: bool,
+        pid_active: bool | None = None,
+        sv_mode: int | None = None) -> PidSvUpdateTarget | None:
+    if not sampling:
+        return None
+    if device == 0 and fuji_follow_background and recording:
+        return PidSvUpdateTarget.FUJI
+    if pid_active is None or sv_mode is None:
+        return None
+    if (pid_active and sv_mode == 1) or sv_mode == 2:
+        return PidSvUpdateTarget.SOFTWARE
+    return None
 
 
 def external_program_background_lookup_time(
@@ -927,6 +951,8 @@ __all__ = [
     'phase_event_candidates_after_turning_point',
     'pid_process_value',
     'pid_set_value_update',
+    'PidSvUpdateTarget',
+    'pid_sv_update_target',
     'post_sample_update_decisions',
     'PostSampleUpdateDecisions',
     'PreviousReadings',

@@ -30,6 +30,8 @@ from artisanlib.sample_processing import (
     phase_event_candidates_after_turning_point,
     pid_process_value,
     pid_set_value_update,
+    pid_sv_update_target,
+    PidSvUpdateTarget,
     post_sample_update_decisions,
     relative_alarm_index,
     ror_curve_window,
@@ -189,6 +191,104 @@ def test_pid_set_value_update_returns_changed_positive_value() -> None:
 def test_pid_set_value_update_clamps_negative_value_after_raw_comparison() -> None:
     assert pid_set_value_update(calculated_sv=-2.5, current_sv=120.0) == 0.0
     assert pid_set_value_update(calculated_sv=-2.5, current_sv=0.0) == 0.0
+
+
+def test_pid_sv_update_target_skips_when_sampling_is_off() -> None:
+    assert pid_sv_update_target(
+        sampling=False,
+        device=0,
+        fuji_follow_background=True,
+        recording=True,
+        pid_active=True,
+        sv_mode=2,
+    ) is None
+
+
+def test_pid_sv_update_target_selects_fuji_only_for_recording_fuji_background_follow() -> None:
+    assert pid_sv_update_target(
+        sampling=True,
+        device=0,
+        fuji_follow_background=True,
+        recording=True,
+        pid_active=False,
+        sv_mode=0,
+    ) is PidSvUpdateTarget.FUJI
+
+    assert pid_sv_update_target(
+        sampling=True,
+        device=0,
+        fuji_follow_background=True,
+        recording=False,
+        pid_active=False,
+        sv_mode=0,
+    ) is None
+
+
+def test_pid_sv_update_target_preserves_fuji_priority_over_software_pid() -> None:
+    assert pid_sv_update_target(
+        sampling=True,
+        device=0,
+        fuji_follow_background=True,
+        recording=True,
+        pid_active=True,
+        sv_mode=2,
+    ) is PidSvUpdateTarget.FUJI
+
+
+def test_pid_sv_update_target_can_select_fuji_without_software_pid_state() -> None:
+    assert pid_sv_update_target(
+        sampling=True,
+        device=0,
+        fuji_follow_background=True,
+        recording=True,
+    ) is PidSvUpdateTarget.FUJI
+
+    assert pid_sv_update_target(
+        sampling=True,
+        device=11,
+        fuji_follow_background=False,
+        recording=True,
+    ) is None
+
+
+def test_pid_sv_update_target_selects_software_pid_for_active_ramp_or_background_follow() -> None:
+    assert pid_sv_update_target(
+        sampling=True,
+        device=11,
+        fuji_follow_background=False,
+        recording=True,
+        pid_active=True,
+        sv_mode=1,
+    ) is PidSvUpdateTarget.SOFTWARE
+
+    assert pid_sv_update_target(
+        sampling=True,
+        device=11,
+        fuji_follow_background=False,
+        recording=False,
+        pid_active=False,
+        sv_mode=2,
+    ) is PidSvUpdateTarget.SOFTWARE
+
+
+def test_pid_sv_update_target_rejects_inactive_ramp_mode_and_manual_mode() -> None:
+    assert pid_sv_update_target(
+        sampling=True,
+        device=11,
+        fuji_follow_background=False,
+        recording=True,
+        pid_active=False,
+        sv_mode=1,
+    ) is None
+
+    assert pid_sv_update_target(
+        sampling=True,
+        device=11,
+        fuji_follow_background=False,
+        recording=True,
+        pid_active=True,
+        sv_mode=0,
+    ) is None
 
 
 def test_external_program_background_lookup_time_skips_when_background_disabled() -> None:

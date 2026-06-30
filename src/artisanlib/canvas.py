@@ -120,6 +120,8 @@ from artisanlib.sample_processing import (
     phase_event_candidates_after_turning_point,
     pid_process_value,
     pid_set_value_update,
+    pid_sv_update_target,
+    PidSvUpdateTarget,
     post_sample_update_decisions,
     rate_of_rise_per_minute,
     smoothing_weights_for_recent_readings,
@@ -5135,15 +5137,30 @@ class tgraphcanvas(QObject):
 
                     #update SV on Arduino/TC4, Hottop, or MODBUS if in Ramp/Soak or Background Follow mode and PID is active
                     if self.flagon: # only during sampling
+                        pid_update_target = pid_sv_update_target(
+                            sampling=True,
+                            device=self.device,
+                            fuji_follow_background=self.aw.fujipid.followBackground,
+                            recording=self.flagstart,
+                        )
+                        if pid_update_target is None:
+                            pid_update_target = pid_sv_update_target(
+                                sampling=True,
+                                device=self.device,
+                                fuji_follow_background=False,
+                                recording=False,
+                                pid_active=self.aw.pidcontrol.pidActive,
+                                sv_mode=self.aw.pidcontrol.svMode,
+                            )
                         #update SV on FujiPIDs
-                        if self.device == 0 and self.aw.fujipid.followBackground and self.flagstart: # no SV updates while not yet recording for Fuji PIDs
+                        if pid_update_target is PidSvUpdateTarget.FUJI: # no SV updates while not yet recording for Fuji PIDs
                             # calculate actual SV
                             sv = self.aw.fujipid.calcSV(tx)
                             # update SV (if needed)
                             sv_update = pid_set_value_update(sv, self.aw.fujipid.sv)
                             if sv_update is not None:
                                 self.aw.fujipid.setsv(sv_update,silent=True) # this is called in updategraphics() within the GUI thread to move the sliders
-                        elif (self.aw.pidcontrol.pidActive and self.aw.pidcontrol.svMode == 1) or self.aw.pidcontrol.svMode == 2:
+                        elif pid_update_target is PidSvUpdateTarget.SOFTWARE:
                             # in BackgroundFollow mode we update the SV even if not active, just we do not move the SV slider
                             # calculate actual SV
                             sv = self.aw.pidcontrol.calcSV(tx)
