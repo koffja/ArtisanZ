@@ -18,6 +18,7 @@ from artisanlib.sample_processing import (
     build_live_processed_sample_frame,
     connected_curve_point,
     decay_weight_sequence,
+    decay_weighted_average,
     delta_smoothing_filter_size,
     displayed_ror_value,
     input_filter_backfill_updates,
@@ -78,6 +79,39 @@ def test_smoothing_weights_disable_smoothing_when_recent_window_has_dropout() ->
 
 def test_smoothing_weights_keep_decay_weights_for_empty_readings() -> None:
     assert smoothing_weights_for_recent_readings([], (1, 2), 2) == (1, 2)
+
+
+def test_decay_weighted_average_falls_back_to_latest_without_usable_weights() -> None:
+    assert decay_weighted_average(
+        sample_times=[0.0, 1.0],
+        temperatures=[10.0, 12.0],
+        decay_weights=None,
+        sample_interval_seconds=1.0,
+    ) == 12.0
+    assert decay_weighted_average(
+        sample_times=[0.0, 1.0],
+        temperatures=[10.0, None],
+        decay_weights=None,
+        sample_interval_seconds=1.0,
+    ) == -1
+
+
+def test_decay_weighted_average_skips_dropouts_and_uses_legacy_resampling() -> None:
+    assert decay_weighted_average(
+        sample_times=[0.0, 1.0, 2.0],
+        temperatures=[10.0, None, 30.0],
+        decay_weights=[1, 2, 3],
+        sample_interval_seconds=1.0,
+    ) == pytest.approx(26.0)
+
+
+def test_decay_weighted_average_returns_negative_one_without_valid_values() -> None:
+    assert decay_weighted_average(
+        sample_times=[0.0, 1.0],
+        temperatures=[None, -1.0],
+        decay_weights=[1, 2],
+        sample_interval_seconds=1.0,
+    ) == -1
 
 
 def test_connected_curve_point_appends_valid_reading() -> None:

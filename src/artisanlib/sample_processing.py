@@ -84,6 +84,47 @@ def smoothing_weights_for_recent_readings(
     return decay_weight_sequence(curve_filter)
 
 
+def decay_weighted_average(
+        sample_times: Sequence[float],
+        temperatures: Sequence[TemperatureValue],
+        decay_weights: Sequence[int] | None,
+        sample_interval_seconds: float) -> float:
+    if decay_weights is None or len(decay_weights) < 2 or len(sample_times) != len(temperatures):
+        if temperatures and temperatures[-1] is not None:
+            return temperatures[-1]
+        return -1
+    window_size = min(len(decay_weights), len(temperatures))
+    time_trail: list[float] = []
+    temperature_trail: list[float] = []
+    for sample_time, temperature in zip(
+            sample_times[-window_size:],
+            temperatures[-window_size:],
+            strict=True):
+        if temperature is not None and temperature != -1:
+            time_trail.append(sample_time)
+            temperature_trail.append(temperature)
+    if not temperature_trail:
+        return -1
+    valid_window_size = len(temperature_trail)
+    linear_times = numpy.flip(
+        numpy.arange(
+            time_trail[-1],
+            time_trail[-1] - valid_window_size * sample_interval_seconds,
+            -sample_interval_seconds,
+        ),
+        axis=0,
+    )
+    resampled_temperatures = numpy.interp(linear_times, time_trail, temperature_trail)
+    try:
+        return float(numpy.average(
+            resampled_temperatures[-len(decay_weights):],
+            axis=0,
+            weights=decay_weights[-valid_window_size:],
+        ))
+    except Exception: # pylint: disable=broad-except
+        return float(numpy.average(numpy.array(temperature_trail)))
+
+
 def connected_curve_point(
         reading: float,
         readings: Sequence[float],
@@ -825,6 +866,7 @@ __all__ = [
     'connected_curve_point',
     'ConnectedCurvePoint',
     'decay_weight_sequence',
+    'decay_weighted_average',
     'delta_smoothing_filter_size',
     'displayed_ror_value',
     'evaluate_alarm_triggers',

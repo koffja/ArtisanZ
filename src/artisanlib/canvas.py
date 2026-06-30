@@ -109,6 +109,7 @@ from artisanlib.sample_processing import (
     build_live_processed_sample_frame,
     connected_curve_point,
     decay_weight_sequence,
+    decay_weighted_average,
     delta_smoothing_filter_size,
     evaluate_alarm_triggers,
     input_filter_backfill_updates,
@@ -4614,32 +4615,7 @@ class tgraphcanvas(QObject):
     # to linear time based on tx and the current sampling interval
     # -1 and None values are skipped/ignored
     def decay_average(self, tx_in:list[float], temp_in:Sequence[float|None], decay_weights:list[int]|None) -> float:
-        if decay_weights is None or len(decay_weights)<2 or len(tx_in) != len(temp_in):
-            if len(temp_in)>0 and temp_in[-1] is not None:
-                return temp_in[-1] # pyrefly: ignore[bad-return]
-            return -1
-        l = min(len(decay_weights),len(temp_in))
-        # take trail of length l and remove items where temp[i]=None to fulfil precond. of numpy.interp
-        tx_org:list[float] = []
-        temp_trail:list[float] = []
-        for x, tp in zip(tx_in[-l:], temp_in[-l:], strict=True): # we only iterate over l-elements
-            if tp is not None and tp != -1:
-                tx_org.append(x)
-                temp_trail.append(tp)
-        if len(temp_trail) == 0:
-            # no valid values
-            return -1
-        l = len(temp_trail) # might be shorter than before
-        # len(tx)=len(temp) here and it is guaranteed that len(tx_org)=len(temp_trail) = l
-        d = self.delay / 1000.
-        # we create a linearly spaced time array starting from the newest timestamp in sampling interval distance
-        tx_lin = numpy.flip(numpy.arange(tx_org[-1],tx_org[-1]-l*d,-d), axis=0) # by construction, len(tx_lin)=len(tx_org)=l
-        temp_trail_re = cast(numpy.ndarray[Any], numpy.interp(tx_lin, tx_org, temp_trail)) # resample data into that linear spaced time
-        try:
-            return float(numpy.average(temp_trail_re[-len(decay_weights):],axis=0,weights=decay_weights[-l:]))
-        except Exception: # pylint: disable=broad-except
-            # in case something goes very wrong we at least return the standard average over temp, this should always work as len(tx)=len(temp)
-            return float(numpy.average(numpy.array(temp_trail)))
+        return decay_weighted_average(tx_in, temp_in, decay_weights, self.delay / 1000.)
 
     # returns true after BT passed the TP
     def checkTPalarmtime(self) -> bool:
