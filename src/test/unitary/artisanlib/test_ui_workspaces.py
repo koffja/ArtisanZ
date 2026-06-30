@@ -134,6 +134,25 @@ class FakeHelpMenuApplicationWindow:
         self.resetAction = 'reset'
 
 
+class FakeFileMenuApplicationWindow:
+    def __init__(self) -> None:
+        self.newRoastMenu = 'new'
+        self.fileLoadAction = 'load'
+        self.openRecentMenu = 'recent'
+        self.importMenu = 'import'
+        self.convFromMenu = 'convert-from'
+        self.fileSaveAction = 'save'
+        self.fileSaveAsAction = 'save-as'
+        self.fileSaveCopyAsAction = 'save-copy-as'
+        self.exportMenu = 'export'
+        self.convMenu = 'convert-to'
+        self.saveGraphMenu = 'save-graph'
+        self.reportMenu = 'report'
+        self.saveStatisticsMenu = 'statistics'
+        self.printAction = 'print'
+        self.quitAction = 'quit'
+
+
 def test_workspace_for_existing_ui_modes_maps_standard_to_roast_control() -> None:
     workspaces = workspace_module()
 
@@ -344,6 +363,102 @@ def test_application_window_create_help_menu_uses_workspace_policy(
     assert 'check-update' in menu.items
     assert 'error' in menu.items
     assert 'load-settings' in menu.items
+
+
+def test_application_window_create_file_menu_preserves_current_policy_visibility(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    main = main_module()
+    monkeypatch.setattr(main, 'QMenu', FakeMenu)
+
+    expected_items = {
+        main.UI_MODE.EXPERT: [
+            'new',
+            'load',
+            'recent',
+            'import',
+            'convert-from',
+            'separator',
+            'save',
+            'save-as',
+            'save-copy-as',
+            'separator',
+            'export',
+            'convert-to',
+            'separator',
+            'save-graph',
+            'report',
+            'statistics',
+            'separator',
+            'print',
+            'quit',
+        ],
+        main.UI_MODE.DEFAULT: [
+            'new',
+            'load',
+            'recent',
+            'import',
+            'convert-from',
+            'separator',
+            'save',
+            'save-as',
+            'separator',
+            'export',
+            'convert-to',
+            'separator',
+            'save-graph',
+            'report',
+            'separator',
+            'print',
+            'quit',
+        ],
+        main.UI_MODE.PRODUCTION: [
+            'new',
+            'load',
+            'recent',
+            'separator',
+            'save',
+            'save-as',
+            'separator',
+            'separator',
+            'separator',
+            'print',
+            'quit',
+        ],
+    }
+
+    for ui_mode, items in expected_items.items():
+        window = FakeFileMenuApplicationWindow()
+        menu = main.ApplicationWindow.create_file_menu(window, ui_mode)
+
+        assert menu.items == items
+
+
+def test_application_window_create_file_menu_uses_workspace_policy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    main = main_module()
+    workspaces = workspace_module()
+    monkeypatch.setattr(main, 'QMenu', FakeMenu)
+    production_policy = workspaces.workspace_policy(workspaces.WorkspaceMode.PRODUCTION)
+    expert_like_policy = dataclasses.replace(
+        production_policy,
+        show_full_menus=True,
+        show_advanced_controls=True,
+    )
+
+    def fake_workspace_policy(_mode: object) -> object:
+        return expert_like_policy
+
+    monkeypatch.setattr(main, 'workspace_policy_for_mode', fake_workspace_policy)
+    window = FakeFileMenuApplicationWindow()
+
+    menu = main.ApplicationWindow.create_file_menu(window, main.UI_MODE.PRODUCTION)
+
+    assert 'import' in menu.items
+    assert 'save-copy-as' in menu.items
+    assert 'export' in menu.items
+    assert 'statistics' in menu.items
 
 
 def test_workspace_policy_is_frozen_and_immutable() -> None:

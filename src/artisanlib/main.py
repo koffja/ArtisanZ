@@ -4393,27 +4393,29 @@ class ApplicationWindow(QMainWindow):
         return False
 
     def create_file_menu(self, ui_mode:UI_MODE) -> QMenu:
+        workspace_mode = workspace_for_ui_mode_value(int(ui_mode))
+        policy = workspace_policy_for_mode(workspace_mode)
         file_menu = QMenu(f"&{QApplication.translate('Menu', 'File')}")
         file_menu.addMenu(self.newRoastMenu)
         file_menu.addAction(self.fileLoadAction)       # Open
         file_menu.addMenu(self.openRecentMenu)         # Open recent
-        if ui_mode in {UI_MODE.EXPERT, UI_MODE.DEFAULT}:
+        if policy.show_full_menus:
             file_menu.addMenu(self.importMenu)         # Import
             file_menu.addMenu(self.convFromMenu)       # Convert from
         file_menu.addSeparator()                       # ---
         file_menu.addAction(self.fileSaveAction)       # Save
         file_menu.addAction(self.fileSaveAsAction)     # SaveAs
-        if ui_mode is UI_MODE.EXPERT:
+        if policy.show_advanced_controls:
             file_menu.addAction(self.fileSaveCopyAsAction) # SaveAs Copy
         file_menu.addSeparator()
-        if ui_mode in {UI_MODE.EXPERT, UI_MODE.DEFAULT}:
+        if policy.show_full_menus:
             file_menu.addMenu(self.exportMenu)         # Export
             file_menu.addMenu(self.convMenu)           # Convert to
         file_menu.addSeparator()                       # ---
-        if ui_mode in {UI_MODE.EXPERT, UI_MODE.DEFAULT}:
+        if policy.show_full_menus:
             file_menu.addMenu(self.saveGraphMenu)      # Save Graph
             file_menu.addMenu(self.reportMenu)         # Report
-            if ui_mode is UI_MODE.EXPERT:    # Save Statistics
+            if policy.show_advanced_controls:    # Save Statistics
                 file_menu.addMenu(self.saveStatisticsMenu)
         file_menu.addSeparator()                       # ---
         file_menu.addAction(self.printAction)          # Print
