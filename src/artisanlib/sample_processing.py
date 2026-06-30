@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+import warnings
+
+import numpy
 
 TemperatureValue = float | None
 
@@ -555,6 +558,71 @@ def delta_smoothing_filter_size(delta_filter: float, sample_count: int, unfilter
     return None
 
 
+def simple_rate_of_rise_per_minute(
+        sample_times: Sequence[float],
+        temperatures: Sequence[float],
+        left_index: int,
+        previous_rates: Sequence[float]) -> float:
+    timed = sample_times[-1] - sample_times[-left_index]
+    if temperatures[-1] != -1 and temperatures[-left_index] != -1:
+        if (
+                len(temperatures) >= left_index + 2 and
+                2 - left_index < 0 and
+                1 - left_index < 0 and
+                temperatures[-left_index - 1] != -1 and
+                temperatures[-left_index + 1] != -1 and
+                temperatures[-left_index - 2] != -1 and
+                temperatures[-left_index + 2] != -1):
+            left_temperature = (
+                temperatures[-left_index - 2] +
+                temperatures[-left_index - 1] +
+                temperatures[-left_index] +
+                temperatures[-left_index + 1] +
+                temperatures[-left_index + 2]
+            ) / 5.
+            return ((temperatures[-1] - left_temperature) / timed) * 60.
+        if (
+                len(temperatures) >= left_index + 1 and
+                1 - left_index < 0 and
+                temperatures[-left_index - 1] != -1 and
+                temperatures[-left_index + 1] != -1):
+            left_temperature = (
+                temperatures[-left_index - 1] +
+                temperatures[-left_index] +
+                temperatures[-left_index + 1]
+            ) / 3.
+            return ((temperatures[-1] - left_temperature) / timed) * 60.
+        return ((temperatures[-1] - temperatures[-left_index]) / timed) * 60.
+    if previous_rates:
+        return previous_rates[-1]
+    return 0.
+
+
+def rate_of_rise_per_minute(
+        latest_temperature: float,
+        sample_times: Sequence[float],
+        temperatures: Sequence[float],
+        previous_rates: Sequence[float],
+        delta_samples: int,
+        use_polyfit: bool) -> float:
+    if latest_temperature == -1 or len(sample_times) < 2:
+        if previous_rates:
+            return previous_rates[-1]
+        return 0.
+    left_index = min(len(sample_times), len(temperatures), max(2, delta_samples + 1))
+    if use_polyfit:
+        try:
+            time_vec = sample_times[-left_index:]
+            temp_samples = temperatures[-left_index:]
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore')
+                ls_fit = numpy.polynomial.polynomial.polyfit(time_vec, temp_samples, 1)
+                return float(ls_fit[1] * 60.)
+        except Exception: # pylint: disable=broad-except
+            pass
+    return simple_rate_of_rise_per_minute(sample_times, temperatures, left_index, previous_rates)
+
+
 def displayed_ror_value(
         rate_of_change: TemperatureValue,
         ror_limit_enabled: bool,
@@ -769,8 +837,10 @@ __all__ = [
     'pid_process_value',
     'PreviousReadings',
     'ProcessedSampleFrame',
+    'rate_of_rise_per_minute',
     'relative_alarm_index',
     'ror_curve_window',
+    'simple_rate_of_rise_per_minute',
     'smoothing_weights_for_recent_readings',
     'turning_point_check_candidate',
     'turning_point_temperature_is_valid',

@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from collections.abc import Iterator, Sequence
 
+import pytest
+import numpy
+
 from artisanlib.sample_processing import (
     alarm_is_eligible_for_evaluation,
     alarm_source_value,
@@ -25,7 +28,9 @@ from artisanlib.sample_processing import (
     pid_process_value,
     relative_alarm_index,
     ror_curve_window,
+    rate_of_rise_per_minute,
     smoothing_weights_for_recent_readings,
+    simple_rate_of_rise_per_minute,
     turning_point_check_candidate,
     turning_point_temperature_is_valid,
     turning_point_timeout_index,
@@ -1359,6 +1364,87 @@ def test_delta_smoothing_filter_size_rejects_disabled_or_unready_windows() -> No
     assert delta_smoothing_filter_size(delta_filter=1, sample_count=5, unfiltered_count=5) is None
     assert delta_smoothing_filter_size(delta_filter=4, sample_count=2, unfiltered_count=5) is None
     assert delta_smoothing_filter_size(delta_filter=4, sample_count=5, unfiltered_count=2) is None
+
+
+def test_simple_rate_of_rise_uses_legacy_left_point_average() -> None:
+    assert simple_rate_of_rise_per_minute(
+        sample_times=[0.0, 10.0, 20.0],
+        temperatures=[100.0, 110.0, 130.0],
+        left_index=2,
+        previous_rates=[],
+    ) == pytest.approx(100.0)
+
+
+def test_simple_rate_of_rise_reuses_previous_rate_for_dropout() -> None:
+    assert simple_rate_of_rise_per_minute(
+        sample_times=[0.0, 10.0],
+        temperatures=[100.0, -1.0],
+        left_index=2,
+        previous_rates=[12.5],
+    ) == 12.5
+    assert simple_rate_of_rise_per_minute(
+        sample_times=[0.0, 10.0],
+        temperatures=[100.0, -1.0],
+        left_index=2,
+        previous_rates=[],
+    ) == 0.0
+
+
+def test_rate_of_rise_reuses_previous_rate_for_invalid_latest_sample() -> None:
+    assert rate_of_rise_per_minute(
+        latest_temperature=-1.0,
+        sample_times=[0.0, 10.0],
+        temperatures=[100.0, -1.0],
+        previous_rates=[8.5],
+        delta_samples=3,
+        use_polyfit=False,
+    ) == 8.5
+    assert rate_of_rise_per_minute(
+        latest_temperature=120.0,
+        sample_times=[0.0],
+        temperatures=[120.0],
+        previous_rates=[],
+        delta_samples=3,
+        use_polyfit=False,
+    ) == 0.0
+
+
+def test_rate_of_rise_uses_delta_sample_window_without_polyfit() -> None:
+    assert rate_of_rise_per_minute(
+        latest_temperature=140.0,
+        sample_times=[0.0, 10.0, 20.0, 30.0],
+        temperatures=[100.0, 110.0, 120.0, 140.0],
+        previous_rates=[],
+        delta_samples=2,
+        use_polyfit=False,
+    ) == 90.0
+
+
+def test_rate_of_rise_uses_polyfit_when_enabled() -> None:
+    assert rate_of_rise_per_minute(
+        latest_temperature=130.0,
+        sample_times=[0.0, 10.0, 20.0, 30.0],
+        temperatures=[100.0, 105.0, 120.0, 130.0],
+        previous_rates=[],
+        delta_samples=3,
+        use_polyfit=True,
+    ) == pytest.approx(63.0)
+
+
+def test_rate_of_rise_falls_back_when_polyfit_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fail_polyfit(*_args: object, **_kwargs: object) -> list[float]:
+        raise ValueError('SVD did not converge')
+
+    monkeypatch.setattr(numpy.polynomial.polynomial, 'polyfit', fail_polyfit)
+
+    assert rate_of_rise_per_minute(
+        latest_temperature=140.0,
+        sample_times=[0.0, 10.0, 20.0, 30.0],
+        temperatures=[100.0, 110.0, 120.0, 140.0],
+        previous_rates=[],
+        delta_samples=2,
+        use_polyfit=True,
+    ) == 90.0
 
 
 def test_displayed_ror_value_passes_through_when_limit_disabled_or_value_missing() -> None:

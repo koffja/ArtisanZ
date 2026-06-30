@@ -116,7 +116,9 @@ from artisanlib.sample_processing import (
     manual_x_axis_extension_end,
     phase_event_candidates_after_turning_point,
     pid_process_value,
+    rate_of_rise_per_minute,
     smoothing_weights_for_recent_readings,
+    simple_rate_of_rise_per_minute,
     turning_point_temperature_is_valid,
 )
 from Phidget22.VoltageRange import VoltageRange # type: ignore[import-untyped]
@@ -4652,46 +4654,19 @@ class tgraphcanvas(QObject):
 
     @staticmethod # pre condition: 1 < left_index <= len(temp) = len(timex)
     def compute_ror_simple(timex:list[float], temp:list[float], left_index:int, unfiltereddelta:list[float]) -> float:
-        timed = timex[-1] - timex[-left_index]   #time difference between last readings
-        if temp[-1] != -1 and temp[-left_index] != -1:
-            # average the left point of the RoR interval (3 points) without introducing a delay
-            if len(temp)>=left_index+2 and 2-left_index<0 and 1-left_index<0 and temp[-left_index-1] != -1 and temp[-left_index + 1] != -1 and temp[-left_index - 2] != -1 and temp[-left_index + 2] != -1:
-                return ((temp[-1] - (temp[-left_index - 2] + temp[-left_index - 1] + temp[-left_index] + temp[-left_index + 1] + temp[-left_index + 2])/5.)/timed)*60.  #delta BT (degrees/minute)
-            if len(temp)>=left_index+1 and 1-left_index<0 and temp[-left_index-1] != -1 and temp[-left_index + 1] != -1:
-                return ((temp[-1] - (temp[-left_index - 1] + temp[-left_index] + temp[-left_index + 1])/3.)/timed)*60.  #delta BT (degrees/minute)
-            return ((temp[-1] - temp[-left_index])/timed)*60.  #delta BT (degrees/minute)
-        # if any of the readings is -1 we repeat the last RoR reading
-        if unfiltereddelta:
-            return unfiltereddelta[-1]
-        return 0.
+        return simple_rate_of_rise_per_minute(timex, temp, left_index, unfiltereddelta)
 
     def compute_ror(self, t_final:float, timex:list[float], temp:list[float], unfiltereddelta:list[float], deltaTempSamples:int) -> float:
         # compute RoR
         try:
-            if t_final == -1 or len(timex)<2:  # we repeat the last RoR if underlying temperature dropped
-                if unfiltereddelta:
-                    return unfiltereddelta[-1]
-                return 0.
-            # normal data received
-            #   Delta T = (changeTemp/ChangeTime)*60. =  degrees per minute;
-            left_index = min(len(timex),len(temp),max(2, deltaTempSamples + 1))
-            # ****** Instead of basing the estimate on the window extremal points,
-            #        grab the full set of points and do a formal LS solution to a straight line and use the slope estimate for RoR
-            if self.polyfitRoRcalc:
-                try:
-                    time_vec = timex[-left_index:]
-                    temp_samples = temp[-left_index:]
-                    with warnings.catch_warnings():
-                        warnings.simplefilter('ignore')
-                        # using stable polyfit from numpy polyfit module
-                        LS_fit = numpy.polynomial.polynomial.polyfit(time_vec, temp_samples, 1)
-                        return float(LS_fit[1]*60.)
-                except Exception: # pylint: disable=broad-except
-                    # a numpy/OpenBLAS polyfit bug can cause polyfit to throw an exception "SVD did not converge in Linear Least Squares" on Windows Windows 10 update 2004
-                    # https://github.com/numpy/numpy/issues/16744
-                    # we fall back to the two point algo below
-                    pass
-            return self.compute_ror_simple(timex, temp, left_index, unfiltereddelta)
+            return rate_of_rise_per_minute(
+                t_final,
+                timex,
+                temp,
+                unfiltereddelta,
+                deltaTempSamples,
+                self.polyfitRoRcalc,
+            )
         except Exception as e: # pylint: disable=broad-except
             _log.exception(e)
             return 0.
