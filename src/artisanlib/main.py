@@ -4535,21 +4535,23 @@ class ApplicationWindow(QMainWindow):
 
 
     def create_help_menu(self, ui_mode:UI_MODE) -> QMenu:
+        workspace_mode = workspace_for_ui_mode_value(int(ui_mode))
+        policy = workspace_policy_for_mode(workspace_mode)
         help_menu = QMenu(f"&{QApplication.translate('Menu', 'Help')}")
         help_menu.addAction(self.helpAboutAction)
         help_menu.addAction(self.aboutQtAction)
         help_menu.addAction(self.helpDocumentationAction)
         help_menu.addAction(self.KshortCAction)
-        if ui_mode in {UI_MODE.EXPERT, UI_MODE.DEFAULT}:
+        if policy.show_full_menus:
             help_menu.addSeparator()
             help_menu.addAction(self.checkUpdateAction)
-        if ui_mode is UI_MODE.EXPERT:
+        if policy.show_advanced_controls:
             help_menu.addSeparator()
             help_menu.addAction(self.errorAction)
             help_menu.addAction(self.messageAction)
             help_menu.addAction(self.serialAction)
             help_menu.addAction(self.platformAction)
-        if ui_mode in {UI_MODE.EXPERT, UI_MODE.DEFAULT}:
+        if policy.show_full_menus:
             help_menu.addSeparator()
             help_menu.addAction(self.loadSettingsAction)
             help_menu.addMenu(self.openRecentSettingMenu)

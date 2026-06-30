@@ -47,6 +47,21 @@ class FakeMenuBar:
         self.menus.append(menu)
 
 
+class FakeMenu:
+    def __init__(self, title: str = '') -> None:
+        self.title = title
+        self.items: list[str] = []
+
+    def addAction(self, action: str) -> None:
+        self.items.append(action)
+
+    def addMenu(self, menu: str) -> None:
+        self.items.append(menu)
+
+    def addSeparator(self) -> None:
+        self.items.append('separator')
+
+
 class FakeApplicationWindow:
     def __init__(self) -> None:
         main = main_module()
@@ -100,6 +115,23 @@ class FakeMenuApplicationWindow:
 
     def create_help_menu(self, _ui_mode: object) -> str:
         return 'help'
+
+
+class FakeHelpMenuApplicationWindow:
+    def __init__(self) -> None:
+        self.helpAboutAction = 'about'
+        self.aboutQtAction = 'about-qt'
+        self.helpDocumentationAction = 'docs'
+        self.KshortCAction = 'shortcuts'
+        self.checkUpdateAction = 'check-update'
+        self.errorAction = 'error'
+        self.messageAction = 'message'
+        self.serialAction = 'serial'
+        self.platformAction = 'platform'
+        self.loadSettingsAction = 'load-settings'
+        self.openRecentSettingMenu = 'recent-settings'
+        self.saveAsSettingsAction = 'save-settings'
+        self.resetAction = 'reset'
 
 
 def test_workspace_for_existing_ui_modes_maps_standard_to_roast_control() -> None:
@@ -231,6 +263,87 @@ def test_application_window_set_menu_uses_workspace_policy_for_tools_menu(
     main.ApplicationWindow.set_menu(window, main.UI_MODE.PRODUCTION)
 
     assert window.menu_bar.menus == ['file', 'edit', 'roast', 'config', 'tools', 'view', 'help']
+
+
+def test_application_window_create_help_menu_preserves_current_policy_visibility(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    main = main_module()
+    monkeypatch.setattr(main, 'QMenu', FakeMenu)
+
+    expected_items = {
+        main.UI_MODE.EXPERT: [
+            'about',
+            'about-qt',
+            'docs',
+            'shortcuts',
+            'separator',
+            'check-update',
+            'separator',
+            'error',
+            'message',
+            'serial',
+            'platform',
+            'separator',
+            'load-settings',
+            'recent-settings',
+            'save-settings',
+            'separator',
+            'reset',
+        ],
+        main.UI_MODE.DEFAULT: [
+            'about',
+            'about-qt',
+            'docs',
+            'shortcuts',
+            'separator',
+            'check-update',
+            'separator',
+            'load-settings',
+            'recent-settings',
+            'save-settings',
+            'separator',
+            'reset',
+        ],
+        main.UI_MODE.PRODUCTION: [
+            'about',
+            'about-qt',
+            'docs',
+            'shortcuts',
+        ],
+    }
+
+    for ui_mode, items in expected_items.items():
+        window = FakeHelpMenuApplicationWindow()
+        menu = main.ApplicationWindow.create_help_menu(window, ui_mode)
+
+        assert menu.items == items
+
+
+def test_application_window_create_help_menu_uses_workspace_policy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    main = main_module()
+    workspaces = workspace_module()
+    monkeypatch.setattr(main, 'QMenu', FakeMenu)
+    production_policy = workspaces.workspace_policy(workspaces.WorkspaceMode.PRODUCTION)
+    expert_like_policy = dataclasses.replace(
+        production_policy,
+        show_full_menus=True,
+        show_advanced_controls=True,
+    )
+
+    def fake_workspace_policy(_mode: object) -> object:
+        return expert_like_policy
+
+    monkeypatch.setattr(main, 'workspace_policy_for_mode', fake_workspace_policy)
+    window = FakeHelpMenuApplicationWindow()
+
+    menu = main.ApplicationWindow.create_help_menu(window, main.UI_MODE.PRODUCTION)
+
+    assert 'check-update' in menu.items
+    assert 'error' in menu.items
+    assert 'load-settings' in menu.items
 
 
 def test_workspace_policy_is_frozen_and_immutable() -> None:
