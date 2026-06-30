@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+import math
 
 import numpy
 
@@ -61,9 +62,35 @@ def apply_matplotlib_live_frame(
     return tuple(applied)
 
 
+def apply_pyqtgraph_live_curve_data(item: object | None, curve: LiveCurveData) -> bool:
+    if item is None:
+        return False
+    set_data = getattr(item, 'setData', None)
+    if not callable(set_data):
+        return False
+    set_data(curve.x, _pyqtgraph_y_values(curve.y))
+    return True
+
+
+def apply_pyqtgraph_live_frame(
+        items_by_name: Mapping[str, object | None],
+        frame: LivePlotFrame) -> tuple[str, ...]:
+    applied: list[str] = []
+    for curve in frame.curves:
+        if apply_pyqtgraph_live_curve_data(items_by_name.get(curve.name), curve):
+            applied.append(curve.name)
+    return tuple(applied)
+
+
+def _pyqtgraph_y_values(values: tuple[float | None, ...]) -> tuple[float, ...]:
+    return tuple(math.nan if value is None else value for value in values)
+
+
 __all__ = [
     'LiveCurveData',
     'LivePlotFrame',
     'apply_matplotlib_live_curve_data',
     'apply_matplotlib_live_frame',
+    'apply_pyqtgraph_live_curve_data',
+    'apply_pyqtgraph_live_frame',
 ]

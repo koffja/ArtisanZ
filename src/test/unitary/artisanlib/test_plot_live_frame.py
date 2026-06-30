@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import math
+
 import numpy
 import pytest
 from matplotlib.lines import Line2D
@@ -9,6 +11,8 @@ from artisanlib.plot_live_frame import (
     LivePlotFrame,
     apply_matplotlib_live_curve_data,
     apply_matplotlib_live_frame,
+    apply_pyqtgraph_live_curve_data,
+    apply_pyqtgraph_live_frame,
 )
 
 
@@ -26,6 +30,18 @@ class FakeLine:
 
 class NoSetDataLine:
     pass
+
+
+class FakePyQtGraphItem:
+    def __init__(self) -> None:
+        self.x: tuple[float, ...] = ()
+        self.y: tuple[float, ...] = ()
+        self.calls = 0
+
+    def setData(self, x: tuple[float, ...], y: tuple[float, ...]) -> None:  # noqa: N802
+        self.x = x
+        self.y = y
+        self.calls += 1
 
 
 def test_live_curve_data_from_sequences_normalizes_values() -> None:
@@ -103,3 +119,38 @@ def test_apply_matplotlib_live_frame_updates_known_curves_only() -> None:
     assert et_line.y.tolist() == [130.0, 131.0]
     assert bt_line.y is not None
     assert bt_line.y.tolist() == [120.0, 121.0]
+
+
+def test_apply_pyqtgraph_live_curve_data_converts_dropouts_to_nan() -> None:
+    item = FakePyQtGraphItem()
+    curve = LiveCurveData.from_sequences(name='Delta BT', x=[0, 1], y=[None, 4.5], y_axis='ror')
+
+    assert apply_pyqtgraph_live_curve_data(item, curve) is True
+
+    assert item.x == (0.0, 1.0)
+    assert math.isnan(item.y[0])
+    assert item.y[1] == 4.5
+    assert item.calls == 1
+
+
+def test_apply_pyqtgraph_live_curve_data_skips_missing_or_incompatible_item() -> None:
+    curve = LiveCurveData.from_sequences(name='BT', x=[0], y=[120])
+
+    assert apply_pyqtgraph_live_curve_data(None, curve) is False
+    assert apply_pyqtgraph_live_curve_data(NoSetDataLine(), curve) is False
+
+
+def test_apply_pyqtgraph_live_frame_updates_known_curves_only() -> None:
+    et_item = FakePyQtGraphItem()
+    bt_item = FakePyQtGraphItem()
+    frame = LivePlotFrame(curves=(
+        LiveCurveData.from_sequences(name='ET', x=[0, 1], y=[130, 131]),
+        LiveCurveData.from_sequences(name='BT', x=[0, 1], y=[120, 121]),
+        LiveCurveData.from_sequences(name='Delta BT', x=[0, 1], y=[None, 4], y_axis='ror'),
+    ))
+
+    applied = apply_pyqtgraph_live_frame({'ET': et_item, 'BT': bt_item}, frame)
+
+    assert applied == ('ET', 'BT')
+    assert et_item.y == (130.0, 131.0)
+    assert bt_item.y == (120.0, 121.0)
