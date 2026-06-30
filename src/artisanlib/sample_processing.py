@@ -71,6 +71,12 @@ class ProcessedSampleFrame:
 
 
 @dataclass(frozen=True)
+class CurveWindowData:
+    times: tuple[float, ...]
+    values: tuple[TemperatureValue, ...]
+
+
+@dataclass(frozen=True)
 class PostSampleUpdateDecisions:
     update_auc: bool
     update_auc_guide: bool
@@ -843,6 +849,19 @@ def ror_curve_window(
     return ror_start, ror_end
 
 
+def windowed_curve_data(
+        sample_times: Sequence[float],
+        values: Sequence[TemperatureValue],
+        window: tuple[int, int] | None) -> CurveWindowData:
+    if window is None:
+        return CurveWindowData(times=(), values=())
+    start, end = window
+    return CurveWindowData(
+        times=tuple(sample_times[start:end]),
+        values=tuple(values[start:end]),
+    )
+
+
 def build_live_processed_sample_frame(
         timestamp: float,
         sample_count: int,
@@ -1014,6 +1033,7 @@ __all__ = [
     'build_live_processed_sample_frame',
     'connected_curve_point',
     'ConnectedCurvePoint',
+    'CurveWindowData',
     'decay_weight_sequence',
     'decay_weighted_average',
     'delta_smoothing_filter_size',
@@ -1048,4 +1068,5 @@ __all__ = [
     'turning_point_check_candidate',
     'turning_point_temperature_is_valid',
     'turning_point_timeout_index',
+    'windowed_curve_data',
 ]

@@ -132,6 +132,7 @@ from artisanlib.sample_processing import (
     smoothing_weights_for_recent_readings,
     simple_rate_of_rise_per_minute,
     turning_point_temperature_is_valid,
+    windowed_curve_data,
 )
 from Phidget22.VoltageRange import VoltageRange # type: ignore[import-untyped]
 
@@ -5059,17 +5060,19 @@ class tgraphcanvas(QObject):
 
                     if local_flagstart:
                         if self.DeltaETflag and self.l_delta1 is not None:
-                            if processed_frame.delta_et_window is not None:
-                                ror_start, ror_end = processed_frame.delta_et_window
-                                self.l_delta1.set_data(sample_timex[ror_start:ror_end], numpy.array(sample_delta1[ror_start:ror_end]))
-                            else:
-                                self.l_delta1.set_data([], [])
+                            delta_et_data = windowed_curve_data(
+                                sample_timex,
+                                sample_delta1,
+                                processed_frame.delta_et_window,
+                            )
+                            self.l_delta1.set_data(delta_et_data.times, numpy.array(delta_et_data.values))
                         if self.DeltaBTflag and self.l_delta2 is not None:
-                            if processed_frame.delta_bt_window is not None:
-                                ror_start, ror_end = processed_frame.delta_bt_window
-                                self.l_delta2.set_data(sample_timex[ror_start:ror_end], numpy.array(sample_delta2[ror_start:ror_end]))
-                            else:
-                                self.l_delta2.set_data([], [])
+                            delta_bt_data = windowed_curve_data(
+                                sample_timex,
+                                sample_delta2,
+                                processed_frame.delta_bt_window,
+                            )
+                            self.l_delta2.set_data(delta_bt_data.times, numpy.array(delta_bt_data.values))
 
                         #readjust xlimit of plot if needed
                         extended_end = processed_frame.live_x_axis_extension_end

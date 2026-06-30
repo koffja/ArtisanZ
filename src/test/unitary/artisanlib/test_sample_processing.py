@@ -46,6 +46,7 @@ from artisanlib.sample_processing import (
     turning_point_check_candidate,
     turning_point_temperature_is_valid,
     turning_point_timeout_index,
+    windowed_curve_data,
 )
 
 
@@ -1962,6 +1963,28 @@ def test_ror_curve_window_skips_charge_warmup_and_stops_after_drop() -> None:
         delta_filter=0,
         delta_samples=0,
     ) == (7, 20)
+
+
+def test_windowed_curve_data_returns_empty_payload_without_window() -> None:
+    data = windowed_curve_data(
+        sample_times=[0.0, 1.0, 2.0],
+        values=[10.0, 11.0, 12.0],
+        window=None,
+    )
+
+    assert data.times == ()
+    assert data.values == ()
+
+
+def test_windowed_curve_data_uses_existing_start_end_slice_semantics() -> None:
+    data = windowed_curve_data(
+        sample_times=[0.0, 1.0, 2.0, 3.0],
+        values=[10.0, None, 12.0, 13.0],
+        window=(1, 3),
+    )
+
+    assert data.times == (1.0, 2.0)
+    assert data.values == (None, 12.0)
 
 
 def test_build_live_processed_sample_frame_collects_display_axis_and_event_decisions() -> None:
