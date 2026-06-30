@@ -22,6 +22,7 @@ class PlotRendererBenchmarkMeasurement:
     ror_item_count: int
     event_item_count: int
     opengl_requested: bool | None = None
+    opengl_widget_supported: bool | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -110,7 +111,8 @@ def benchmark_plot_renderers(
         point_count: int = 900,
         event_count: int = 8,
         iterations: int = 3,
-        use_opengl: bool = True) -> PlotRendererBenchmarkReport:
+        use_opengl: bool = True,
+        pyqtgraph_opengl_probe: Callable[[], bool] | None = None) -> PlotRendererBenchmarkReport:
     if iterations < 1:
         raise ValueError('iterations must be at least 1')
     benchmark_snapshot = snapshot or build_renderer_benchmark_snapshot(
@@ -122,7 +124,12 @@ def benchmark_plot_renderers(
         snapshot_curve_count=len(benchmark_snapshot.curves),
         snapshot_event_count=len(benchmark_snapshot.events),
         matplotlib=_benchmark_matplotlib(benchmark_snapshot, iterations),
-        pyqtgraph=_benchmark_pyqtgraph(benchmark_snapshot, iterations, use_opengl),
+        pyqtgraph=_benchmark_pyqtgraph(
+            benchmark_snapshot,
+            iterations,
+            use_opengl,
+            pyqtgraph_opengl_probe,
+        ),
     )
 
 
@@ -208,7 +215,8 @@ def _benchmark_matplotlib(
 def _benchmark_pyqtgraph(
         snapshot: RoastPlotSnapshot,
         iterations: int,
-        use_opengl: bool) -> PlotRendererBenchmarkMeasurement:
+        use_opengl: bool,
+        opengl_probe: Callable[[], bool] | None) -> PlotRendererBenchmarkMeasurement:
     from PyQt6.QtWidgets import QApplication
     import pyqtgraph as pg  # type: ignore[import-not-found,unused-ignore]
 
@@ -218,6 +226,11 @@ def _benchmark_pyqtgraph(
     temperature_plot = pg.PlotWidget()
     ror_plot = pg.PlotWidget() if snapshot.ror_axis is not None else None
     try:
+        opengl_widget_supported = _detect_opengl_widget_support(
+            application,
+            use_opengl,
+            opengl_probe,
+        )
         renderer = PyQtGraphSnapshotRenderer(
             temperature_plot=temperature_plot,
             ror_plot=ror_plot,
@@ -235,6 +248,7 @@ def _benchmark_pyqtgraph(
             ror_item_count=0 if ror_plot is None else _plot_data_item_count(ror_plot),
             event_item_count=renderer.event_item_count(),
             opengl_requested=use_opengl,
+            opengl_widget_supported=opengl_widget_supported,
         )
     finally:
         temperature_plot.close()
@@ -257,6 +271,36 @@ def _render_pyqtgraph(
         process_events: Callable[[], object]) -> None:
     renderer.set_snapshot(snapshot)
     process_events()
+
+
+def _detect_opengl_widget_support(
+        application: object,
+        use_opengl: bool,
+        opengl_probe: Callable[[], bool] | None) -> bool | None:
+    if not use_opengl:
+        return None
+    probe = opengl_probe or (lambda: _qopenglwidget_supported(application))
+    try:
+        return bool(probe())
+    except Exception:
+        return False
+
+
+def _qopenglwidget_supported(application: object) -> bool:
+    try:
+        from PyQt6.QtOpenGLWidgets import QOpenGLWidget
+    except ImportError:
+        return False
+    widget = QOpenGLWidget()
+    try:
+        widget.resize(1, 1)
+        widget.show()
+        process_events = getattr(application, 'processEvents', None)
+        if callable(process_events):
+            process_events()
+        return bool(widget.isValid())
+    finally:
+        widget.close()
 
 
 def _time_iterations(render: Callable[[], None], iterations: int) -> float:

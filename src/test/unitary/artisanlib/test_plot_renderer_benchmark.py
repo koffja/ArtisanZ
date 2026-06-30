@@ -25,7 +25,12 @@ def test_build_renderer_benchmark_snapshot_handles_minimum_point_count() -> None
 def test_benchmark_plot_renderers_reports_backend_timings() -> None:
     snapshot = build_renderer_benchmark_snapshot(point_count=24, event_count=3)
 
-    report = benchmark_plot_renderers(snapshot=snapshot, iterations=1, use_opengl=True)
+    report = benchmark_plot_renderers(
+        snapshot=snapshot,
+        iterations=1,
+        use_opengl=True,
+        pyqtgraph_opengl_probe=lambda: False,
+    )
 
     assert report.snapshot_point_count == 24
     assert report.snapshot_curve_count == len(snapshot.curves)
@@ -38,4 +43,26 @@ def test_benchmark_plot_renderers_reports_backend_timings() -> None:
     assert report.pyqtgraph.iterations == 1
     assert report.pyqtgraph.total_seconds >= 0.0
     assert report.pyqtgraph.opengl_requested is True
+    assert report.pyqtgraph.opengl_widget_supported is False
     assert report.pyqtgraph.event_item_count == 6
+
+
+def test_benchmark_plot_renderers_skips_opengl_probe_when_not_requested() -> None:
+    snapshot = build_renderer_benchmark_snapshot(point_count=8, event_count=0)
+    probe_calls = 0
+
+    def opengl_probe() -> bool:
+        nonlocal probe_calls
+        probe_calls += 1
+        return True
+
+    report = benchmark_plot_renderers(
+        snapshot=snapshot,
+        iterations=1,
+        use_opengl=False,
+        pyqtgraph_opengl_probe=opengl_probe,
+    )
+
+    assert probe_calls == 0
+    assert report.pyqtgraph.opengl_requested is False
+    assert report.pyqtgraph.opengl_widget_supported is None
