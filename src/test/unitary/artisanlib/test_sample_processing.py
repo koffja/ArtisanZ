@@ -29,6 +29,7 @@ from artisanlib.sample_processing import (
     manual_x_axis_extension_end,
     phase_event_candidates_after_turning_point,
     pid_process_value,
+    pid_set_value_update,
     post_sample_update_decisions,
     relative_alarm_index,
     ror_curve_window,
@@ -173,6 +174,21 @@ def test_post_sample_update_decisions_trigger_bbp_at_fifth_sample_after_charge()
         charge_index=-1,
         sample_count=4,
     ).update_bbp_metrics
+
+
+def test_pid_set_value_update_skips_none_or_unchanged_values() -> None:
+    assert pid_set_value_update(calculated_sv=None, current_sv=120.0) is None
+    assert pid_set_value_update(calculated_sv=120.0, current_sv=120.0) is None
+
+
+def test_pid_set_value_update_returns_changed_positive_value() -> None:
+    assert pid_set_value_update(calculated_sv=125.5, current_sv=120.0) == 125.5
+    assert pid_set_value_update(calculated_sv=125.5, current_sv=None) == 125.5
+
+
+def test_pid_set_value_update_clamps_negative_value_after_raw_comparison() -> None:
+    assert pid_set_value_update(calculated_sv=-2.5, current_sv=120.0) == 0.0
+    assert pid_set_value_update(calculated_sv=-2.5, current_sv=0.0) == 0.0
 
 
 def test_external_program_background_lookup_time_skips_when_background_disabled() -> None:

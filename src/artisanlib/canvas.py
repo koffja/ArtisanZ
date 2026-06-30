@@ -119,6 +119,7 @@ from artisanlib.sample_processing import (
     manual_x_axis_extension_end,
     phase_event_candidates_after_turning_point,
     pid_process_value,
+    pid_set_value_update,
     post_sample_update_decisions,
     rate_of_rise_per_minute,
     smoothing_weights_for_recent_readings,
@@ -5139,17 +5140,17 @@ class tgraphcanvas(QObject):
                             # calculate actual SV
                             sv = self.aw.fujipid.calcSV(tx)
                             # update SV (if needed)
-                            if sv is not None and sv != self.aw.fujipid.sv:
-                                sv = max(0.0, sv) # we don't send SV < 0
-                                self.aw.fujipid.setsv(sv,silent=True) # this is called in updategraphics() within the GUI thread to move the sliders
+                            sv_update = pid_set_value_update(sv, self.aw.fujipid.sv)
+                            if sv_update is not None:
+                                self.aw.fujipid.setsv(sv_update,silent=True) # this is called in updategraphics() within the GUI thread to move the sliders
                         elif (self.aw.pidcontrol.pidActive and self.aw.pidcontrol.svMode == 1) or self.aw.pidcontrol.svMode == 2:
                             # in BackgroundFollow mode we update the SV even if not active, just we do not move the SV slider
                             # calculate actual SV
                             sv = self.aw.pidcontrol.calcSV(tx)
                             # update SV (if needed)
-                            if sv is not None and sv != self.aw.pidcontrol.sv:
-                                sv = max(0.0, sv) # we don't send SV < 0
-                                self.aw.pidcontrol.setSV(sv,init=False)
+                            sv_update = pid_set_value_update(sv, self.aw.pidcontrol.sv)
+                            if sv_update is not None:
+                                self.aw.pidcontrol.setSV(sv_update,init=False)
 
                     post_update_decisions = post_sample_update_decisions(
                         local_flagstart,

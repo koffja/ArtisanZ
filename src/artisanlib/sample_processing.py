@@ -145,6 +145,12 @@ def post_sample_update_decisions(
     )
 
 
+def pid_set_value_update(calculated_sv: float | None, current_sv: float | None) -> float | None:
+    if calculated_sv is None or calculated_sv == current_sv:
+        return None
+    return max(0.0, calculated_sv)
+
+
 def external_program_background_lookup_time(
         background_enabled: bool,
         charge_index: int,
@@ -920,6 +926,7 @@ __all__ = [
     'PhaseEventDecisions',
     'phase_event_candidates_after_turning_point',
     'pid_process_value',
+    'pid_set_value_update',
     'post_sample_update_decisions',
     'PostSampleUpdateDecisions',
     'PreviousReadings',
