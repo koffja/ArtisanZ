@@ -27,6 +27,7 @@ from artisanlib.sample_processing import (
     manual_x_axis_extension_end,
     phase_event_candidates_after_turning_point,
     pid_process_value,
+    post_sample_update_decisions,
     relative_alarm_index,
     ror_curve_window,
     rate_of_rise_per_minute,
@@ -112,6 +113,64 @@ def test_decay_weighted_average_returns_negative_one_without_valid_values() -> N
         decay_weights=[1, 2],
         sample_interval_seconds=1.0,
     ) == -1
+
+
+def test_post_sample_update_decisions_skip_all_work_outside_recording() -> None:
+    decisions = post_sample_update_decisions(
+        recording=False,
+        auc_guide_enabled=True,
+        charge_index=2,
+        sample_count=7,
+    )
+
+    assert not decisions.update_auc
+    assert not decisions.update_auc_guide
+    assert not decisions.update_bbp_metrics
+
+
+def test_post_sample_update_decisions_follow_auc_guide_flag_during_recording() -> None:
+    decisions = post_sample_update_decisions(
+        recording=True,
+        auc_guide_enabled=True,
+        charge_index=-1,
+        sample_count=4,
+    )
+
+    assert decisions.update_auc
+    assert decisions.update_auc_guide
+    assert not decisions.update_bbp_metrics
+
+    decisions = post_sample_update_decisions(
+        recording=True,
+        auc_guide_enabled=False,
+        charge_index=-1,
+        sample_count=4,
+    )
+
+    assert decisions.update_auc
+    assert not decisions.update_auc_guide
+    assert not decisions.update_bbp_metrics
+
+
+def test_post_sample_update_decisions_trigger_bbp_at_fifth_sample_after_charge() -> None:
+    assert post_sample_update_decisions(
+        recording=True,
+        auc_guide_enabled=False,
+        charge_index=3,
+        sample_count=8,
+    ).update_bbp_metrics
+    assert not post_sample_update_decisions(
+        recording=True,
+        auc_guide_enabled=False,
+        charge_index=3,
+        sample_count=7,
+    ).update_bbp_metrics
+    assert not post_sample_update_decisions(
+        recording=True,
+        auc_guide_enabled=False,
+        charge_index=-1,
+        sample_count=4,
+    ).update_bbp_metrics
 
 
 def test_connected_curve_point_appends_valid_reading() -> None:

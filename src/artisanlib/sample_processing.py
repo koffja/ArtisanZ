@@ -64,6 +64,13 @@ class ProcessedSampleFrame:
     events: AutoEventDecisions
 
 
+@dataclass(frozen=True)
+class PostSampleUpdateDecisions:
+    update_auc: bool
+    update_auc_guide: bool
+    update_bbp_metrics: bool
+
+
 def decay_weight_sequence(curve_filter: int) -> tuple[int, ...]:
     if curve_filter <= 0:
         return (1,)
@@ -123,6 +130,19 @@ def decay_weighted_average(
         ))
     except Exception: # pylint: disable=broad-except
         return float(numpy.average(numpy.array(temperature_trail)))
+
+
+def post_sample_update_decisions(
+        recording: bool,
+        auc_guide_enabled: bool,
+        charge_index: int,
+        sample_count: int) -> PostSampleUpdateDecisions:
+    update_auc = recording
+    return PostSampleUpdateDecisions(
+        update_auc=update_auc,
+        update_auc_guide=update_auc and auc_guide_enabled,
+        update_bbp_metrics=recording and charge_index > -1 and sample_count == charge_index + 5,
+    )
 
 
 def connected_curve_point(
@@ -877,6 +897,8 @@ __all__ = [
     'PhaseEventDecisions',
     'phase_event_candidates_after_turning_point',
     'pid_process_value',
+    'post_sample_update_decisions',
+    'PostSampleUpdateDecisions',
     'PreviousReadings',
     'ProcessedSampleFrame',
     'rate_of_rise_per_minute',

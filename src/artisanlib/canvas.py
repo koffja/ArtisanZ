@@ -117,6 +117,7 @@ from artisanlib.sample_processing import (
     manual_x_axis_extension_end,
     phase_event_candidates_after_turning_point,
     pid_process_value,
+    post_sample_update_decisions,
     rate_of_rise_per_minute,
     smoothing_weights_for_recent_readings,
     simple_rate_of_rise_per_minute,
@@ -5148,20 +5149,26 @@ class tgraphcanvas(QObject):
                                 sv = max(0.0, sv) # we don't send SV < 0
                                 self.aw.pidcontrol.setSV(sv,init=False)
 
+                    post_update_decisions = post_sample_update_decisions(
+                        local_flagstart,
+                        self.AUCguideFlag,
+                        self.timeindex[0],
+                        len(sample_timex),
+                    )
+
                     # update AUC running value
-                    if local_flagstart: # only during recording
+                    if post_update_decisions.update_auc: # only during recording
                         try:
                             self.aw.updateAUC()
-                            if self.AUCguideFlag:
+                            if post_update_decisions.update_auc_guide:
                                 self.aw.updateAUCguide()
                         except Exception as e: # pylint: disable=broad-except
                             _log.exception(e)
 
                     # update BBP values
-                    if local_flagstart: # only during recording
+                    if post_update_decisions.update_bbp_metrics: # only during recording
                         try:
-                            if self.timeindex[0] > -1 and len(sample_timex) == self.timeindex[0] + 5:
-                                self.aw.calcBBPMetrics(checkCache=True)
+                            self.aw.calcBBPMetrics(checkCache=True)
                         except Exception as e: # pylint: disable=broad-except
                             _log.exception(e)
 
