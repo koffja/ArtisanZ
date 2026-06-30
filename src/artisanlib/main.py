@@ -26,7 +26,12 @@ from artisanlib.charge_manager import ChargeTargetManager
 from artisanlib.charge_dialog import ChargeTempRorDlg
 from artisanlib.gui_theme import lcd_label_stylesheet, lcd_value_stylesheet, modern_application_stylesheet
 from artisanlib.performance import export_gui_perf_metrics
-from artisanlib.ui_workspaces import WorkspaceMode, workspace_for_ui_mode_value
+from artisanlib.ui_workspaces import (
+    WorkspaceMode,
+    WorkspacePolicy,
+    workspace_for_ui_mode_value,
+    workspace_policy as workspace_policy_for_mode,
+)
 
 
 import os
@@ -1538,7 +1543,7 @@ class ApplicationWindow(QMainWindow):
         'bbp_begin_to_bottom_ror', 'bbp_bottom_to_charge_ror', 'bbp_time_added_from_prev', 'bbp_begin', 'bbp_endroast_epoch_msec', 'bbp_endevents',
         'bbp_dropevents', 'bbp_dropbt', 'bbp_dropet', 'bbp_drop_to_end', 'schedule_day_filter', 'schedule_user_filter', 'schedule_machine_filter',
         'schedule_visible_filter', 'scheduler_tasks_visible', 'scheduler_completed_details_visible', 'scheduler_filters_visible', 'scheduler_auto_open',
-        'main_menu_actions_with_shortcuts', 'ui_mode', 'workspace_mode', 'UIModeMenu',  'productionModeAction', 'defaultModeAction', 'expertModeAction', 'calculatorAction',
+        'main_menu_actions_with_shortcuts', 'ui_mode', 'workspace_mode', 'workspace_policy', 'UIModeMenu',  'productionModeAction', 'defaultModeAction', 'expertModeAction', 'calculatorAction',
         'helpAboutAction', 'checkUpdateAction', 'errorAction', 'messageAction', 'serialAction', 'platformAction', 'aboutQtAction',
         'helpDocumentationAction', 'KshortCAction', 'profile_data_type_adapter', 'official_build' ]
 
@@ -1556,6 +1561,7 @@ class ApplicationWindow(QMainWindow):
         self.superusermode:bool = False
         self.ui_mode:UI_MODE = UI_MODE.DEFAULT
         self.workspace_mode:WorkspaceMode = workspace_for_ui_mode_value(int(self.ui_mode))
+        self.workspace_policy:WorkspacePolicy = workspace_policy_for_mode(self.workspace_mode)
 
         self.sample_loop_running:bool = True
         self.time_stopped:float = 0
@@ -4583,7 +4589,8 @@ class ApplicationWindow(QMainWindow):
 
     def set_toolbar(self, ui_mode:UI_MODE) -> None:
         workspace_mode = workspace_for_ui_mode_value(int(ui_mode))
-        if workspace_mode is WorkspaceMode.EXPERT:
+        policy = workspace_policy_for_mode(workspace_mode)
+        if policy.show_advanced_controls:
             self.ntb.add_toolbar_lines_configuration()
         else:
             self.ntb.remove_toolbar_lines_configuration()
@@ -4619,6 +4626,7 @@ class ApplicationWindow(QMainWindow):
     def set_ui_mode(self, ui_mode:UI_MODE) -> None:
         self.ui_mode = ui_mode
         self.workspace_mode = workspace_for_ui_mode_value(int(ui_mode))
+        self.workspace_policy = workspace_policy_for_mode(self.workspace_mode)
         self.productionModeAction.setChecked(ui_mode is UI_MODE.PRODUCTION)
         self.defaultModeAction.setChecked(ui_mode is UI_MODE.DEFAULT)
         self.expertModeAction.setChecked(ui_mode is UI_MODE.EXPERT)
@@ -18127,6 +18135,7 @@ class ApplicationWindow(QMainWindow):
                 # similarly we default to UI_MODE.EXPERT for existing users while for new users the default is UI_MODE.DEFAULT
                 self.ui_mode = UI_MODE.EXPERT
                 self.workspace_mode = workspace_for_ui_mode_value(int(self.ui_mode))
+                self.workspace_policy = workspace_policy_for_mode(self.workspace_mode)
 
             if self.resetqsettings or (filename is None and QApplication.queryKeyboardModifiers() == (Qt.KeyboardModifier.AltModifier | Qt.KeyboardModifier.ShiftModifier)):
                 self.resetqsettings = 0
@@ -18476,6 +18485,7 @@ class ApplicationWindow(QMainWindow):
             self.keyboardmoveflag = toInt(settings.value('keyboardmoveflag',int(self.keyboardmoveflag)))
             self.ui_mode = UI_MODE(toInt(settings.value('UI_mode',int(self.ui_mode))))
             self.workspace_mode = workspace_for_ui_mode_value(int(self.ui_mode))
+            self.workspace_policy = workspace_policy_for_mode(self.workspace_mode)
             self.qmc.ambientTempSource = toInt(settings.value('AmbientTempSource',int(self.qmc.ambientTempSource)))
             self.qmc.ambientHumiditySource = toInt(settings.value('AmbientHumiditySource',int(self.qmc.ambientHumiditySource)))
             self.qmc.ambientPressureSource = toInt(settings.value('AmbientPressureSource',int(self.qmc.ambientPressureSource)))

@@ -41,6 +41,7 @@ class FakeApplicationWindow:
 
         self.ui_mode = main.UI_MODE.DEFAULT
         self.workspace_mode = workspaces.workspace_for_ui_mode_value(int(self.ui_mode))
+        self.workspace_policy = workspaces.workspace_policy(self.workspace_mode)
         self.productionModeAction = FakeAction()
         self.defaultModeAction = FakeAction()
         self.expertModeAction = FakeAction()
@@ -119,6 +120,7 @@ def test_application_window_set_ui_mode_syncs_workspace_and_toolbar_policy() -> 
     main.ApplicationWindow.set_ui_mode(window, main.UI_MODE.EXPERT)
 
     assert window.workspace_mode is workspaces.WorkspaceMode.EXPERT
+    assert window.workspace_policy is workspaces.workspace_policy(workspaces.WorkspaceMode.EXPERT)
     assert window.expertModeAction.checked is True
     assert window.defaultModeAction.checked is False
     assert window.productionModeAction.checked is False
@@ -126,11 +128,13 @@ def test_application_window_set_ui_mode_syncs_workspace_and_toolbar_policy() -> 
 
     main.ApplicationWindow.set_ui_mode(window, main.UI_MODE.DEFAULT)
     assert window.workspace_mode is workspaces.WorkspaceMode.ROAST_CONTROL
+    assert window.workspace_policy is workspaces.workspace_policy(workspaces.WorkspaceMode.ROAST_CONTROL)
     assert window.defaultModeAction.checked is True
     assert window.ntb.actions[-1] == 'remove'
 
     main.ApplicationWindow.set_ui_mode(window, main.UI_MODE.PRODUCTION)
     assert window.workspace_mode is workspaces.WorkspaceMode.PRODUCTION
+    assert window.workspace_policy is workspaces.workspace_policy(workspaces.WorkspaceMode.PRODUCTION)
     assert window.productionModeAction.checked is True
     assert window.ntb.actions[-1] == 'remove'
     assert window.menus == [
@@ -139,6 +143,17 @@ def test_application_window_set_ui_mode_syncs_workspace_and_toolbar_policy() -> 
         main.UI_MODE.PRODUCTION,
     ]
     assert window.announcements == 3
+
+
+def test_application_window_set_toolbar_uses_workspace_policy() -> None:
+    main = main_module()
+    window = FakeApplicationWindow()
+
+    main.ApplicationWindow.set_toolbar(window, main.UI_MODE.EXPERT)
+    main.ApplicationWindow.set_toolbar(window, main.UI_MODE.DEFAULT)
+    main.ApplicationWindow.set_toolbar(window, main.UI_MODE.PRODUCTION)
+
+    assert window.ntb.actions == ['add', 'remove', 'remove']
 
 
 def test_workspace_policy_is_frozen_and_immutable() -> None:
