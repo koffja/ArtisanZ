@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 from collections.abc import Iterator, Sequence
+from dataclasses import FrozenInstanceError
 
 import pytest
 import numpy
 
 from artisanlib.sample_processing import (
+    _alarm_row_is_complete,
+    _bt_above_event_threshold,
+    _relative_latest_value,
     alarm_is_eligible_for_evaluation,
     alarm_source_value,
     alarm_temperature_reaches_limit,
@@ -28,7 +32,6 @@ from artisanlib.sample_processing import (
     input_filter_backfill_updates,
     input_filter_previous_values,
     input_filter_result,
-    BackfillUpdate,
     live_x_axis_extension_end,
     manual_turning_point_check_candidate,
     manual_x_axis_extension_end,
@@ -37,7 +40,6 @@ from artisanlib.sample_processing import (
     pid_process_value_update_enabled,
     pid_set_value_update,
     pid_sv_update_target,
-    PidSvUpdateTarget,
     post_sample_update_decisions,
     relative_alarm_index,
     ror_curve_window,
@@ -50,6 +52,17 @@ from artisanlib.sample_processing import (
     turning_point_temperature_is_valid,
     turning_point_timeout_index,
     windowed_curve_data,
+    AlarmTrigger,
+    AutoEventDecisions,
+    BackfillUpdate,
+    ConnectedCurvePoint,
+    CurveWindowData,
+    InputFilterResult,
+    PhaseEventDecisions,
+    PidSvUpdateTarget,
+    PostSampleUpdateDecisions,
+    PreviousReadings,
+    ProcessedSampleFrame,
 )
 
 
@@ -2292,3 +2305,195 @@ def test_phase_event_candidates_are_evaluated_after_turning_point_timeout_state(
 
     assert phase_events.dry_candidate
     assert phase_events.fcs_candidate
+
+
+# ----------------------------------------------------------------------------
+# Phase 3 audit additive characterization tests (2026-06-30).
+#
+# These tests document the existing contract of symbols in
+# ``artisanlib.sample_processing`` that prior Phase 3 slices left without
+# direct unit coverage. They are intentionally minimal (one equality test +
+# one frozen test per dataclass; a small behaviour matrix per private
+# helper) and exist to break loudly if a future cleanup slice changes a
+# dataclass field, drops ``frozen=True``, or silently alters the private
+# helper contracts that the public wrappers depend on.
+#
+# No production code was modified to add these tests.
+# ----------------------------------------------------------------------------
+
+
+def test_alarm_trigger_is_frozen_and_equal() -> None:
+    assert AlarmTrigger(alarm_index=2, state_index=1) == AlarmTrigger(alarm_index=2, state_index=1)
+    assert AlarmTrigger(alarm_index=2, state_index=1) != AlarmTrigger(alarm_index=3, state_index=1)
+    trigger = AlarmTrigger(alarm_index=2, state_index=1)
+    with pytest.raises(FrozenInstanceError):
+        trigger.alarm_index = 5  # type: ignore[misc]
+
+
+def test_backfill_update_is_frozen_and_equal() -> None:
+    assert BackfillUpdate(index=1, value=199.5) == BackfillUpdate(index=1, value=199.5)
+    assert BackfillUpdate(index=1, value=199.5) != BackfillUpdate(index=2, value=199.5)
+    update = BackfillUpdate(index=1, value=199.5)
+    with pytest.raises(FrozenInstanceError):
+        update.value = 200.0  # type: ignore[misc]
+
+
+def test_auto_event_decisions_is_frozen_and_equal() -> None:
+    a = AutoEventDecisions(
+        charge_candidate=True,
+        turning_point_timeout_index=4,
+        turning_point_check_candidate=False,
+        drop_candidate=False,
+    )
+    b = AutoEventDecisions(
+        charge_candidate=True,
+        turning_point_timeout_index=4,
+        turning_point_check_candidate=False,
+        drop_candidate=False,
+    )
+    assert a == b
+    assert a != AutoEventDecisions(True, None, False, False)
+    with pytest.raises(FrozenInstanceError):
+        a.charge_candidate = False  # type: ignore[misc]
+
+
+def test_connected_curve_point_is_frozen_and_equal() -> None:
+    assert ConnectedCurvePoint(should_append=True, value=200.0) == ConnectedCurvePoint(True, 200.0)
+    assert ConnectedCurvePoint(True, 200.0) != ConnectedCurvePoint(False, 200.0)
+    point = ConnectedCurvePoint(True, 200.0)
+    with pytest.raises(FrozenInstanceError):
+        point.value = 201.0  # type: ignore[misc]
+
+
+def test_curve_window_data_is_frozen_and_equal() -> None:
+    payload_a = CurveWindowData(times=(0.0, 1.0), values=(200.0, 201.0))
+    payload_b = CurveWindowData(times=(0.0, 1.0), values=(200.0, 201.0))
+    assert payload_a == payload_b
+    assert payload_a != CurveWindowData(times=(0.0,), values=(200.0,))
+    with pytest.raises(FrozenInstanceError):
+        payload_a.times = (9.0,)  # type: ignore[misc]
+
+
+def test_input_filter_result_is_frozen_and_equal() -> None:
+    result = InputFilterResult(value=200.0, backfill_updates=(BackfillUpdate(0, 199.0),))
+    same = InputFilterResult(value=200.0, backfill_updates=(BackfillUpdate(0, 199.0),))
+    assert result == same
+    assert result != InputFilterResult(value=201.0, backfill_updates=())
+    with pytest.raises(FrozenInstanceError):
+        result.value = 205.0  # type: ignore[misc]
+
+
+def test_phase_event_decisions_is_frozen_and_equal() -> None:
+    assert PhaseEventDecisions(dry_candidate=True, fcs_candidate=False) == PhaseEventDecisions(True, False)
+    assert PhaseEventDecisions(True, False) != PhaseEventDecisions(False, True)
+    decisions = PhaseEventDecisions(True, False)
+    with pytest.raises(FrozenInstanceError):
+        decisions.dry_candidate = False  # type: ignore[misc]
+
+
+def test_post_sample_update_decisions_is_frozen_and_equal() -> None:
+    assert PostSampleUpdateDecisions(True, True, False) == PostSampleUpdateDecisions(True, True, False)
+    assert PostSampleUpdateDecisions(True, True, False) != PostSampleUpdateDecisions(False, True, False)
+    decisions = PostSampleUpdateDecisions(True, True, False)
+    with pytest.raises(FrozenInstanceError):
+        decisions.update_auc = False  # type: ignore[misc]
+
+
+def test_previous_readings_is_frozen_and_equal() -> None:
+    assert PreviousReadings(latest=200.0, previous=199.5) == PreviousReadings(200.0, 199.5)
+    assert PreviousReadings(200.0, 199.5) != PreviousReadings(200.0, None)
+    readings = PreviousReadings(200.0, 199.5)
+    with pytest.raises(FrozenInstanceError):
+        readings.latest = 205.0  # type: ignore[misc]
+
+
+def test_processed_sample_frame_is_frozen_and_field_set_pinned() -> None:
+    frame = build_live_processed_sample_frame(
+        timestamp=120.0,
+        sample_count=3,
+        latest_et=180.0,
+        latest_bt=200.0,
+        smoothed_et=179.5,
+        smoothed_bt=199.5,
+        pid_process_value=199.5,
+        raw_delta_et=5.0,
+        raw_delta_bt=6.0,
+        ror_limit_enabled=False,
+        max_ror_limit=30.0,
+        ror_limit=20.0,
+        ror_limit_min=-20.0,
+        charge_index=1,
+        dry_index=0,
+        drop_index=0,
+        delta_et_filter=0.0,
+        delta_bt_filter=0.0,
+        delta_et_samples=0,
+        delta_bt_samples=0,
+        fix_max_time=True,
+        lock_time_x=False,
+        sample_times=[0.0, 60.0, 120.0],
+        start_of_x=0.0,
+        end_of_x=660.0,
+        tp_alarm_timeindex=None,
+        tp_max_roast_time=120.0,
+        auto_charge_idx=1,
+        auto_charge_flag=True,
+        auto_charge_enabled=True,
+        auto_drop_idx=0,
+        auto_drop_flag=False,
+        auto_drop_enabled=True,
+        mode='C',
+    )
+    # Pin the runtime type and field set so canvas.py consumers don't silently
+    # lose a payload attribute if a future slice renames or removes a field.
+    assert isinstance(frame, ProcessedSampleFrame)
+    assert set(frame.__dataclass_fields__) == {
+        'timestamp', 'sample_count', 'latest_et', 'latest_bt',
+        'smoothed_et', 'smoothed_bt', 'pid_process_value',
+        'displayed_delta_et', 'displayed_delta_bt',
+        'delta_et_window', 'delta_bt_window',
+        'live_x_axis_extension_end', 'events',
+    }
+    with pytest.raises(FrozenInstanceError):
+        frame.latest_bt = 999.0  # type: ignore[misc]
+
+
+def test_bt_above_event_threshold_is_strict_per_mode() -> None:
+    # Celsius mode uses celsius_threshold and is strict inequality.
+    assert _bt_above_event_threshold('C', 195.0, 194.0, 380.0) is True
+    assert _bt_above_event_threshold('C', 194.0, 194.0, 380.0) is False
+    # Fahrenheit mode uses fahrenheit_threshold and ignores celsius_threshold.
+    assert _bt_above_event_threshold('F', 380.0, 999.0, 379.0) is True
+    assert _bt_above_event_threshold('F', 379.0, 0.0, 379.0) is False
+    # Any other mode string yields False (guarded equality, not membership).
+    assert _bt_above_event_threshold('c', 9999.0, 0.0, 0.0) is False
+    assert _bt_above_event_threshold('', 9999.0, 0.0, 0.0) is False
+
+
+def test_alarm_row_is_complete_requires_every_input_long_enough() -> None:
+    # 8 sequences after index: states, guards, negative_guards, times,
+    # offsets, sources, conditions, temperatures.
+    full_args = ([0], [0], [0], [0], [0.0], [0], [0], [0.0])
+    assert _alarm_row_is_complete(0, *full_args) is True
+    # Each sequence is checked independently; shortening any one trips False.
+    for short_idx in range(8):
+        args = list(full_args)
+        args[short_idx] = []
+        assert _alarm_row_is_complete(0, *args) is False
+    # Index equal to length is the boundary (not complete).
+    assert _alarm_row_is_complete(1, *full_args) is False
+
+
+def test_relative_latest_value_handles_empty_dropout_and_baseline_cases() -> None:
+    # Empty values short-circuit to None.
+    assert _relative_latest_value([], alarm_index=None) is None
+    # Latest dropout propagates as None without consulting earlier entries.
+    assert _relative_latest_value([1.0, None], alarm_index=None) is None
+    # Without a baseline request, the latest value is returned as-is.
+    assert _relative_latest_value([1.0, 2.0, 3.0], alarm_index=None) == 3.0
+    # With a valid baseline index, the baseline is subtracted.
+    assert _relative_latest_value([10.0, 20.0, 30.0], alarm_index=0) == 20.0
+    # A dropout baseline is treated as zero (no subtraction).
+    assert _relative_latest_value([None, 20.0, 30.0], alarm_index=0) == 30.0
+    # An out-of-range baseline is caught and the helper returns None.
+    assert _relative_latest_value([1.0, 2.0, 3.0], alarm_index=99) is None
