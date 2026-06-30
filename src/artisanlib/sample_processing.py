@@ -138,6 +138,21 @@ def decay_weighted_average(
         return float(numpy.average(numpy.array(temperature_trail)))
 
 
+def smoothed_temperature_value(
+        sample_times: Sequence[float],
+        connected_temperatures: Sequence[TemperatureValue],
+        decay_weights: Sequence[int] | None,
+        sample_interval_seconds: float) -> float:
+    if len(connected_temperatures) <= 0:
+        return -1
+    return decay_weighted_average(
+        sample_times,
+        connected_temperatures,
+        decay_weights,
+        sample_interval_seconds,
+    )
+
+
 def post_sample_update_decisions(
         recording: bool,
         auc_guide_enabled: bool,
@@ -1003,6 +1018,7 @@ __all__ = [
     'relative_alarm_index',
     'ror_curve_window',
     'simple_rate_of_rise_per_minute',
+    'smoothed_temperature_value',
     'smoothing_weights_for_recent_readings',
     'turning_point_check_candidate',
     'turning_point_temperature_is_valid',

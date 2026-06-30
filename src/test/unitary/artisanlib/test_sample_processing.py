@@ -38,6 +38,7 @@ from artisanlib.sample_processing import (
     relative_alarm_index,
     ror_curve_window,
     rate_of_rise_per_minute,
+    smoothed_temperature_value,
     smoothing_weights_for_recent_readings,
     simple_rate_of_rise_per_minute,
     turning_point_check_candidate,
@@ -120,6 +121,33 @@ def test_decay_weighted_average_returns_negative_one_without_valid_values() -> N
         decay_weights=[1, 2],
         sample_interval_seconds=1.0,
     ) == -1
+
+
+def test_smoothed_temperature_value_returns_negative_one_without_connected_values() -> None:
+    assert smoothed_temperature_value(
+        sample_times=[],
+        connected_temperatures=[],
+        decay_weights=[1, 2],
+        sample_interval_seconds=1.0,
+    ) == -1
+
+
+def test_smoothed_temperature_value_falls_back_to_latest_without_usable_weights() -> None:
+    assert smoothed_temperature_value(
+        sample_times=[0.0, 1.0],
+        connected_temperatures=[10.0, 12.0],
+        decay_weights=None,
+        sample_interval_seconds=1.0,
+    ) == 12.0
+
+
+def test_smoothed_temperature_value_uses_decay_weighted_average_for_connected_values() -> None:
+    assert smoothed_temperature_value(
+        sample_times=[0.0, 1.0, 2.0],
+        connected_temperatures=[10.0, None, 30.0],
+        decay_weights=[1, 2, 3],
+        sample_interval_seconds=1.0,
+    ) == pytest.approx(26.0)
 
 
 def test_post_sample_update_decisions_skip_all_work_outside_recording() -> None:

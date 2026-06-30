@@ -126,6 +126,7 @@ from artisanlib.sample_processing import (
     PidSvUpdateTarget,
     post_sample_update_decisions,
     rate_of_rise_per_minute,
+    smoothed_temperature_value,
     smoothing_weights_for_recent_readings,
     simple_rate_of_rise_per_minute,
     turning_point_temperature_is_valid,
@@ -4896,14 +4897,18 @@ class tgraphcanvas(QObject):
                     dw1 = list(smoothing_weights_for_recent_readings(sample_temp1, self.temp_decay_weights, cf))
                     dw2 = list(smoothing_weights_for_recent_readings(sample_temp2, self.temp_decay_weights, cf))
                     # average smoothing
-                    if len(sample_ctemp1) > 0:
-                        st1 = self.decay_average(sample_ctimex1,sample_ctemp1,dw1)
-                    else:
-                        st1 = -1
-                    if len(sample_ctemp2) > 0:
-                        st2 = self.decay_average(sample_ctimex2,sample_ctemp2,dw2)
-                    else:
-                        st2 = -1
+                    st1 = smoothed_temperature_value(
+                        sample_ctimex1,
+                        sample_ctemp1,
+                        dw1,
+                        self.delay / 1000.,
+                    )
+                    st2 = smoothed_temperature_value(
+                        sample_ctimex2,
+                        sample_ctemp2,
+                        dw2,
+                        self.delay / 1000.,
+                    )
 
 #                    # we apply a minimal live median spike filter
 #                    if self.filterDropOuts:
