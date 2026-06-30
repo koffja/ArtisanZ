@@ -4623,7 +4623,7 @@ class tgraphcanvas(QObject):
 
     # sample devices at interval self.delay milliseconds.
     # we can assume within the processing of sample_processing() that flagon=True
-    # NOTE: sample_processing is processed in the GUI thread NOT the sample thread!
+    # NOTE: sample_processing is queued to the GUI thread by Athreadserver.createSampleThread().
     @gui_perf_tracked('canvas.sample_processing')
     def sample_processing(self, local_flagstart:bool, temp1_readings:list[float], temp2_readings:list[float], timex_readings:list[float]) -> None: # pyright: ignore [reportGeneralTypeIssues] # Code is too complex to analyze; reduce complexity by refactoring into subroutines or reducing conditional code paths
         ##### (try to) lock resources  #########
@@ -20184,8 +20184,11 @@ class Athreadserver(QWidget):
         if not self.aw.qmc.flagsamplingthreadrunning: # we only start a new sampling thread if none is running yet
             sthread = SampleThread(self.aw)
 
-            #connect graphics to GUI thread
-            sthread.sample_processingSignal.connect(self.aw.qmc.sample_processing)
+            # Queue processing back to the GUI thread; the sampling thread only gathers readings.
+            sthread.sample_processingSignal.connect(
+                self.aw.qmc.sample_processing,
+                type=Qt.ConnectionType.QueuedConnection,
+            ) # type: ignore[call-arg]
             sthread.finished.connect(sthread.deleteLater)
             sthread.terminatingSignal.connect(self.terminating)
             sthread.start(QThread.Priority.TimeCriticalPriority) # TimeCriticalPriority > HighestPriority > HighPriority > NormalPriority > LowPriority
