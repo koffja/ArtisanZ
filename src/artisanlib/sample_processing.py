@@ -331,6 +331,16 @@ def manual_turning_point_check_candidate(
     )
 
 
+def pid_process_value_update_enabled(
+        control_button_enabled: bool,
+        external_pid_controller: int | None) -> bool:
+    if not control_button_enabled:
+        return False
+    if external_pid_controller is None:
+        return False
+    return external_pid_controller == 0
+
+
 def pid_process_value(
         pid_source: int,
         smoothed_et: TemperatureValue,
@@ -1007,6 +1017,7 @@ __all__ = [
     'PhaseEventDecisions',
     'phase_event_candidates_after_turning_point',
     'pid_process_value',
+    'pid_process_value_update_enabled',
     'pid_set_value_update',
     'PidSvUpdateTarget',
     'pid_sv_update_target',

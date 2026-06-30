@@ -31,6 +31,7 @@ from artisanlib.sample_processing import (
     manual_x_axis_extension_end,
     phase_event_candidates_after_turning_point,
     pid_process_value,
+    pid_process_value_update_enabled,
     pid_set_value_update,
     pid_sv_update_target,
     PidSvUpdateTarget,
@@ -654,6 +655,36 @@ def test_manual_turning_point_check_candidate_uses_strict_five_sample_gap_after_
 def test_pid_process_value_uses_smoothed_bt_for_default_sources() -> None:
     assert pid_process_value(0, smoothed_et=181.0, smoothed_bt=202.5, extra_temps_1=[], extra_temps_2=[]) == 202.5
     assert pid_process_value(1, smoothed_et=181.0, smoothed_bt=203.5, extra_temps_1=[], extra_temps_2=[]) == 203.5
+
+
+def test_pid_process_value_update_enabled_requires_control_button() -> None:
+    assert not pid_process_value_update_enabled(
+        control_button_enabled=False,
+        external_pid_controller=None,
+    )
+    assert not pid_process_value_update_enabled(
+        control_button_enabled=False,
+        external_pid_controller=0,
+    )
+
+
+def test_pid_process_value_update_enabled_rejects_external_pid_control() -> None:
+    assert pid_process_value_update_enabled(
+        control_button_enabled=True,
+        external_pid_controller=0,
+    )
+    for controller_code in (1, 2, 3, 4):
+        assert not pid_process_value_update_enabled(
+            control_button_enabled=True,
+            external_pid_controller=controller_code,
+        )
+
+
+def test_pid_process_value_update_enabled_rejects_missing_external_pid_state() -> None:
+    assert not pid_process_value_update_enabled(
+        control_button_enabled=True,
+        external_pid_controller=None,
+    )
 
 
 def test_pid_process_value_uses_smoothed_et_for_source_two() -> None:

@@ -121,6 +121,7 @@ from artisanlib.sample_processing import (
     manual_x_axis_extension_end,
     phase_event_candidates_after_turning_point,
     pid_process_value,
+    pid_process_value_update_enabled,
     pid_set_value_update,
     pid_sv_update_target,
     PidSvUpdateTarget,
@@ -4930,8 +4931,11 @@ class tgraphcanvas(QObject):
                     #NOTE: the following is no longer restricted to self.aw.pidcontrol.pidActive==True
                     # as now the software PID is also update while the PID is off (if configured).
                     process_value:float|None = None
-                    if (self.Controlbuttonflag and \
-                            not self.aw.pidcontrol.externalPIDControl()): # any device and + Artisan Software PID lib
+                    external_pid_controller = (
+                        self.aw.pidcontrol.externalPIDControl() if self.Controlbuttonflag else None)
+                    if pid_process_value_update_enabled(
+                            self.Controlbuttonflag,
+                            external_pid_controller): # any device and + Artisan Software PID lib
                         process_value = pid_process_value(
                             self.aw.pidcontrol.pidSource,
                             smoothed_et=st1,
