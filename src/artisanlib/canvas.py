@@ -118,6 +118,7 @@ from artisanlib.sample_processing import (
     full_curve_data,
     input_filter_backfill_updates,
     input_filter_previous_values,
+    input_filter_result,
     manual_turning_point_check_candidate,
     manual_x_axis_extension_end,
     phase_event_candidates_after_turning_point,
@@ -4551,73 +4552,26 @@ class tgraphcanvas(QObject):
     # note that here we assume that the actual measured temperature time/temp was not already added to the list of previous measurements timex/tempx
     def inputFilter(self, timex:list[float], tempx:list[float], time:float, temp:float, BT:bool = False) -> float:
         try:
-            wrong_reading = 0
-            #########################
-            # a) detect duplicates: remove a reading if it is equal to the previous or if that is -1 to the one before that
-            if self.dropDuplicates and ((len(tempx)>1 and tempx[-1] == -1 and abs(temp - tempx[-2]) <= self.dropDuplicatesLimit) or (len(tempx)>0 and abs(temp - tempx[-1]) <= self.dropDuplicatesLimit)):
-                wrong_reading = 2 # replace by previous reading not by -1
-            #########################
-            # b) detect overflows
-            if self.minmaxLimits and (temp < self.filterDropOut_tmin or temp > self.filterDropOut_tmax):
-                wrong_reading = 1
-            #########################
-            # c) detect spikes (on BT only after CHARGE if autoChargeFlag=True not to have a conflict here)
-            n = self.filterDropOut_spikeRoR_period
-            dRoR_limit = self.filterDropOut_spikeRoR_dRoR_limit # the limit of additional RoR in temp/sec (4C for C / 7F for F) compared to previous readings
-            if self.dropSpikes and ((not self.autoChargeFlag) or (not BT) or (self.timeindex[0] != -1 and (self.timeindex[0] + n) < len(timex))) and not wrong_reading and len(tempx) >= n:
-                # no min/max overflow detected
-                # check if RoR caused by actual measurement is way higher then the previous one
-                # calc previous RoR (pRoR) taking the last n samples into account
-                pdtemp = tempx[-1] - tempx[-n]
-                pdtime = timex[-1] - timex[-n]
-                if pdtime > 0:
-
-# old (asymmetric):
-#                    pRoR = abs(pdtemp/pdtime)
-#                    dtemp = tempx[-1] - temp
-#                    dtime = timex[-1] - time
-
-# new (symmetric and more conservative:
-                    pRoR = pdtemp/pdtime
-                    dtemp = temp - tempx[-n + 1]
-                    dtime = time - timex[-n + 1]
-
-                    if dtime > 0:
-
-# old (asymmetric)
-#                        RoR = abs(dtemp/dtime)
-#                        if RoR > (pRoR + dRoR_limit):
-#                            wrong_reading = 2
-
-# new (symmetric and more conservative):
-                        RoR = dtemp/dtime
-                        if (pRoR + dRoR_limit) < RoR < (pRoR - dRoR_limit):
-                            wrong_reading = 2
-
-            #########################
-            # c) handle outliers if it could be detected
-            if wrong_reading:
-                if len(tempx) > 0 and tempx[-1] != -1:
-                    # repeate last correct reading if not done before in the last two fixes (min/max violation are always filtered)
-                    if len(tempx) == 1 or (len(tempx) > 3 and (tempx[-1] != tempx[-2] or tempx[-2] != tempx[-3])):
-                        return tempx[-1]
-                    if wrong_reading == 1:
-                        return -1
-                    # no way to correct this
-                    return temp
-                if wrong_reading == 1:
-                    return -1
-                # no way to correct this
-                return temp
-            # try to improve a previously corrected reading timex/temp[-1] based on the current reading time/temp (just in this case the actual reading is not a drop)
-            if (self.minmaxLimits or self.dropSpikes or self.dropDuplicates):
-                if len(tempx) > 2 and tempx[-1] == tempx[-2] == tempx[-3] and tempx[-1] != -1 and tempx[-1] != temp and temp!=-1: # previous reading was a drop and replaced by reading[-2] and same for the one before
-                    delta = (tempx[-3] - temp) / 3.0
-                    tempx[-1] = tempx[-3] - 2*delta
-                    tempx[-2] = tempx[-3] - delta
-                elif len(tempx) > 1 and tempx[-1] == tempx[-2] and tempx[-1] != -1 and tempx[-1] != temp and temp!=-1: # previous reading was a drop and replaced by reading[-2]
-                    tempx[-1] = (tempx[-2] + temp) / 2.0
-            return temp
+            result = input_filter_result(
+                timex,
+                tempx,
+                time,
+                temp,
+                BT,
+                self.dropDuplicates,
+                self.dropDuplicatesLimit,
+                self.minmaxLimits,
+                self.filterDropOut_tmin,
+                self.filterDropOut_tmax,
+                self.dropSpikes,
+                self.autoChargeFlag,
+                self.timeindex[0],
+                self.filterDropOut_spikeRoR_period,
+                self.filterDropOut_spikeRoR_dRoR_limit,
+            )
+            for update in result.backfill_updates:
+                tempx[update.index] = update.value
+            return result.value
         except Exception as e: # pylint: disable=broad-except
             _log.exception(e)
             _, _, exc_tb = sys.exc_info()

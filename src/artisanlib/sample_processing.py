@@ -34,6 +34,12 @@ class PreviousReadings:
 
 
 @dataclass(frozen=True)
+class InputFilterResult:
+    value: float
+    backfill_updates: tuple[BackfillUpdate, ...]
+
+
+@dataclass(frozen=True)
 class AlarmTrigger:
     alarm_index: int
     state_index: int
@@ -290,6 +296,94 @@ def input_filter_previous_values(
     latest = readings[-1] if len(readings) > 0 else None
     previous = readings[-2] if len(readings) > 1 else None
     return PreviousReadings(latest, previous)
+
+
+def input_filter_result(
+        sample_times: Sequence[float],
+        temperatures: Sequence[float],
+        current_time: float,
+        current_temperature: float,
+        is_bt: bool,
+        drop_duplicates: bool,
+        drop_duplicates_limit: float,
+        minmax_limits: bool,
+        min_temperature: float,
+        max_temperature: float,
+        drop_spikes: bool,
+        auto_charge_flag: bool,
+        charge_index: int,
+        spike_period: int,
+        spike_dror_limit: float) -> InputFilterResult:
+    wrong_reading = 0
+    if (
+            drop_duplicates and (
+                (len(temperatures) > 1 and temperatures[-1] == -1 and
+                    abs(current_temperature - temperatures[-2]) <= drop_duplicates_limit) or
+                (len(temperatures) > 0 and
+                    abs(current_temperature - temperatures[-1]) <= drop_duplicates_limit))):
+        wrong_reading = 2
+    if minmax_limits and (current_temperature < min_temperature or current_temperature > max_temperature):
+        wrong_reading = 1
+    if (
+            drop_spikes and
+            (
+                not auto_charge_flag or
+                not is_bt or
+                (charge_index != -1 and (charge_index + spike_period) < len(sample_times))) and
+            not wrong_reading and
+            len(temperatures) >= spike_period):
+        previous_delta_temperature = temperatures[-1] - temperatures[-spike_period]
+        previous_delta_time = sample_times[-1] - sample_times[-spike_period]
+        if previous_delta_time > 0:
+            previous_ror = previous_delta_temperature / previous_delta_time
+            current_delta_temperature = current_temperature - temperatures[-spike_period + 1]
+            current_delta_time = current_time - sample_times[-spike_period + 1]
+            if current_delta_time > 0:
+                current_ror = current_delta_temperature / current_delta_time
+                if (previous_ror + spike_dror_limit) < current_ror < (previous_ror - spike_dror_limit):
+                    wrong_reading = 2
+
+    if wrong_reading:
+        if len(temperatures) > 0 and temperatures[-1] != -1:
+            if (
+                    len(temperatures) == 1 or
+                    (len(temperatures) > 3 and (
+                        temperatures[-1] != temperatures[-2] or
+                        temperatures[-2] != temperatures[-3]))):
+                return InputFilterResult(temperatures[-1], ())
+            if wrong_reading == 1:
+                return InputFilterResult(-1, ())
+            return InputFilterResult(current_temperature, ())
+        if wrong_reading == 1:
+            return InputFilterResult(-1, ())
+        return InputFilterResult(current_temperature, ())
+
+    if minmax_limits or drop_spikes or drop_duplicates:
+        if (
+                len(temperatures) > 2 and
+                temperatures[-1] == temperatures[-2] == temperatures[-3] and
+                temperatures[-1] != -1 and
+                temperatures[-1] != current_temperature and
+                current_temperature != -1):
+            delta = (temperatures[-3] - current_temperature) / 3.0
+            return InputFilterResult(
+                current_temperature,
+                (
+                    BackfillUpdate(len(temperatures) - 1, temperatures[-3] - 2 * delta),
+                    BackfillUpdate(len(temperatures) - 2, temperatures[-3] - delta),
+                ),
+            )
+        if (
+                len(temperatures) > 1 and
+                temperatures[-1] == temperatures[-2] and
+                temperatures[-1] != -1 and
+                temperatures[-1] != current_temperature and
+                current_temperature != -1):
+            return InputFilterResult(
+                current_temperature,
+                (BackfillUpdate(len(temperatures) - 1, (temperatures[-2] + current_temperature) / 2.0),),
+            )
+    return InputFilterResult(current_temperature, ())
 
 
 def live_x_axis_extension_end(
@@ -1054,6 +1148,8 @@ __all__ = [
     'full_curve_data',
     'input_filter_backfill_updates',
     'input_filter_previous_values',
+    'input_filter_result',
+    'InputFilterResult',
     'live_x_axis_extension_end',
     'manual_turning_point_check_candidate',
     'manual_x_axis_extension_end',

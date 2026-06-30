@@ -27,6 +27,8 @@ from artisanlib.sample_processing import (
     full_curve_data,
     input_filter_backfill_updates,
     input_filter_previous_values,
+    input_filter_result,
+    BackfillUpdate,
     live_x_axis_extension_end,
     manual_turning_point_check_candidate,
     manual_x_axis_extension_end,
@@ -524,6 +526,124 @@ def test_input_filter_previous_values_return_latest_and_previous_readings() -> N
 
     assert previous.latest == 181.0
     assert previous.previous == 176.0
+
+
+def test_input_filter_result_repeats_latest_for_duplicate_reading() -> None:
+    result = input_filter_result(
+        sample_times=[0.0],
+        temperatures=[150.0],
+        current_time=1.0,
+        current_temperature=150.2,
+        is_bt=False,
+        drop_duplicates=True,
+        drop_duplicates_limit=0.54,
+        minmax_limits=False,
+        min_temperature=0.0,
+        max_temperature=300.0,
+        drop_spikes=False,
+        auto_charge_flag=False,
+        charge_index=-1,
+        spike_period=3,
+        spike_dror_limit=4.0,
+    )
+
+    assert result.value == 150.0
+    assert result.backfill_updates == ()
+
+
+def test_input_filter_result_returns_negative_one_for_repeated_minmax_violation() -> None:
+    result = input_filter_result(
+        sample_times=[0.0, 1.0, 2.0],
+        temperatures=[150.0, 150.0, 150.0],
+        current_time=3.0,
+        current_temperature=999.0,
+        is_bt=False,
+        drop_duplicates=False,
+        drop_duplicates_limit=0.54,
+        minmax_limits=True,
+        min_temperature=0.0,
+        max_temperature=300.0,
+        drop_spikes=False,
+        auto_charge_flag=False,
+        charge_index=-1,
+        spike_period=3,
+        spike_dror_limit=4.0,
+    )
+
+    assert result.value == -1
+    assert result.backfill_updates == ()
+
+
+def test_input_filter_result_passes_through_when_filters_are_disabled() -> None:
+    result = input_filter_result(
+        sample_times=[0.0, 1.0],
+        temperatures=[150.0, 150.0],
+        current_time=2.0,
+        current_temperature=170.0,
+        is_bt=False,
+        drop_duplicates=False,
+        drop_duplicates_limit=0.54,
+        minmax_limits=False,
+        min_temperature=0.0,
+        max_temperature=300.0,
+        drop_spikes=False,
+        auto_charge_flag=False,
+        charge_index=-1,
+        spike_period=3,
+        spike_dror_limit=4.0,
+    )
+
+    assert result.value == 170.0
+    assert result.backfill_updates == ()
+
+
+def test_input_filter_result_returns_single_backfill_for_previous_repeated_reading() -> None:
+    result = input_filter_result(
+        sample_times=[0.0, 1.0],
+        temperatures=[150.0, 150.0],
+        current_time=2.0,
+        current_temperature=156.0,
+        is_bt=False,
+        drop_duplicates=False,
+        drop_duplicates_limit=0.54,
+        minmax_limits=True,
+        min_temperature=0.0,
+        max_temperature=300.0,
+        drop_spikes=False,
+        auto_charge_flag=False,
+        charge_index=-1,
+        spike_period=3,
+        spike_dror_limit=4.0,
+    )
+
+    assert result.value == 156.0
+    assert result.backfill_updates == (BackfillUpdate(1, 153.0),)
+
+
+def test_input_filter_result_returns_two_backfills_for_three_repeated_readings() -> None:
+    result = input_filter_result(
+        sample_times=[0.0, 1.0, 2.0],
+        temperatures=[150.0, 150.0, 150.0],
+        current_time=3.0,
+        current_temperature=156.0,
+        is_bt=False,
+        drop_duplicates=False,
+        drop_duplicates_limit=0.54,
+        minmax_limits=True,
+        min_temperature=0.0,
+        max_temperature=300.0,
+        drop_spikes=False,
+        auto_charge_flag=False,
+        charge_index=-1,
+        spike_period=3,
+        spike_dror_limit=4.0,
+    )
+
+    assert result.value == 156.0
+    assert result.backfill_updates == (
+        BackfillUpdate(2, 154.0),
+        BackfillUpdate(1, 152.0),
+    )
 
 
 def test_live_x_axis_extension_skips_sample_time_access_when_fixed_or_locked() -> None:
