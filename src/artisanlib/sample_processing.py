@@ -196,6 +196,33 @@ def external_program_output_command(
     return f'{program} {latest_et:.1f} {latest_bt:.1f} {background_et:.1f} {background_bt:.1f}'
 
 
+def extra_device_length_error_message(
+        extra_serial_count: int,
+        extra_device_count: int,
+        extra_temp_count: int) -> str | None:
+    lengths = [extra_serial_count, extra_device_count, extra_temp_count]
+    if lengths[0] == lengths[1] == lengths[2]:
+        return None
+    locations = ['Extra-Serial', 'Extra-Devices', 'Extra-Temp']
+    if extra_device_count - 1 in lengths:
+        indexerror = lengths.index(extra_device_count - 1)
+    elif extra_device_count + 1 in lengths:
+        indexerror = lengths.index(extra_device_count + 1)
+    else:
+        indexerror = -1
+    if indexerror != -1:
+        return (
+            f'ERROR: length of {locations[indexerror]} (={lengths[indexerror]}) '
+            f'does not have the necessary length (={extra_device_count})\n'
+            'Please Reset: Extra devices'
+        )
+    return (
+        f"ERROR: extra devices lengths don't match: "
+        f'{locations[0]}= {lengths[0]} {locations[1]}= {lengths[1]} {locations[2]}= {lengths[2]}\n'
+        'Please Reset: Extra devices'
+    )
+
+
 def connected_curve_point(
         reading: float,
         readings: Sequence[float],
@@ -954,6 +981,7 @@ __all__ = [
     'delta_smoothing_filter_size',
     'displayed_ror_value',
     'evaluate_alarm_triggers',
+    'extra_device_length_error_message',
     'external_program_background_lookup_time',
     'external_program_output_command',
     'input_filter_backfill_updates',

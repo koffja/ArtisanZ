@@ -21,6 +21,7 @@ from artisanlib.sample_processing import (
     decay_weighted_average,
     delta_smoothing_filter_size,
     displayed_ror_value,
+    extra_device_length_error_message,
     external_program_background_lookup_time,
     external_program_output_command,
     input_filter_backfill_updates,
@@ -334,6 +335,44 @@ def test_external_program_output_command_formats_live_and_background_values() ->
         background_et=-1.0,
         background_bt=-1.0,
     ) == 'log-temperatures 181.2 202.9 -1.0 -1.0'
+
+
+def test_extra_device_length_error_message_returns_none_for_matching_buffers() -> None:
+    assert extra_device_length_error_message(
+        extra_serial_count=2,
+        extra_device_count=2,
+        extra_temp_count=2,
+    ) is None
+
+
+def test_extra_device_length_error_message_identifies_near_mismatch_location() -> None:
+    assert extra_device_length_error_message(
+        extra_serial_count=1,
+        extra_device_count=2,
+        extra_temp_count=2,
+    ) == 'ERROR: length of Extra-Serial (=1) does not have the necessary length (=2)\nPlease Reset: Extra devices'
+
+    assert extra_device_length_error_message(
+        extra_serial_count=2,
+        extra_device_count=2,
+        extra_temp_count=3,
+    ) == 'ERROR: length of Extra-Temp (=3) does not have the necessary length (=2)\nPlease Reset: Extra devices'
+
+
+def test_extra_device_length_error_message_prefers_minus_one_mismatch_before_plus_one() -> None:
+    assert extra_device_length_error_message(
+        extra_serial_count=3,
+        extra_device_count=2,
+        extra_temp_count=1,
+    ) == 'ERROR: length of Extra-Temp (=1) does not have the necessary length (=2)\nPlease Reset: Extra devices'
+
+
+def test_extra_device_length_error_message_reports_general_mismatch_when_location_is_unclear() -> None:
+    assert extra_device_length_error_message(
+        extra_serial_count=0,
+        extra_device_count=2,
+        extra_temp_count=4,
+    ) == "ERROR: extra devices lengths don't match: Extra-Serial= 0 Extra-Devices= 2 Extra-Temp= 4\nPlease Reset: Extra devices"
 
 
 def test_connected_curve_point_appends_valid_reading() -> None:

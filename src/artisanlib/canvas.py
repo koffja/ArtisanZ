@@ -112,6 +112,7 @@ from artisanlib.sample_processing import (
     decay_weighted_average,
     delta_smoothing_filter_size,
     evaluate_alarm_triggers,
+    extra_device_length_error_message,
     external_program_background_lookup_time,
     external_program_output_command,
     input_filter_backfill_updates,
@@ -4820,21 +4821,8 @@ class tgraphcanvas(QObject):
                                         xtra_dev_lines2 = xtra_dev_lines2 + 1
                         #ERROR FOUND
                         else:
-                            lengths = [les,led,let]
-                            location = ['Extra-Serial','Extra-Devices','Extra-Temp']
-                            #find error
-                            if nxdevices-1 in lengths:
-                                indexerror =  lengths.index(nxdevices-1)
-                            elif nxdevices+1 in lengths:
-                                indexerror =  lengths.index(nxdevices+1)
-                            else:
-                                indexerror = 1000
-                            if indexerror != 1000:
-                                errormessage = f'ERROR: length of {location[indexerror]} (={lengths[indexerror]}) does not have the necessary length (={nxdevices})'
-                                errormessage += '\nPlease Reset: Extra devices'
-                            else:
-                                errormessage = f"ERROR: extra devices lengths don't match: {location[0]}= {lengths[0]} {location[1]}= {lengths[1]} {location[2]}= {lengths[2]}"
-                                errormessage += '\nPlease Reset: Extra devices'
+                            errormessage = extra_device_length_error_message(les, led, let)
+                            assert errormessage is not None
                             raise Exception(errormessage) # pylint: disable=broad-exception-raised
 
                     ####### all values retrieved
