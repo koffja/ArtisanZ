@@ -66,6 +66,21 @@ def apply_matplotlib_live_curve_data(line: object | None, curve: LiveCurveData) 
     return True
 
 
+def apply_matplotlib_live_curve_sequences(
+        line: object | None,
+        *,
+        name: str,
+        x: Sequence[float],
+        y: Sequence[float | None],
+        y_axis: YAxisName = 'temperature') -> bool:
+    if line is None:
+        return False
+    return apply_matplotlib_live_curve_data(
+        line,
+        LiveCurveData.from_sequences(name=name, x=x, y=y, y_axis=y_axis),
+    )
+
+
 def apply_matplotlib_live_frame(
         lines_by_name: Mapping[str, object | None],
         frame: LivePlotFrame) -> tuple[str, ...]:
@@ -116,6 +131,7 @@ __all__ = [
     'LivePlotFrame',
     'apply_matplotlib_live_axis_range',
     'apply_matplotlib_live_curve_data',
+    'apply_matplotlib_live_curve_sequences',
     'apply_matplotlib_live_frame',
     'apply_pyqtgraph_live_curve_data',
     'apply_pyqtgraph_live_frame',

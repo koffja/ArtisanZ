@@ -110,6 +110,7 @@ from artisanlib.plot_live_frame import (
     LiveCurveData,
     apply_matplotlib_live_axis_range,
     apply_matplotlib_live_curve_data,
+    apply_matplotlib_live_curve_sequences,
 )
 from artisanlib.sample_processing import (
     build_live_processed_sample_frame,
@@ -6670,7 +6671,12 @@ class tgraphcanvas(QObject):
                         else:
                             self.BTprojection_tx = []
                             self.BTprojection_temp = []
-                        self.l_BTprojection.set_data(self.BTprojection_tx, self.BTprojection_temp)
+                        apply_matplotlib_live_curve_sequences(
+                            self.l_BTprojection,
+                            name='BT projection',
+                            x=self.BTprojection_tx,
+                            y=self.BTprojection_temp,
+                        )
                     if self.l_ETprojection is not None:
                         # only draw if ET RoR is not exactly 0 (as on start)
                         if (len(self.unfiltereddelta1_pure) > 0 and
@@ -6691,7 +6697,12 @@ class tgraphcanvas(QObject):
                         else:
                             self.ETprojection_tx = []
                             self.ETprojection_temp = []
-                        self.l_ETprojection.set_data(self.ETprojection_tx, self.ETprojection_temp)
+                        apply_matplotlib_live_curve_sequences(
+                            self.l_ETprojection,
+                            name='ET projection',
+                            x=self.ETprojection_tx,
+                            y=self.ETprojection_temp,
+                        )
 
                 # quadratic temperature projection based on linear RoR approximation
                 # only active 5min after CHARGE
@@ -6726,7 +6737,12 @@ class tgraphcanvas(QObject):
                         else:
                             self.BTprojection_tx = []
                             self.BTprojection_temp = []
-                        self.l_BTprojection.set_data(self.BTprojection_tx, self.BTprojection_temp)
+                        apply_matplotlib_live_curve_sequences(
+                            self.l_BTprojection,
+                            name='BT projection',
+                            x=self.BTprojection_tx,
+                            y=self.BTprojection_temp,
+                        )
 
                     if self.l_ETprojection is not None:
                         if (len(self.ctemp1) > 0 and self.ctemp1[-1] is not None and self.ctemp1[-1] != -1 and not math.isnan(self.ctemp1[-1]) and
@@ -6752,7 +6768,12 @@ class tgraphcanvas(QObject):
                         else:
                             self.ETprojection_tx = []
                             self.ETprojection_temp = []
-                        self.l_ETprojection.set_data(self.ETprojection_tx, self.ETprojection_temp)
+                        apply_matplotlib_live_curve_sequences(
+                            self.l_ETprojection,
+                            name='ET projection',
+                            x=self.ETprojection_tx,
+                            y=self.ETprojection_temp,
+                        )
 
                 # RoR projections
                 if self.projectDeltaFlag and (self.timex[-1]-charge)>60*5:
@@ -6779,7 +6800,13 @@ class tgraphcanvas(QObject):
                         else:
                             self.DeltaBTprojection_tx = []
                             self.DeltaBTprojection_temp = []
-                        self.l_DeltaBTprojection.set_data(self.DeltaBTprojection_tx, self.DeltaBTprojection_temp)
+                        apply_matplotlib_live_curve_sequences(
+                            self.l_DeltaBTprojection,
+                            name='Delta BT projection',
+                            x=self.DeltaBTprojection_tx,
+                            y=self.DeltaBTprojection_temp,
+                            y_axis='ror',
+                        )
 
                     if self.l_DeltaETprojection is not None:
                         delta_interval_ET = max(10, self.deltaETsamples*2) # at least a span of 10 readings
@@ -6802,7 +6829,13 @@ class tgraphcanvas(QObject):
                         else:
                             self.DeltaETprojection_tx = []
                             self.DeltaETprojection_temp = []
-                        self.l_DeltaETprojection.set_data(self.DeltaETprojection_tx, self.DeltaETprojection_temp)
+                        apply_matplotlib_live_curve_sequences(
+                            self.l_DeltaETprojection,
+                            name='Delta ET projection',
+                            x=self.DeltaETprojection_tx,
+                            y=self.DeltaETprojection_temp,
+                            y_axis='ror',
+                        )
             else:
                 self.BTprojection_tx = []
                 self.BTprojection_temp = []
@@ -6813,26 +6846,70 @@ class tgraphcanvas(QObject):
                 self.DeltaETprojection_tx = []
                 self.DeltaETprojection_temp = []
                 if self.l_BTprojection is not None:
-                    self.l_BTprojection.set_data([],[])
+                    apply_matplotlib_live_curve_sequences(
+                        self.l_BTprojection,
+                        name='BT projection',
+                        x=[],
+                        y=[],
+                    )
                 if self.l_ETprojection is not None:
-                    self.l_ETprojection.set_data([],[])
+                    apply_matplotlib_live_curve_sequences(
+                        self.l_ETprojection,
+                        name='ET projection',
+                        x=[],
+                        y=[],
+                    )
                 if self.l_DeltaBTprojection is not None:
-                    self.l_DeltaBTprojection.set_data([],[])
+                    apply_matplotlib_live_curve_sequences(
+                        self.l_DeltaBTprojection,
+                        name='Delta BT projection',
+                        x=[],
+                        y=[],
+                        y_axis='ror',
+                    )
                 if self.l_DeltaETprojection is not None:
-                    self.l_DeltaETprojection.set_data([],[])
+                    apply_matplotlib_live_curve_sequences(
+                        self.l_DeltaETprojection,
+                        name='Delta ET projection',
+                        x=[],
+                        y=[],
+                        y_axis='ror',
+                    )
 
         except Exception as ex: # pylint: disable=broad-except
             _log.exception(ex)
             _, _, exc_tb = sys.exc_info()
             self.adderror((QApplication.translate('Error Message','Exception:') + ' updateProjection() {0}').format(str(ex)),getattr(exc_tb, 'tb_lineno', '?'))
             if self.l_BTprojection is not None:
-                self.l_BTprojection.set_data([],[])
+                apply_matplotlib_live_curve_sequences(
+                    self.l_BTprojection,
+                    name='BT projection',
+                    x=[],
+                    y=[],
+                )
             if self.l_ETprojection is not None:
-                self.l_ETprojection.set_data([],[])
+                apply_matplotlib_live_curve_sequences(
+                    self.l_ETprojection,
+                    name='ET projection',
+                    x=[],
+                    y=[],
+                )
             if self.l_DeltaBTprojection is not None:
-                self.l_DeltaBTprojection.set_data([],[])
+                apply_matplotlib_live_curve_sequences(
+                    self.l_DeltaBTprojection,
+                    name='Delta BT projection',
+                    x=[],
+                    y=[],
+                    y_axis='ror',
+                )
             if self.l_DeltaETprojection is not None:
-                self.l_DeltaETprojection.set_data([],[])
+                apply_matplotlib_live_curve_sequences(
+                    self.l_DeltaETprojection,
+                    name='Delta ET projection',
+                    x=[],
+                    y=[],
+                    y_axis='ror',
+                )
 
     # takes array with readings, the current index, the sign of the shift as character and the shift value
     # returns val, evalsign
