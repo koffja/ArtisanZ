@@ -112,6 +112,8 @@ from artisanlib.sample_processing import (
     decay_weighted_average,
     delta_smoothing_filter_size,
     evaluate_alarm_triggers,
+    external_program_background_lookup_time,
+    external_program_output_command,
     input_filter_backfill_updates,
     input_filter_previous_values,
     manual_x_axis_extension_end,
@@ -5176,23 +5178,30 @@ class tgraphcanvas(QObject):
                     #output ET, BT, ETB, BTB to output program
                     if self.aw.ser.externaloutprogramFlag:
                         try:
-                            if self.background:
-                                if self.timeindex[0] != -1:
-                                    j = self.backgroundtime2index(tx - sample_timex[self.timeindex[0]])
-                                else:
-                                    j = self.backgroundtime2index(tx)
+                            background_lookup_time = external_program_background_lookup_time(
+                                self.background,
+                                self.timeindex[0],
+                                tx,
+                                sample_timex,
+                            )
+                            ETB = BTB = -1.0
+                            if background_lookup_time is not None:
+                                j = self.backgroundtime2index(background_lookup_time)
                                 ETB = self.temp1B[j]
                                 BTB = self.temp2B[j]
-                            else:
-                                ETB = -1
-                                BTB = -1
 #                            from subprocess import call as subprocesscall# @Reimport
 #                            subprocesscall([self.aw.ser.externaloutprogram,
 #                                f'{sample_temp1[-1]:.1f}',
 #                                f'{sample_temp2[-1]:.1f}',
 #                                f'{ETB:.1f}',
 #                                f'{BTB:.1f}'])
-                            self.aw.call_prog_with_args(f'{self.aw.ser.externaloutprogram} {sample_temp1[-1]:.1f} {sample_temp2[-1]:.1f} {ETB:.1f} {BTB:.1f}')
+                            self.aw.call_prog_with_args(external_program_output_command(
+                                self.aw.ser.externaloutprogram,
+                                sample_temp1[-1],
+                                sample_temp2[-1],
+                                ETB,
+                                BTB,
+                            ))
                         except Exception as e: # pylint: disable=broad-except
                             _log.exception(e)
 

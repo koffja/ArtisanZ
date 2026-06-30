@@ -21,6 +21,8 @@ from artisanlib.sample_processing import (
     decay_weighted_average,
     delta_smoothing_filter_size,
     displayed_ror_value,
+    external_program_background_lookup_time,
+    external_program_output_command,
     input_filter_backfill_updates,
     input_filter_previous_values,
     live_x_axis_extension_end,
@@ -171,6 +173,50 @@ def test_post_sample_update_decisions_trigger_bbp_at_fifth_sample_after_charge()
         charge_index=-1,
         sample_count=4,
     ).update_bbp_metrics
+
+
+def test_external_program_background_lookup_time_skips_when_background_disabled() -> None:
+    assert external_program_background_lookup_time(
+        background_enabled=False,
+        charge_index=2,
+        current_time=240.0,
+        sample_times=[0.0, 60.0, 120.0],
+    ) is None
+
+
+def test_external_program_background_lookup_time_uses_current_time_before_charge() -> None:
+    assert external_program_background_lookup_time(
+        background_enabled=True,
+        charge_index=-1,
+        current_time=240.0,
+        sample_times=[0.0, 60.0, 120.0],
+    ) == 240.0
+
+
+def test_external_program_background_lookup_time_subtracts_charge_time_after_charge() -> None:
+    assert external_program_background_lookup_time(
+        background_enabled=True,
+        charge_index=2,
+        current_time=300.0,
+        sample_times=[0.0, 60.0, 120.0],
+    ) == 180.0
+
+
+def test_external_program_output_command_formats_live_and_background_values() -> None:
+    assert external_program_output_command(
+        program='log-temperatures',
+        latest_et=181.24,
+        latest_bt=202.86,
+        background_et=150.04,
+        background_bt=160.05,
+    ) == 'log-temperatures 181.2 202.9 150.0 160.1'
+    assert external_program_output_command(
+        program='log-temperatures',
+        latest_et=181.24,
+        latest_bt=202.86,
+        background_et=-1.0,
+        background_bt=-1.0,
+    ) == 'log-temperatures 181.2 202.9 -1.0 -1.0'
 
 
 def test_connected_curve_point_appends_valid_reading() -> None:

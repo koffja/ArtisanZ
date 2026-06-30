@@ -145,6 +145,27 @@ def post_sample_update_decisions(
     )
 
 
+def external_program_background_lookup_time(
+        background_enabled: bool,
+        charge_index: int,
+        current_time: float,
+        sample_times: Sequence[float]) -> float | None:
+    if not background_enabled:
+        return None
+    if charge_index != -1:
+        return current_time - sample_times[charge_index]
+    return current_time
+
+
+def external_program_output_command(
+        program: str,
+        latest_et: float,
+        latest_bt: float,
+        background_et: float,
+        background_bt: float) -> str:
+    return f'{program} {latest_et:.1f} {latest_bt:.1f} {background_et:.1f} {background_bt:.1f}'
+
+
 def connected_curve_point(
         reading: float,
         readings: Sequence[float],
@@ -890,6 +911,8 @@ __all__ = [
     'delta_smoothing_filter_size',
     'displayed_ror_value',
     'evaluate_alarm_triggers',
+    'external_program_background_lookup_time',
+    'external_program_output_command',
     'input_filter_backfill_updates',
     'input_filter_previous_values',
     'live_x_axis_extension_end',
