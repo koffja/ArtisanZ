@@ -24,6 +24,7 @@ from artisanlib.sample_processing import (
     extra_device_length_error_message,
     external_program_background_lookup_time,
     external_program_output_command,
+    full_curve_data,
     input_filter_backfill_updates,
     input_filter_previous_values,
     live_x_axis_extension_end,
@@ -1985,6 +1986,26 @@ def test_windowed_curve_data_uses_existing_start_end_slice_semantics() -> None:
 
     assert data.times == (1.0, 2.0)
     assert data.values == (None, 12.0)
+
+
+def test_full_curve_data_returns_empty_payload_for_empty_sequences() -> None:
+    data = full_curve_data(
+        sample_times=[],
+        values=[],
+    )
+
+    assert data.times == ()
+    assert data.values == ()
+
+
+def test_full_curve_data_preserves_connected_curve_values() -> None:
+    data = full_curve_data(
+        sample_times=[0.0, 1.0, 2.0],
+        values=[10.0, None, 12.0],
+    )
+
+    assert data.times == (0.0, 1.0, 2.0)
+    assert data.values == (10.0, None, 12.0)
 
 
 def test_build_live_processed_sample_frame_collects_display_axis_and_event_decisions() -> None:

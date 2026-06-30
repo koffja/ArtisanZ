@@ -115,6 +115,7 @@ from artisanlib.sample_processing import (
     extra_device_length_error_message,
     external_program_background_lookup_time,
     external_program_output_command,
+    full_curve_data,
     input_filter_backfill_updates,
     input_filter_previous_values,
     manual_turning_point_check_candidate,
@@ -4818,10 +4819,12 @@ class tgraphcanvas(QObject):
                                 # update extra lines
                                 if local_flagstart:
                                     if self.aw.extraCurveVisibility1[i] and len(self.extratemp1lines) > xtra_dev_lines1 and self.extratemp1lines[xtra_dev_lines1] is not None:
-                                        self.extratemp1lines[xtra_dev_lines1].set_data(numpy.array(sample_extractimex1[i]), numpy.array(sample_extractemp1[i]))
+                                        extra_curve1_data = full_curve_data(sample_extractimex1[i], sample_extractemp1[i])
+                                        self.extratemp1lines[xtra_dev_lines1].set_data(numpy.array(extra_curve1_data.times), numpy.array(extra_curve1_data.values))
                                         xtra_dev_lines1 = xtra_dev_lines1 + 1
                                     if self.aw.extraCurveVisibility2[i] and len(self.extratemp2lines) > xtra_dev_lines2 and self.extratemp2lines[xtra_dev_lines2] is not None:
-                                        self.extratemp2lines[xtra_dev_lines2].set_data(numpy.array(sample_extractimex2[i]), numpy.array(sample_extractemp2[i]))
+                                        extra_curve2_data = full_curve_data(sample_extractimex2[i], sample_extractemp2[i])
+                                        self.extratemp2lines[xtra_dev_lines2].set_data(numpy.array(extra_curve2_data.times), numpy.array(extra_curve2_data.values))
                                         xtra_dev_lines2 = xtra_dev_lines2 + 1
                         #ERROR FOUND
                         else:
@@ -4926,9 +4929,11 @@ class tgraphcanvas(QObject):
 
                     if local_flagstart:
                         if self.ETcurve and self.l_temp1 is not None:
-                            self.l_temp1.set_data(sample_ctimex1, numpy.array(sample_ctemp1))
+                            et_curve_data = full_curve_data(sample_ctimex1, sample_ctemp1)
+                            self.l_temp1.set_data(et_curve_data.times, numpy.array(et_curve_data.values))
                         if self.BTcurve and self.l_temp2 is not None:
-                            self.l_temp2.set_data(sample_ctimex2, numpy.array(sample_ctemp2))
+                            bt_curve_data = full_curve_data(sample_ctimex2, sample_ctemp2)
+                            self.l_temp2.set_data(bt_curve_data.times, numpy.array(bt_curve_data.values))
 
                     #NOTE: the following is no longer restricted to self.aw.pidcontrol.pidActive==True
                     # as now the software PID is also update while the PID is off (if configured).

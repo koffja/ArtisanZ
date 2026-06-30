@@ -862,6 +862,15 @@ def windowed_curve_data(
     )
 
 
+def full_curve_data(
+        sample_times: Sequence[float],
+        values: Sequence[TemperatureValue]) -> CurveWindowData:
+    return CurveWindowData(
+        times=tuple(sample_times),
+        values=tuple(values),
+    )
+
+
 def build_live_processed_sample_frame(
         timestamp: float,
         sample_count: int,
@@ -1042,6 +1051,7 @@ __all__ = [
     'extra_device_length_error_message',
     'external_program_background_lookup_time',
     'external_program_output_command',
+    'full_curve_data',
     'input_filter_backfill_updates',
     'input_filter_previous_values',
     'live_x_axis_extension_end',
