@@ -105,6 +105,7 @@ from matplotlib.colors import to_hex, to_rgba # type:ignore[untyped-import,unuse
 
 from artisanlib.performance import gui_perf_count, gui_perf_tracked
 from artisanlib.phidgets import PhidgetManager
+from artisanlib.plot_live_frame import LiveCurveData, apply_matplotlib_live_curve_data
 from artisanlib.sample_processing import (
     build_live_processed_sample_frame,
     connected_curve_point,
@@ -4884,10 +4885,24 @@ class tgraphcanvas(QObject):
                     if local_flagstart:
                         if self.ETcurve and self.l_temp1 is not None:
                             et_curve_data = full_curve_data(sample_ctimex1, sample_ctemp1)
-                            self.l_temp1.set_data(et_curve_data.times, numpy.array(et_curve_data.values))
+                            apply_matplotlib_live_curve_data(
+                                self.l_temp1,
+                                LiveCurveData(
+                                    name='ET',
+                                    x=et_curve_data.times,
+                                    y=et_curve_data.values,
+                                ),
+                            )
                         if self.BTcurve and self.l_temp2 is not None:
                             bt_curve_data = full_curve_data(sample_ctimex2, sample_ctemp2)
-                            self.l_temp2.set_data(bt_curve_data.times, numpy.array(bt_curve_data.values))
+                            apply_matplotlib_live_curve_data(
+                                self.l_temp2,
+                                LiveCurveData(
+                                    name='BT',
+                                    x=bt_curve_data.times,
+                                    y=bt_curve_data.values,
+                                ),
+                            )
 
                     #NOTE: the following is no longer restricted to self.aw.pidcontrol.pidActive==True
                     # as now the software PID is also update while the PID is off (if configured).
@@ -5024,14 +5039,30 @@ class tgraphcanvas(QObject):
                                 sample_delta1,
                                 processed_frame.delta_et_window,
                             )
-                            self.l_delta1.set_data(delta_et_data.times, numpy.array(delta_et_data.values))
+                            apply_matplotlib_live_curve_data(
+                                self.l_delta1,
+                                LiveCurveData(
+                                    name='Delta ET',
+                                    x=delta_et_data.times,
+                                    y=delta_et_data.values,
+                                    y_axis='ror',
+                                ),
+                            )
                         if self.DeltaBTflag and self.l_delta2 is not None:
                             delta_bt_data = windowed_curve_data(
                                 sample_timex,
                                 sample_delta2,
                                 processed_frame.delta_bt_window,
                             )
-                            self.l_delta2.set_data(delta_bt_data.times, numpy.array(delta_bt_data.values))
+                            apply_matplotlib_live_curve_data(
+                                self.l_delta2,
+                                LiveCurveData(
+                                    name='Delta BT',
+                                    x=delta_bt_data.times,
+                                    y=delta_bt_data.values,
+                                    y_axis='ror',
+                                ),
+                            )
 
                         #readjust xlimit of plot if needed
                         extended_end = processed_frame.live_x_axis_extension_end
