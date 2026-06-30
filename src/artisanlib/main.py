@@ -4485,17 +4485,19 @@ class ApplicationWindow(QMainWindow):
         return config_menu
 
     def create_tools_menu(self, ui_mode:UI_MODE) -> QMenu:
+        workspace_mode = workspace_for_ui_mode_value(int(ui_mode))
+        policy = workspace_policy_for_mode(workspace_mode)
         tools_menu = QMenu(f"&{QApplication.translate('Menu', 'Tools')}")
-        if ui_mode is not UI_MODE.PRODUCTION:
-            if ui_mode is UI_MODE.EXPERT:
+        if policy.show_full_menus:
+            if policy.show_analysis_tools:
                 tools_menu.addMenu(self.analyzeMenu)
             tools_menu.addAction(self.roastCompareAction)
             tools_menu.addAction(self.designerAction)
-            if ui_mode is UI_MODE.EXPERT:
+            if policy.show_advanced_controls:
                 tools_menu.addAction(self.simulatorAction)
                 tools_menu.addAction(self.wheeleditorAction)
             tools_menu.addSeparator()
-            if ui_mode is UI_MODE.EXPERT:
+            if policy.show_advanced_controls:
                 tools_menu.addAction(self.transformAction)
             tools_menu.addMenu(self.temperatureMenu)
             tools_menu.addSeparator()

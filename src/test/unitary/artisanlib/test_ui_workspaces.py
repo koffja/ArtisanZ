@@ -174,6 +174,18 @@ class FakeConfigMenuApplicationWindow:
         self.UIModeMenu = 'ui-mode'
 
 
+class FakeToolsMenuApplicationWindow:
+    def __init__(self) -> None:
+        self.analyzeMenu = 'analyze'
+        self.roastCompareAction = 'compare'
+        self.designerAction = 'designer'
+        self.simulatorAction = 'simulator'
+        self.wheeleditorAction = 'wheel'
+        self.transformAction = 'transform'
+        self.temperatureMenu = 'temperature'
+        self.calculatorAction = 'calculator'
+
+
 def test_workspace_for_existing_ui_modes_maps_standard_to_roast_control() -> None:
     workspaces = workspace_module()
 
@@ -608,6 +620,109 @@ def test_application_window_create_config_menu_separates_device_policy(
         'separator',
         'separator',
         'ui-mode',
+    ]
+
+
+def test_application_window_create_tools_menu_preserves_current_policy_visibility(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    main = main_module()
+    monkeypatch.setattr(main, 'QMenu', FakeMenu)
+
+    expected_items = {
+        main.UI_MODE.EXPERT: [
+            'analyze',
+            'compare',
+            'designer',
+            'simulator',
+            'wheel',
+            'separator',
+            'transform',
+            'temperature',
+            'separator',
+            'calculator',
+        ],
+        main.UI_MODE.DEFAULT: [
+            'compare',
+            'designer',
+            'separator',
+            'temperature',
+            'separator',
+            'calculator',
+        ],
+        main.UI_MODE.PRODUCTION: [],
+    }
+
+    for ui_mode, items in expected_items.items():
+        window = FakeToolsMenuApplicationWindow()
+        menu = main.ApplicationWindow.create_tools_menu(window, ui_mode)
+
+        assert menu.items == items
+
+
+def test_application_window_create_tools_menu_separates_analysis_policy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    main = main_module()
+    workspaces = workspace_module()
+    monkeypatch.setattr(main, 'QMenu', FakeMenu)
+    production_policy = workspaces.workspace_policy(workspaces.WorkspaceMode.PRODUCTION)
+    analysis_policy = dataclasses.replace(
+        production_policy,
+        show_full_menus=True,
+        show_analysis_tools=True,
+    )
+
+    def fake_workspace_policy(_mode: object) -> object:
+        return analysis_policy
+
+    monkeypatch.setattr(main, 'workspace_policy_for_mode', fake_workspace_policy)
+    window = FakeToolsMenuApplicationWindow()
+
+    menu = main.ApplicationWindow.create_tools_menu(window, main.UI_MODE.PRODUCTION)
+
+    assert menu.items == [
+        'analyze',
+        'compare',
+        'designer',
+        'separator',
+        'temperature',
+        'separator',
+        'calculator',
+    ]
+
+
+def test_application_window_create_tools_menu_separates_advanced_policy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    main = main_module()
+    workspaces = workspace_module()
+    monkeypatch.setattr(main, 'QMenu', FakeMenu)
+    production_policy = workspaces.workspace_policy(workspaces.WorkspaceMode.PRODUCTION)
+    advanced_policy = dataclasses.replace(
+        production_policy,
+        show_full_menus=True,
+        show_advanced_controls=True,
+    )
+
+    def fake_workspace_policy(_mode: object) -> object:
+        return advanced_policy
+
+    monkeypatch.setattr(main, 'workspace_policy_for_mode', fake_workspace_policy)
+    window = FakeToolsMenuApplicationWindow()
+
+    menu = main.ApplicationWindow.create_tools_menu(window, main.UI_MODE.PRODUCTION)
+
+    assert menu.items == [
+        'compare',
+        'designer',
+        'simulator',
+        'wheel',
+        'separator',
+        'transform',
+        'temperature',
+        'separator',
+        'calculator',
     ]
 
 
