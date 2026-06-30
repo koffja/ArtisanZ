@@ -34,6 +34,19 @@ class FakeToolbar:
         self.actions.append('remove')
 
 
+class FakeMenuBar:
+    def __init__(self) -> None:
+        self.menus: list[str] = []
+        self.clear_count = 0
+
+    def clear(self) -> None:
+        self.menus.clear()
+        self.clear_count += 1
+
+    def addMenu(self, menu: str) -> None:
+        self.menus.append(menu)
+
+
 class FakeApplicationWindow:
     def __init__(self) -> None:
         main = main_module()
@@ -58,6 +71,35 @@ class FakeApplicationWindow:
 
     def announce_current_ui_mode(self) -> None:
         self.announcements += 1
+
+
+class FakeMenuApplicationWindow:
+    def __init__(self) -> None:
+        self.menu_bar = FakeMenuBar()
+
+    def menuBar(self) -> FakeMenuBar:
+        return self.menu_bar
+
+    def create_file_menu(self, _ui_mode: object) -> str:
+        return 'file'
+
+    def create_edit_menu(self, _ui_mode: object) -> str:
+        return 'edit'
+
+    def create_roast_menu(self, _ui_mode: object) -> str:
+        return 'roast'
+
+    def create_config_menu(self, _ui_mode: object) -> str:
+        return 'config'
+
+    def create_tools_menu(self, _ui_mode: object) -> str:
+        return 'tools'
+
+    def create_view_menu(self, _ui_mode: object) -> str:
+        return 'view'
+
+    def create_help_menu(self, _ui_mode: object) -> str:
+        return 'help'
 
 
 def test_workspace_for_existing_ui_modes_maps_standard_to_roast_control() -> None:
@@ -154,6 +196,41 @@ def test_application_window_set_toolbar_uses_workspace_policy() -> None:
     main.ApplicationWindow.set_toolbar(window, main.UI_MODE.PRODUCTION)
 
     assert window.ntb.actions == ['add', 'remove', 'remove']
+
+
+def test_application_window_set_menu_preserves_current_tools_visibility() -> None:
+    main = main_module()
+
+    expected_tools_visibility = {
+        main.UI_MODE.EXPERT: True,
+        main.UI_MODE.DEFAULT: True,
+        main.UI_MODE.PRODUCTION: False,
+    }
+    for ui_mode, should_show_tools in expected_tools_visibility.items():
+        window = FakeMenuApplicationWindow()
+        main.ApplicationWindow.set_menu(window, ui_mode)
+
+        assert window.menu_bar.clear_count == 1
+        assert ('tools' in window.menu_bar.menus) is should_show_tools
+
+
+def test_application_window_set_menu_uses_workspace_policy_for_tools_menu(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    main = main_module()
+    workspaces = workspace_module()
+    window = FakeMenuApplicationWindow()
+    production_policy = workspaces.workspace_policy(workspaces.WorkspaceMode.PRODUCTION)
+    full_menu_policy = dataclasses.replace(production_policy, show_full_menus=True)
+
+    def fake_workspace_policy(_mode: object) -> object:
+        return full_menu_policy
+
+    monkeypatch.setattr(main, 'workspace_policy_for_mode', fake_workspace_policy)
+
+    main.ApplicationWindow.set_menu(window, main.UI_MODE.PRODUCTION)
+
+    assert window.menu_bar.menus == ['file', 'edit', 'roast', 'config', 'tools', 'view', 'help']
 
 
 def test_workspace_policy_is_frozen_and_immutable() -> None:

@@ -4563,6 +4563,8 @@ class ApplicationWindow(QMainWindow):
     def set_menu(self, ui_mode:UI_MODE) -> None:
         menuBar:QMenuBar|None = self.menuBar()
         if menuBar is not None:
+            workspace_mode = workspace_for_ui_mode_value(int(ui_mode))
+            policy = workspace_policy_for_mode(workspace_mode)
             menuBar.clear()
             # File menu
             self.fileMenu = self.create_file_menu(ui_mode)
@@ -4577,7 +4579,7 @@ class ApplicationWindow(QMainWindow):
             self.ConfMenu = self.create_config_menu(ui_mode)
             menuBar.addMenu(self.ConfMenu)
             # Tools menu
-            if ui_mode in {UI_MODE.EXPERT, UI_MODE.DEFAULT}: # no Tools menu in Production mode
+            if policy.show_full_menus: # no Tools menu in Production mode
                 self.ToolkitMenu = self.create_tools_menu(ui_mode)
                 menuBar.addMenu(self.ToolkitMenu)
             # View menu
