@@ -22,13 +22,41 @@ Item {
     id: root
     property var workspaceModel
     implicitWidth: 320
-    implicitHeight: 96
+    implicitHeight: 132
+    readonly property color accentColor: !root.workspaceModel
+        ? "#0087b3"
+        : root.workspaceModel.modeValue === "qc_analysis"
+            ? "#0087b3"
+            : root.workspaceModel.modeValue === "device_setup"
+                ? "#7a8a60"
+                : root.workspaceModel.modeValue === "production"
+                    ? "#b46a55"
+                    : root.workspaceModel.modeValue === "expert"
+                        ? "#4f5f66"
+                        : "#0087b3"
+    readonly property string areaLabel: root.workspaceModel && root.workspaceModel.showAnalysisTools
+        ? qsTr("Analysis")
+        : root.workspaceModel && root.workspaceModel.showDeviceSetupTools
+            ? qsTr("Device setup")
+            : qsTr("Roast control")
+    readonly property string controlLabel: root.workspaceModel && root.workspaceModel.showAdvancedControls
+        ? qsTr("Advanced")
+        : qsTr("Focused")
 
     Rectangle {
         anchors.fill: parent
-        color: "#f7f8f5"
-        border.color: "#cfd8dc"
+        color: "#fbfcfa"
+        border.color: "#d2dde1"
         border.width: 1
+        radius: 8
+    }
+
+    Rectangle {
+        anchors.left: parent.left
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
+        width: 5
+        color: root.accentColor
         radius: 8
     }
 
@@ -37,37 +65,69 @@ Item {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
-        anchors.margins: 14
+        anchors.leftMargin: 18
+        anchors.rightMargin: 16
+        anchors.topMargin: 14
         color: "#2f3a3d"
-        font.pixelSize: 18
+        font.pixelSize: 17
         font.weight: Font.DemiBold
         text: root.workspaceModel ? root.workspaceModel.label : ""
+        elide: Text.ElideRight
+    }
+
+    Text {
+        id: modeValue
+        anchors.left: title.left
+        anchors.top: title.bottom
+        anchors.topMargin: 4
+        color: "#718084"
+        font.pixelSize: 12
+        text: root.workspaceModel ? root.workspaceModel.modeValue : ""
         elide: Text.ElideRight
     }
 
     Row {
         id: statusRow
         anchors.left: title.left
-        anchors.top: title.bottom
-        anchors.topMargin: 12
+        anchors.right: title.right
+        anchors.top: modeValue.bottom
+        anchors.topMargin: 14
         spacing: 8
 
         Rectangle {
-            width: 10
-            height: 10
-            radius: 5
-            anchors.verticalCenter: parent.verticalCenter
-            color: root.workspaceModel && root.workspaceModel.compactChrome ? "#7a8a60" : "#0087b3"
+            width: areaText.implicitWidth + 20
+            height: 26
+            radius: 13
+            color: "#eef4f5"
+            border.color: "#d5e0e3"
+
+            Text {
+                id: areaText
+                anchors.centerIn: parent
+                color: root.accentColor
+                font.pixelSize: 12
+                font.weight: Font.DemiBold
+                text: root.areaLabel
+                elide: Text.ElideRight
+            }
         }
 
-        Text {
-            color: "#59686c"
-            font.pixelSize: 13
-            text: root.workspaceModel && root.workspaceModel.showAnalysisTools
-                ? qsTr("Analysis")
-                : root.workspaceModel && root.workspaceModel.showDeviceSetupTools
-                    ? qsTr("Device setup")
-                    : qsTr("Roast control")
+        Rectangle {
+            width: controlText.implicitWidth + 20
+            height: 26
+            radius: 13
+            color: root.workspaceModel && root.workspaceModel.compactChrome ? "#f3eee8" : "#f4f5f1"
+            border.color: root.workspaceModel && root.workspaceModel.compactChrome ? "#e0d2c8" : "#dce2d3"
+
+            Text {
+                id: controlText
+                anchors.centerIn: parent
+                color: root.workspaceModel && root.workspaceModel.compactChrome ? "#9b5f4f" : "#68765b"
+                font.pixelSize: 12
+                font.weight: Font.DemiBold
+                text: root.controlLabel
+                elide: Text.ElideRight
+            }
         }
     }
 
@@ -75,12 +135,12 @@ Item {
         anchors.left: title.left
         anchors.right: title.right
         anchors.top: statusRow.bottom
-        anchors.topMargin: 8
+        anchors.topMargin: 10
         color: "#6f7c80"
         font.pixelSize: 12
         text: root.workspaceModel && root.workspaceModel.showAdvancedControls
-            ? qsTr("Advanced controls")
-            : qsTr("Focused controls")
+            ? qsTr("Full menu access")
+            : qsTr("Reduced control surface")
         elide: Text.ElideRight
     }
 }
@@ -150,4 +210,5 @@ def create_workspace_status_widget(
     widget.setResizeMode(QQuickWidget.ResizeMode.SizeRootObjectToView)
     widget.setInitialProperties({'workspaceModel': model})
     widget.setSource(qml_data_url(WORKSPACE_STATUS_PANEL_QML))
+    widget.setMinimumSize(widget.sizeHint())
     return widget

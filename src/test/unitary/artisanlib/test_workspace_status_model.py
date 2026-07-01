@@ -90,7 +90,7 @@ def test_workspace_status_panel_qml_accepts_python_model() -> None:
         assert item is not None, [error.toString() for error in component.errors()]
         assert item.setProperty('workspaceModel', model)
         assert item.property('implicitWidth') == 320
-        assert item.property('implicitHeight') == 96
+        assert item.property('implicitHeight') == 132
     finally:
         if item is not None:
             item.deleteLater()
@@ -111,7 +111,9 @@ def test_workspace_status_widget_factory_loads_qml_with_python_model() -> None:
         assert root_object is not None
         assert root_object.property('workspaceModel') is model
         assert widget.sizeHint().width() == 320
-        assert widget.sizeHint().height() == 96
+        assert widget.sizeHint().height() == 132
+        assert widget.minimumWidth() == 320
+        assert widget.minimumHeight() == 132
     finally:
         widget.deleteLater()
 

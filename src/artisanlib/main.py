@@ -4299,6 +4299,7 @@ class ApplicationWindow(QMainWindow):
 
         self.workspaceStatusDock = QDockWidget(QApplication.translate('Menu', 'Workspace Status'), self)
         self.workspaceStatusDock.setObjectName('workspaceStatusDock')
+        self.workspaceStatusDock.setMinimumWidth(320)
         self.workspaceStatusDock.setAllowedAreas(Qt.DockWidgetArea.LeftDockWidgetArea|Qt.DockWidgetArea.RightDockWidgetArea)
         self.workspaceStatusDock.setFloating(False)
         self.workspaceStatusDock.setFeatures(
@@ -28345,6 +28346,10 @@ def _gui_perf_env_int(name: str, default: int, minimum: int = 1) -> int:
         return default
 
 
+def _gui_perf_env_bool(name: str) -> bool:
+    return os.environ.get(name, '').strip().lower() in {'1', 'true', 'yes', 'on'}
+
+
 def _schedule_gui_perf_autorun(appWindow:'ApplicationWindow') -> None:
     enabled = os.environ.get('ARTISANZ_GUI_PERF_AUTORUN', '').strip().lower()
     if enabled not in {'1', 'true', 'yes', 'on'}:
@@ -28468,10 +28473,25 @@ def _save_gui_perf_autorun_screenshot(appWindow:'ApplicationWindow') -> None:
     if not screenshot_path:
         return
     try:
+        _prepare_gui_perf_autorun_screenshot(appWindow)
         Path(screenshot_path).parent.mkdir(parents=True, exist_ok=True)
         appWindow.grab().save(screenshot_path)
     except Exception as e: # pylint: disable=broad-except
         _log.exception(e)
+
+
+def _prepare_gui_perf_autorun_screenshot(appWindow:'ApplicationWindow') -> None:
+    workspace_mode_value = os.environ.get('ARTISANZ_GUI_PERF_AUTORUN_WORKSPACE_MODE', '').strip()
+    if workspace_mode_value:
+        workspace_mode = workspace_from_setting_value(workspace_mode_value, appWindow.workspace_mode)
+        if workspace_mode is not appWindow.workspace_mode:
+            appWindow.set_workspace_mode(workspace_mode)
+        _write_gui_perf_autorun_status(f'workspace-mode={workspace_mode.value}')
+
+    if _gui_perf_env_bool('ARTISANZ_GUI_PERF_AUTORUN_WORKSPACE_STATUS_DOCK'):
+        appWindow.toggleWorkspaceStatusDock(True)
+        QApplication.processEvents()
+        _write_gui_perf_autorun_status('workspace-status-dock=visible')
 
 
 def _write_gui_perf_autorun_status(message: str) -> None:

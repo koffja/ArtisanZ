@@ -303,6 +303,21 @@ class FakeWorkspaceStatusWindow:
         self.ensure_calls += 1
 
 
+class FakeGuiPerfScreenshotWindow:
+    def __init__(self) -> None:
+        workspaces = workspace_module()
+        self.workspace_mode = workspaces.WorkspaceMode.ROAST_CONTROL
+        self.workspace_modes: list[object] = []
+        self.workspace_status_dock_visible: list[bool] = []
+
+    def set_workspace_mode(self, mode: object) -> None:
+        self.workspace_mode = mode
+        self.workspace_modes.append(mode)
+
+    def toggleWorkspaceStatusDock(self, visible: bool = False) -> None:
+        self.workspace_status_dock_visible.append(visible)
+
+
 def test_workspace_for_existing_ui_modes_maps_standard_to_roast_control() -> None:
     workspaces = workspace_module()
 
@@ -489,6 +504,36 @@ def test_application_window_toggle_workspace_status_dock() -> None:
     assert window.ensure_calls == 1
     assert window.workspaceStatusDock.visible == [True, False]
     assert window.workspaceStatusDock.raise_count == 1
+
+
+def test_gui_perf_screenshot_prep_switches_workspace_and_opens_status_dock(
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    main = main_module()
+    workspaces = workspace_module()
+    window = FakeGuiPerfScreenshotWindow()
+    processed_events: list[None] = []
+    monkeypatch.setenv('ARTISANZ_GUI_PERF_AUTORUN_WORKSPACE_MODE', 'qc_analysis')
+    monkeypatch.setenv('ARTISANZ_GUI_PERF_AUTORUN_WORKSPACE_STATUS_DOCK', '1')
+    monkeypatch.setattr(main.QApplication, 'processEvents', lambda: processed_events.append(None))
+
+    main._prepare_gui_perf_autorun_screenshot(window) # pylint: disable=protected-access
+
+    assert window.workspace_modes == [workspaces.WorkspaceMode.QC_ANALYSIS]
+    assert window.workspace_status_dock_visible == [True]
+    assert processed_events == [None]
+
+
+def test_gui_perf_screenshot_prep_keeps_default_ui_when_disabled(
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    main = main_module()
+    window = FakeGuiPerfScreenshotWindow()
+    monkeypatch.delenv('ARTISANZ_GUI_PERF_AUTORUN_WORKSPACE_MODE', raising=False)
+    monkeypatch.delenv('ARTISANZ_GUI_PERF_AUTORUN_WORKSPACE_STATUS_DOCK', raising=False)
+
+    main._prepare_gui_perf_autorun_screenshot(window) # pylint: disable=protected-access
+
+    assert window.workspace_modes == []
+    assert window.workspace_status_dock_visible == []
 
 
 def test_application_window_set_toolbar_uses_workspace_policy() -> None:
