@@ -8,6 +8,7 @@ import os
 
 from artisanlib.plot_renderer_benchmark import build_renderer_benchmark_snapshot
 from artisanlib.plot_renderer_factory import create_renderer
+from artisanlib.plot_renderer_plugin_loader import build_runtime_registry
 from artisanlib.plot_renderer_registry import RendererPluginRegistry, create_default_renderer_registry
 from artisanlib.plot_snapshot import RendererViewState, RoastPlotSnapshot
 
@@ -56,21 +57,24 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description='Smoke-test ArtisanZ renderer factory backends.')
     parser.add_argument(
         '--renderer',
-        choices=('matplotlib-snapshot', 'pyqtgraph-snapshot'),
         required=True,
-        help='Renderer plugin id to instantiate through the factory.')
+        help='Renderer plugin id to instantiate through the runtime registry.')
     parser.add_argument('--points', type=int, default=120, help='Synthetic sample count.')
     parser.add_argument('--events', type=int, default=4, help='Synthetic event count.')
     parser.add_argument('--opengl', action='store_true', help='Request PyQtGraph OpenGL rendering.')
     parser.add_argument('--no-opengl', action='store_true', help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
 
-    result = smoke_renderer_factory(
-        args.renderer,
-        point_count=args.points,
-        event_count=args.events,
-        use_opengl=args.opengl and not args.no_opengl,
-    )
+    try:
+        result = smoke_renderer_factory(
+            args.renderer,
+            registry=build_runtime_registry(),
+            point_count=args.points,
+            event_count=args.events,
+            use_opengl=args.opengl and not args.no_opengl,
+        )
+    except KeyError as exc:
+        parser.error(str(exc))
     print(json.dumps(result_to_dict(result), ensure_ascii=False, indent=2, sort_keys=True))
     return 0
 
