@@ -37,7 +37,7 @@ Important observations from the code review:
 | 3 | Sampling Post-Processing Decoupling | Pure helper extraction surface audited; remaining work is orchestration/renderer payload | Pure data pipeline for filtering, RoR, PID inputs, alarm/event decisions | GUI thread consumes snapshots instead of doing heavy processing inline |
 | 4 | Main UI Information Architecture | Started: workspace model + policy-backed toolbar/menu state | Scenario-oriented Roast Control, QC Analysis, and Device Setup workspaces | Users can switch task modes without losing existing expert controls |
 | 5 | Local QML Islands | Started: workspace-status model + lazy dock + screenshot and packaging smoke | A limited Qt Quick panel or dashboard backed by Python state models | QML proves useful without breaking packaging, translations, or Windows portable build |
-| 6 | Plugin Boundary Exploration | Started: renderer plugin metadata + factory seam | Renderer/report/filter/analyzer extension seams | Future customization can be isolated without destabilizing upstream sync |
+| 6 | Plugin Boundary Exploration | Started: renderer plugin metadata + factory smoke seam | Renderer/report/filter/analyzer extension seams | Future customization can be isolated without destabilizing upstream sync |
 
 ## Phase 0: Performance Baseline and Risk Map
 
@@ -186,7 +186,7 @@ Important observations from the code review:
 
 **Goal:** Prepare the codebase for long-term customization and optional commercial-product divergence.
 
-**Started:** 2026-07-01 with a side-effect-light renderer plugin registry that describes the existing Matplotlib and PyQtGraph snapshot adapters as built-in renderer plugins. Follow-up work adds a `create_renderer()` factory that can instantiate built-in or externally registered renderers by id after dependency checks. This creates the first renderer plugin factory seam without changing `main.py`, `canvas.py`, or the live roast rendering path; wiring the live renderer selection remains a follow-up step.
+**Started:** 2026-07-01 with a side-effect-light renderer plugin registry that describes the existing Matplotlib and PyQtGraph snapshot adapters as built-in renderer plugins. Follow-up work adds a `create_renderer()` factory that can instantiate built-in or externally registered renderers by id after dependency checks, plus a headless-safe factory smoke runner that renders the same synthetic roast snapshot through either built-in renderer id, `matplotlib-snapshot` or `pyqtgraph-snapshot`. This creates the first renderer plugin factory seam without changing `main.py`, `canvas.py`, or the live roast rendering path. The current smoke proves built-in backend swapping; live renderer selection wiring and a small external-registry smoke remain follow-up steps before the broader Phase 6 exit gate is closed.
 
 **Candidate Work:**
 
