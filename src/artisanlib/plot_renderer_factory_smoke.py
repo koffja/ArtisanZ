@@ -8,7 +8,7 @@ import os
 
 from artisanlib.plot_renderer_benchmark import build_renderer_benchmark_snapshot
 from artisanlib.plot_renderer_factory import create_renderer
-from artisanlib.plot_renderer_registry import RendererPluginRegistry
+from artisanlib.plot_renderer_registry import RendererPluginRegistry, create_default_renderer_registry
 from artisanlib.plot_snapshot import RendererViewState, RoastPlotSnapshot
 
 
@@ -39,11 +39,13 @@ def smoke_renderer_factory(
         point_count=point_count,
         event_count=event_count,
     )
-    if renderer_id == 'matplotlib-snapshot':
-        return _smoke_matplotlib_renderer(renderer_id, smoke_snapshot, registry)
-    if renderer_id == 'pyqtgraph-snapshot':
-        return _smoke_pyqtgraph_renderer(renderer_id, smoke_snapshot, registry, use_opengl)
-    raise KeyError(f'unsupported renderer factory smoke id: {renderer_id}')
+    renderer_registry = registry or create_default_renderer_registry()
+    plugin = renderer_registry.get(renderer_id)
+    if plugin.surface == 'matplotlib-axis':
+        return _smoke_matplotlib_renderer(renderer_id, smoke_snapshot, renderer_registry)
+    if plugin.surface == 'pyqtgraph-plot':
+        return _smoke_pyqtgraph_renderer(renderer_id, smoke_snapshot, renderer_registry, use_opengl)
+    raise ValueError(f'unsupported renderer smoke surface: {plugin.surface}')
 
 
 def result_to_dict(result: RendererFactorySmokeResult) -> dict[str, object]:

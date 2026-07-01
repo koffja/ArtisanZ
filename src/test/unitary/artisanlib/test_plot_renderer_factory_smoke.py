@@ -7,6 +7,7 @@ from artisanlib.plot_renderer_factory_smoke import (
     result_to_dict,
     smoke_renderer_factory,
 )
+from artisanlib.plot_renderer_registry import RendererPluginRegistry, RendererPluginSpec
 from artisanlib.plot_snapshot import AxisSnapshot, RendererViewState
 
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
@@ -84,3 +85,29 @@ def test_renderer_factory_smoke_results_share_backend_neutral_shape() -> None:
     assert set(matplotlib_result) == set(pyqtgraph_result)
     assert matplotlib_result['renderer_id'] == 'matplotlib-snapshot'
     assert pyqtgraph_result['renderer_id'] == 'pyqtgraph-snapshot'
+
+
+def test_smoke_renderer_factory_supports_external_registry_plugin_id() -> None:
+    snapshot = build_factory_smoke_snapshot(point_count=16, event_count=2)
+    registry = RendererPluginRegistry((
+        RendererPluginSpec(
+            renderer_id='external-matplotlib-smoke',
+            label='External Matplotlib Smoke',
+            description='External renderer id using a Matplotlib-compatible surface.',
+            class_path='artisanlib.plot_matplotlib_adapter.MatplotlibSnapshotRenderer',
+            surface='matplotlib-axis',
+            dependencies=('matplotlib',),
+        ),
+    ))
+
+    result = smoke_renderer_factory(
+        'external-matplotlib-smoke',
+        snapshot=snapshot,
+        registry=registry,
+    )
+
+    assert result.renderer_id == 'external-matplotlib-smoke'
+    assert result.temperature_item_count == 4
+    assert result.ror_item_count == 2
+    assert result.event_item_count == 4
+    assert result.png_byte_count > 1000

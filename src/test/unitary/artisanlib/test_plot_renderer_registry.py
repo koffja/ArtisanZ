@@ -22,7 +22,9 @@ def test_default_renderer_registry_exposes_builtin_renderers() -> None:
         'pyqtgraph-snapshot',
     )
     assert registry.get('matplotlib-snapshot').stability == 'stable'
+    assert registry.get('matplotlib-snapshot').surface == 'matplotlib-axis'
     assert registry.get('pyqtgraph-snapshot').stability == 'experimental'
+    assert registry.get('pyqtgraph-snapshot').surface == 'pyqtgraph-plot'
 
 
 def test_default_renderer_registry_loads_builtin_renderer_classes() -> None:
@@ -46,6 +48,7 @@ def test_renderer_registry_supports_external_plugin_registration() -> None:
         label='External Renderer',
         description='Renderer provided outside the built-in registry.',
         class_path='artisanlib.plot_matplotlib_adapter.MatplotlibSnapshotRenderer',
+        surface='matplotlib-axis',
         dependencies=('matplotlib',),
         stability='experimental',
     )
@@ -63,6 +66,7 @@ def test_renderer_registry_filters_unavailable_plugins() -> None:
             label='Available',
             description='Uses an installed dependency.',
             class_path='artisanlib.plot_matplotlib_adapter.MatplotlibSnapshotRenderer',
+            surface='matplotlib-axis',
             dependencies=('matplotlib',),
         ),
         RendererPluginSpec(
@@ -70,6 +74,7 @@ def test_renderer_registry_filters_unavailable_plugins() -> None:
             label='Missing',
             description='Uses a missing dependency.',
             class_path='artisanlib.plot_matplotlib_adapter.MatplotlibSnapshotRenderer',
+            surface='matplotlib-axis',
             dependencies=('definitely_missing_renderer_dependency',),
         ),
     ))
@@ -98,6 +103,7 @@ def test_renderer_registry_availability_filter_does_not_import_dependencies(
             label='Available',
             description='Uses an installed dependency.',
             class_path='artisanlib.plot_matplotlib_adapter.MatplotlibSnapshotRenderer',
+            surface='matplotlib-axis',
             dependencies=('available_dependency',),
         ),
         RendererPluginSpec(
@@ -105,6 +111,7 @@ def test_renderer_registry_availability_filter_does_not_import_dependencies(
             label='Missing',
             description='Uses a missing dependency.',
             class_path='artisanlib.plot_matplotlib_adapter.MatplotlibSnapshotRenderer',
+            surface='matplotlib-axis',
             dependencies=('missing_dependency',),
         ),
     ))
@@ -122,6 +129,7 @@ def test_load_renderer_class_rejects_invalid_class_paths() -> None:
             label='Invalid',
             description='Invalid class path.',
             class_path='MissingClassName',
+            surface='matplotlib-axis',
         ))
 
 
@@ -132,6 +140,7 @@ def test_load_renderer_class_rejects_non_class_targets() -> None:
             label='Function',
             description='Function target.',
             class_path='artisanlib.plot_renderer_registry.create_default_renderer_registry',
+            surface='matplotlib-axis',
         ))
 
 
@@ -142,4 +151,5 @@ def test_load_renderer_class_rejects_classes_without_renderer_methods() -> None:
             label='Registry',
             description='Class target that is not a renderer.',
             class_path='artisanlib.plot_renderer_registry.RendererPluginRegistry',
+            surface='matplotlib-axis',
         ))

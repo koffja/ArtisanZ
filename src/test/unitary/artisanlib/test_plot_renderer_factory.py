@@ -64,6 +64,7 @@ def test_create_renderer_supports_external_registry_plugin() -> None:
             label='External Matplotlib',
             description='Renderer registered outside built-ins.',
             class_path='artisanlib.plot_matplotlib_adapter.MatplotlibSnapshotRenderer',
+            surface='matplotlib-axis',
             dependencies=('matplotlib',),
             stability='experimental',
         ),
@@ -83,6 +84,7 @@ def test_create_renderer_rejects_missing_dependencies() -> None:
         label='Missing',
         description='Renderer with missing dependency.',
         class_path='artisanlib.plot_matplotlib_adapter.MatplotlibSnapshotRenderer',
+        surface='matplotlib-axis',
         dependencies=('definitely_missing_renderer_dependency',),
     )
     registry = RendererPluginRegistry((plugin,))
@@ -106,6 +108,7 @@ def test_create_renderer_checks_dependencies_before_loading_renderer_class(
             label='Missing Before Import',
             description='Renderer whose module must not be imported when dependencies are missing.',
             class_path='unimported_renderer_module.Renderer',
+            surface='matplotlib-axis',
             dependencies=('definitely_missing_renderer_dependency',),
         ),
     ))
@@ -127,6 +130,7 @@ def test_missing_renderer_dependencies_reports_only_missing_modules() -> None:
         label='Mixed',
         description='Renderer with available and missing dependencies.',
         class_path='artisanlib.plot_matplotlib_adapter.MatplotlibSnapshotRenderer',
+        surface='matplotlib-axis',
         dependencies=('matplotlib', 'definitely_missing_renderer_dependency'),
     )
 

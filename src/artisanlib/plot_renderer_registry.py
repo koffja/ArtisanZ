@@ -7,6 +7,7 @@ from typing import Literal
 
 
 type RendererStability = Literal['stable', 'experimental']
+type RendererSurface = Literal['matplotlib-axis', 'pyqtgraph-plot']
 
 REQUIRED_RENDERER_METHODS: tuple[str, ...] = (
     'set_snapshot',
@@ -22,6 +23,7 @@ class RendererPluginSpec:
     label: str
     description: str
     class_path: str
+    surface: RendererSurface
     dependencies: tuple[str, ...] = ()
     stability: RendererStability = 'experimental'
 
@@ -63,6 +65,7 @@ BUILTIN_RENDERER_PLUGINS: tuple[RendererPluginSpec, ...] = (
         label='Matplotlib Snapshot',
         description='Compatibility renderer for Artisan matplotlib axes.',
         class_path='artisanlib.plot_matplotlib_adapter.MatplotlibSnapshotRenderer',
+        surface='matplotlib-axis',
         dependencies=('matplotlib',),
         stability='stable',
     ),
@@ -71,6 +74,7 @@ BUILTIN_RENDERER_PLUGINS: tuple[RendererPluginSpec, ...] = (
         label='PyQtGraph Snapshot',
         description='Experimental PyQtGraph renderer for benchmarked live-plot exploration.',
         class_path='artisanlib.plot_pyqtgraph_adapter.PyQtGraphSnapshotRenderer',
+        surface='pyqtgraph-plot',
         dependencies=('pyqtgraph',),
         stability='experimental',
     ),
@@ -109,6 +113,7 @@ __all__ = [
     'RendererPluginRegistry',
     'RendererPluginSpec',
     'RendererStability',
+    'RendererSurface',
     'create_default_renderer_registry',
     'load_renderer_class',
 ]
