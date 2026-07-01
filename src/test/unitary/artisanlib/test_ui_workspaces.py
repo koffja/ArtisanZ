@@ -43,6 +43,14 @@ class FakeToolbar:
         self.actions.append('remove')
 
 
+class FakeWorkspaceStatusModel:
+    def __init__(self) -> None:
+        self.modes: list[object] = []
+
+    def set_workspace_mode(self, mode: object) -> None:
+        self.modes.append(mode)
+
+
 class FakeMenuBar:
     def __init__(self) -> None:
         self.menus: list[str] = []
@@ -105,6 +113,7 @@ class FakeApplicationWindow:
         self.deviceSetupModeAction = FakeAction()
         self.expertModeAction = FakeAction()
         self.ntb = FakeToolbar()
+        self.workspaceStatusModel: FakeWorkspaceStatusModel | None = None
         self.menus: list[object] = []
         self.announcements = 0
 
@@ -117,6 +126,10 @@ class FakeApplicationWindow:
 
     def announce_current_ui_mode(self) -> None:
         self.announcements += 1
+
+    def syncWorkspaceStatusModel(self) -> None:
+        main = main_module()
+        main.ApplicationWindow.syncWorkspaceStatusModel(self)
 
 
 class FakeMenuApplicationWindow:
@@ -248,6 +261,7 @@ class FakeViewMenuApplicationWindow:
         self.controlsAction = 'controls'
         self.readingsAction = 'readings'
         self.eventsEditorAction = 'events-editor'
+        self.workspaceStatusAction = 'workspace-status'
         self.buttonsAction = 'buttons'
         self.slidersAction = 'sliders'
         self.scheduleAction = FakeMenuAction('schedule')
@@ -266,6 +280,27 @@ class FakeViewMenuApplicationWindow:
 
     def slidersVisible(self) -> bool:
         return self._sliders_visible
+
+
+class FakeWorkspaceStatusDock:
+    def __init__(self) -> None:
+        self.visible: list[bool] = []
+        self.raise_count = 0
+
+    def setVisible(self, visible: bool) -> None:
+        self.visible.append(visible)
+
+    def raise_(self) -> None:
+        self.raise_count += 1
+
+
+class FakeWorkspaceStatusWindow:
+    def __init__(self) -> None:
+        self.workspaceStatusDock = FakeWorkspaceStatusDock()
+        self.ensure_calls = 0
+
+    def ensureWorkspaceStatusWidget(self) -> None:
+        self.ensure_calls += 1
 
 
 def test_workspace_for_existing_ui_modes_maps_standard_to_roast_control() -> None:
@@ -418,6 +453,17 @@ def test_application_window_set_workspace_mode_syncs_task_workspace_policy() -> 
     assert window.announcements == 2
 
 
+def test_application_window_set_workspace_mode_syncs_visible_workspace_status_model() -> None:
+    main = main_module()
+    workspaces = workspace_module()
+    window = FakeApplicationWindow()
+    window.workspaceStatusModel = FakeWorkspaceStatusModel()
+
+    main.ApplicationWindow.set_workspace_mode(window, workspaces.WorkspaceMode.DEVICE_SETUP)
+
+    assert window.workspaceStatusModel.modes == [workspaces.WorkspaceMode.DEVICE_SETUP]
+
+
 def test_application_window_default_mode_switches_back_from_task_workspace() -> None:
     main = main_module()
     workspaces = workspace_module()
@@ -431,6 +477,18 @@ def test_application_window_default_mode_switches_back_from_task_workspace() -> 
     assert window.defaultModeAction.checked is True
     assert window.qcAnalysisModeAction.checked is False
     assert window.menus == [main.UI_MODE.DEFAULT, main.UI_MODE.DEFAULT]
+
+
+def test_application_window_toggle_workspace_status_dock() -> None:
+    main = main_module()
+    window = FakeWorkspaceStatusWindow()
+
+    main.ApplicationWindow.toggleWorkspaceStatusDock(window, True)
+    main.ApplicationWindow.toggleWorkspaceStatusDock(window, False)
+
+    assert window.ensure_calls == 1
+    assert window.workspaceStatusDock.visible == [True, False]
+    assert window.workspaceStatusDock.raise_count == 1
 
 
 def test_application_window_set_toolbar_uses_workspace_policy() -> None:
@@ -1055,6 +1113,7 @@ def test_application_window_create_view_menu_preserves_current_policy_visibility
         'controls',
         'readings',
         'events-editor',
+        'workspace-status',
         'buttons',
         'sliders',
         'separator',
@@ -1076,6 +1135,7 @@ def test_application_window_create_view_menu_preserves_current_policy_visibility
             'controls',
             'readings',
             'events-editor',
+            'workspace-status',
             'separator',
             'schedule',
             'separator',
@@ -1113,6 +1173,7 @@ def test_application_window_create_view_menu_preserves_production_runtime_fallba
         'controls',
         'readings',
         'events-editor',
+        'workspace-status',
         'buttons',
         'sliders',
         'separator',
@@ -1219,6 +1280,7 @@ def test_application_window_create_view_menu_uses_workspace_policy(
         'controls',
         'readings',
         'events-editor',
+        'workspace-status',
         'buttons',
         'sliders',
         'separator',

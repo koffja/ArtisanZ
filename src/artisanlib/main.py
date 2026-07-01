@@ -1542,8 +1542,8 @@ class ApplicationWindow(QMainWindow):
         'batchAction', 'temperatureConfMenu', 'FahrenheitAction', 'CelsiusAction', 'languageMenu', 'analyzeMenu', 'fitIdealautoAction',
         'analyzeMenu', 'fitIdealx2Action', 'fitIdealx3Action', 'fitIdealx0Action', 'fitBkgndAction', 'clearresultsAction', 'roastCompareAction',
         'designerAction', 'simulatorAction', 'wheeleditorAction', 'transformAction', 'temperatureMenu', 'ConvertToFahrenheitAction',
-        'ConvertToCelsiusAction', 'controlsAction', 'readingsAction', 'eventsEditorAction', 'buttonsAction', 'slidersAction', 'scheduleAction', 'lcdsAction', 'deltalcdsAction',
-        'pidlcdsAction', 'scalelcdsAction', 'extralcdsAction', 'phaseslcdsAction', 'fullscreenAction', 'newRoastAction', 'loadSettingsAction', 'openRecentSettingMenu',
+        'ConvertToCelsiusAction', 'controlsAction', 'readingsAction', 'eventsEditorAction', 'workspaceStatusAction', 'buttonsAction', 'slidersAction', 'scheduleAction', 'lcdsAction', 'deltalcdsAction',
+        'pidlcdsAction', 'scalelcdsAction', 'extralcdsAction', 'phaseslcdsAction', 'fullscreenAction', 'workspaceStatusDock', 'workspaceStatusModel', 'workspaceStatusWidget', 'newRoastAction', 'loadSettingsAction', 'openRecentSettingMenu',
         'saveAsSettingsAction', 'resetAction', 'messagelabel', 'button_font_size_pt', 'button_font_size', 'button_font_size_small', 'button_font_size_small_selected',
         'button_font_size_tiny', 'button_font_size_micro',
         'pushbuttonstyles_simulator', 'pushbuttonstyles', 'standard_button_tiny_height', 'standard_button_small_height', 'standard_button_height',
@@ -2110,6 +2110,9 @@ class ApplicationWindow(QMainWindow):
         # initialize the variables holding QActions with shortcuts
         self.fullscreenAction:QAction|None = None
         self.newRoastAction:QAction|None = None
+        self.workspaceStatusDock:QDockWidget|None = None
+        self.workspaceStatusModel:QObject|None = None
+        self.workspaceStatusWidget:QWidget|None = None
 
         #FILE menu
         self.newRoastMenu:QMenu = QMenu(QApplication.translate('Menu', 'New'))
@@ -2773,6 +2776,11 @@ class ApplicationWindow(QMainWindow):
         self.eventsEditorAction.triggered.connect(self.toggle_minieventline)
         self.eventsEditorAction.setCheckable(True)
         self.eventsEditorAction.setChecked(False)
+
+        self.workspaceStatusAction = QAction(QApplication.translate('Menu', 'Workspace Status'), self)
+        self.workspaceStatusAction.triggered.connect(self.toggleWorkspaceStatusDock)
+        self.workspaceStatusAction.setCheckable(True)
+        self.workspaceStatusAction.setChecked(False)
 
         self.buttonsAction = QAction(QApplication.translate('Menu', 'Buttons'), self)
         self.buttonsAction.setShortcut('B')
@@ -4289,6 +4297,18 @@ class ApplicationWindow(QMainWindow):
 
         self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.sliderDock)
 
+        self.workspaceStatusDock = QDockWidget(QApplication.translate('Menu', 'Workspace Status'), self)
+        self.workspaceStatusDock.setObjectName('workspaceStatusDock')
+        self.workspaceStatusDock.setAllowedAreas(Qt.DockWidgetArea.LeftDockWidgetArea|Qt.DockWidgetArea.RightDockWidgetArea)
+        self.workspaceStatusDock.setFloating(False)
+        self.workspaceStatusDock.setFeatures(
+            QDockWidget.DockWidgetFeature.DockWidgetClosable |
+            QDockWidget.DockWidgetFeature.DockWidgetMovable |
+            QDockWidget.DockWidgetFeature.DockWidgetFloatable)
+        self.workspaceStatusDock.visibilityChanged.connect(self.workspaceStatusAction.setChecked)
+        self.workspaceStatusDock.setVisible(False)
+        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.workspaceStatusDock)
+
         self.lcdFrame:QFrame = QFrame()
         self.lcdFrame.setLayout(LCDlayout)
         self.lcdFrame.setVisible(False)
@@ -4556,6 +4576,7 @@ class ApplicationWindow(QMainWindow):
         view_menu.addAction(self.controlsAction)
         view_menu.addAction(self.readingsAction)
         view_menu.addAction(self.eventsEditorAction)
+        view_menu.addAction(self.workspaceStatusAction)
         if policy.show_full_menus or len(self.extraeventslabels) > 0:
             view_menu.addAction(self.buttonsAction)
         if policy.show_full_menus or self.slidersVisible():
@@ -4584,6 +4605,34 @@ class ApplicationWindow(QMainWindow):
 #            self.fullscreenAction.setMenuRole(QAction.MenuRole.NoRole)
             view_menu.addAction(self.fullscreenAction)
         return view_menu
+
+    def ensureWorkspaceStatusWidget(self) -> None:
+        if self.workspaceStatusDock is None or self.workspaceStatusWidget is not None:
+            return
+        from artisanlib.workspace_status_model import ( # pylint: disable=import-outside-toplevel
+            WorkspaceStatusModel,
+            create_workspace_status_widget,
+        )
+        self.workspaceStatusModel = WorkspaceStatusModel(self.workspace_mode, self.workspaceStatusDock)
+        self.workspaceStatusWidget = create_workspace_status_widget(
+            self.workspaceStatusModel,
+            self.workspaceStatusDock)
+        self.workspaceStatusDock.setWidget(self.workspaceStatusWidget)
+
+    def syncWorkspaceStatusModel(self) -> None:
+        if self.workspaceStatusModel is not None:
+            self.workspaceStatusModel.set_workspace_mode(self.workspace_mode) # type: ignore[attr-defined]
+
+    @pyqtSlot()
+    @pyqtSlot(bool)
+    def toggleWorkspaceStatusDock(self, visible:bool = False) -> None:
+        if visible:
+            self.ensureWorkspaceStatusWidget()
+        if self.workspaceStatusDock is None:
+            return
+        self.workspaceStatusDock.setVisible(visible)
+        if visible:
+            self.workspaceStatusDock.raise_()
 
 
     def create_help_menu(self, ui_mode:UI_MODE) -> QMenu:
@@ -4695,6 +4744,7 @@ class ApplicationWindow(QMainWindow):
         self.ui_mode = ui_mode
         self.workspace_mode = workspace_mode
         self.workspace_policy = workspace_policy_for_mode(self.workspace_mode)
+        self.syncWorkspaceStatusModel()
         self.productionModeAction.setChecked(workspace_mode is WorkspaceMode.PRODUCTION)
         self.defaultModeAction.setChecked(workspace_mode is WorkspaceMode.ROAST_CONTROL)
         self.qcAnalysisModeAction.setChecked(workspace_mode is WorkspaceMode.QC_ANALYSIS)
