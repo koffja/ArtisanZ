@@ -51,6 +51,20 @@ class FakeWorkspaceStatusModel:
         self.modes.append(mode)
 
 
+class FakeRendererWorkspaceStatusModel(FakeWorkspaceStatusModel):
+    def __init__(self) -> None:
+        super().__init__()
+        self.renderer_selections: list[object] = []
+
+    def set_renderer_selection(self, selection: object) -> None:
+        self.renderer_selections.append(selection)
+
+
+class FakeCanvasRendererState:
+    def __init__(self, selection: object) -> None:
+        self.plot_renderer_selection = selection
+
+
 class FakeMenuBar:
     def __init__(self) -> None:
         self.menus: list[str] = []
@@ -477,6 +491,19 @@ def test_application_window_set_workspace_mode_syncs_visible_workspace_status_mo
     main.ApplicationWindow.set_workspace_mode(window, workspaces.WorkspaceMode.DEVICE_SETUP)
 
     assert window.workspaceStatusModel.modes == [workspaces.WorkspaceMode.DEVICE_SETUP]
+
+
+def test_application_window_syncs_renderer_selection_to_workspace_status_model() -> None:
+    main = main_module()
+    selection = object()
+    window = FakeApplicationWindow()
+    window.qmc = FakeCanvasRendererState(selection)
+    window.workspaceStatusModel = FakeRendererWorkspaceStatusModel()
+
+    main.ApplicationWindow.syncWorkspaceStatusModel(window)
+
+    assert window.workspaceStatusModel.modes == [window.workspace_mode]
+    assert window.workspaceStatusModel.renderer_selections == [selection]
 
 
 def test_application_window_default_mode_switches_back_from_task_workspace() -> None:

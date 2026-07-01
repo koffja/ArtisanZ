@@ -7,6 +7,7 @@ from PyQt6.QtCore import QObject, QUrl, pyqtProperty, pyqtSignal, pyqtSlot
 from PyQt6.QtQuickWidgets import QQuickWidget
 from PyQt6.QtWidgets import QWidget
 
+from artisanlib.plot_renderer_settings import DEFAULT_RENDERER_ID, RendererSelection
 from artisanlib.ui_workspaces import (
     WorkspaceMode,
     workspace_from_setting_value,
@@ -22,7 +23,7 @@ Item {
     id: root
     property var workspaceModel
     implicitWidth: 320
-    implicitHeight: 132
+    implicitHeight: 156
     readonly property color accentColor: !root.workspaceModel
         ? "#0087b3"
         : root.workspaceModel.modeValue === "qc_analysis"
@@ -132,10 +133,11 @@ Item {
     }
 
     Text {
+        id: controlSummary
         anchors.left: title.left
         anchors.right: title.right
         anchors.top: statusRow.bottom
-        anchors.topMargin: 10
+        anchors.topMargin: 9
         color: "#6f7c80"
         font.pixelSize: 12
         text: root.workspaceModel && root.workspaceModel.showAdvancedControls
@@ -143,12 +145,43 @@ Item {
             : qsTr("Reduced control surface")
         elide: Text.ElideRight
     }
+
+    Row {
+        anchors.left: title.left
+        anchors.right: title.right
+        anchors.top: controlSummary.bottom
+        anchors.topMargin: 9
+        spacing: 6
+
+        Rectangle {
+            width: 7
+            height: 7
+            radius: 2
+            anchors.verticalCenter: rendererText.verticalCenter
+            color: root.workspaceModel && root.workspaceModel.rendererFallbackReason !== ""
+                ? "#b46a55"
+                : root.accentColor
+        }
+
+        Text {
+            id: rendererText
+            width: parent.width - 13
+            color: "#4f5f66"
+            font.pixelSize: 12
+            text: root.workspaceModel
+                ? qsTr("Renderer") + ": " + root.workspaceModel.rendererLabel
+                    + " - " + root.workspaceModel.rendererStatusLabel
+                : ""
+            elide: Text.ElideRight
+        }
+    }
 }
 """
 
 
 class WorkspaceStatusModel(QObject):
     workspaceChanged = pyqtSignal()
+    rendererChanged = pyqtSignal()
 
     def __init__(
             self,
@@ -156,6 +189,9 @@ class WorkspaceStatusModel(QObject):
             parent: QObject | None = None) -> None:
         super().__init__(parent)
         self._mode = mode
+        self._renderer_id = DEFAULT_RENDERER_ID
+        self._renderer_label = 'Matplotlib Snapshot'
+        self._renderer_fallback_reason = ''
 
     def workspace_mode(self) -> WorkspaceMode:
         return self._mode
@@ -165,6 +201,20 @@ class WorkspaceStatusModel(QObject):
             return
         self._mode = mode
         self.workspaceChanged.emit()
+
+    def set_renderer_selection(self, selection: RendererSelection | None) -> None:
+        renderer_id = selection.renderer_id if selection is not None else DEFAULT_RENDERER_ID
+        renderer_label = selection.plugin.label if selection is not None else 'Matplotlib Snapshot'
+        fallback_reason = (selection.fallback_reason or '') if selection is not None else ''
+        if (
+                renderer_id == self._renderer_id and
+                renderer_label == self._renderer_label and
+                fallback_reason == self._renderer_fallback_reason):
+            return
+        self._renderer_id = renderer_id
+        self._renderer_label = renderer_label
+        self._renderer_fallback_reason = fallback_reason
+        self.rendererChanged.emit()
 
     @pyqtSlot(str)
     def setWorkspaceModeValue(self, value: str) -> None:
@@ -197,6 +247,30 @@ class WorkspaceStatusModel(QObject):
     @pyqtProperty(bool, notify=workspaceChanged)
     def showDeviceSetupTools(self) -> bool:
         return workspace_policy(self._mode).show_device_setup_tools
+
+    @pyqtProperty(str, notify=rendererChanged)
+    def rendererId(self) -> str:
+        return self._renderer_id
+
+    @pyqtProperty(str, notify=rendererChanged)
+    def rendererLabel(self) -> str:
+        return self._renderer_label
+
+    @pyqtProperty(str, notify=rendererChanged)
+    def rendererFallbackReason(self) -> str:
+        return self._renderer_fallback_reason
+
+    @pyqtProperty(str, notify=rendererChanged)
+    def rendererStatusLabel(self) -> str:
+        if not self._renderer_fallback_reason:
+            return 'Selected'
+        if self._renderer_fallback_reason == 'selection_error':
+            return 'Fallback active'
+        if self._renderer_fallback_reason == 'unavailable':
+            return 'Dependency fallback'
+        if self._renderer_fallback_reason == 'default_unavailable':
+            return 'Default fallback'
+        return 'Fallback active'
 
 
 def qml_data_url(qml_source: str) -> QUrl:

@@ -7,6 +7,8 @@ from PyQt6.QtCore import QUrl
 from PyQt6.QtQml import QQmlComponent, QQmlEngine
 from PyQt6.QtWidgets import QApplication
 
+from artisanlib.plot_renderer_registry import create_default_renderer_registry
+from artisanlib.plot_renderer_settings import DEFAULT_RENDERER_ID, RendererSelection
 from artisanlib.ui_workspaces import WorkspaceMode
 from artisanlib.workspace_status_model import (
     WORKSPACE_STATUS_PANEL_QML,
@@ -27,6 +29,10 @@ def test_workspace_status_model_exposes_policy_properties() -> None:
     assert model.showDeviceSetupTools is False
     assert model.showAdvancedControls is False
     assert model.compactChrome is False
+    assert model.rendererId == DEFAULT_RENDERER_ID
+    assert model.rendererLabel == 'Matplotlib Snapshot'
+    assert model.rendererFallbackReason == ''
+    assert model.rendererStatusLabel == 'Selected'
 
 
 def test_workspace_status_model_updates_from_workspace_mode() -> None:
@@ -65,6 +71,75 @@ def test_workspace_status_model_ignores_unknown_qml_slot_value() -> None:
     assert model.workspace_mode() is WorkspaceMode.PRODUCTION
 
 
+def test_workspace_status_model_exposes_renderer_selection() -> None:
+    registry = create_default_renderer_registry()
+    model = WorkspaceStatusModel()
+    notifications: list[None] = []
+    selection = RendererSelection(
+        requested_renderer_id='pyqtgraph-snapshot',
+        renderer_id='matplotlib-snapshot',
+        plugin=registry.get('matplotlib-snapshot'),
+        registry=registry,
+        fallback_reason='selection_error',
+    )
+    model.rendererChanged.connect(lambda: notifications.append(None))
+
+    model.set_renderer_selection(selection)
+
+    assert model.rendererId == 'matplotlib-snapshot'
+    assert model.rendererLabel == 'Matplotlib Snapshot'
+    assert model.rendererFallbackReason == 'selection_error'
+    assert model.rendererStatusLabel == 'Fallback active'
+    assert len(notifications) == 1
+
+    model.set_renderer_selection(selection)
+    assert len(notifications) == 1
+
+
+def test_workspace_status_model_maps_renderer_fallback_status_labels() -> None:
+    registry = create_default_renderer_registry()
+    model = WorkspaceStatusModel()
+
+    expected_labels = {
+        'selection_error': 'Fallback active',
+        'unavailable': 'Dependency fallback',
+        'default_unavailable': 'Default fallback',
+        'unknown': 'Fallback active',
+    }
+    for fallback_reason, expected_label in expected_labels.items():
+        model.set_renderer_selection(RendererSelection(
+            requested_renderer_id='pyqtgraph-snapshot',
+            renderer_id=DEFAULT_RENDERER_ID,
+            plugin=registry.get(DEFAULT_RENDERER_ID),
+            registry=registry,
+            fallback_reason=fallback_reason, # type: ignore[arg-type]
+        ))
+
+        assert model.rendererFallbackReason == fallback_reason
+        assert model.rendererStatusLabel == expected_label
+
+
+def test_workspace_status_model_resets_renderer_selection_to_default() -> None:
+    registry = create_default_renderer_registry()
+    model = WorkspaceStatusModel()
+    notifications: list[None] = []
+    model.rendererChanged.connect(lambda: notifications.append(None))
+
+    model.set_renderer_selection(RendererSelection(
+        requested_renderer_id='pyqtgraph-snapshot',
+        renderer_id='pyqtgraph-snapshot',
+        plugin=registry.get('pyqtgraph-snapshot'),
+        registry=registry,
+    ))
+    model.set_renderer_selection(None)
+
+    assert model.rendererId == DEFAULT_RENDERER_ID
+    assert model.rendererLabel == 'Matplotlib Snapshot'
+    assert model.rendererFallbackReason == ''
+    assert model.rendererStatusLabel == 'Selected'
+    assert len(notifications) == 2
+
+
 def test_workspace_status_panel_qml_compiles() -> None:
     _app = QApplication.instance() or QApplication([])
     engine = QQmlEngine()
@@ -90,7 +165,7 @@ def test_workspace_status_panel_qml_accepts_python_model() -> None:
         assert item is not None, [error.toString() for error in component.errors()]
         assert item.setProperty('workspaceModel', model)
         assert item.property('implicitWidth') == 320
-        assert item.property('implicitHeight') == 132
+        assert item.property('implicitHeight') == 156
     finally:
         if item is not None:
             item.deleteLater()
@@ -111,9 +186,9 @@ def test_workspace_status_widget_factory_loads_qml_with_python_model() -> None:
         assert root_object is not None
         assert root_object.property('workspaceModel') is model
         assert widget.sizeHint().width() == 320
-        assert widget.sizeHint().height() == 132
+        assert widget.sizeHint().height() == 156
         assert widget.minimumWidth() == 320
-        assert widget.minimumHeight() == 132
+        assert widget.minimumHeight() == 156
     finally:
         widget.deleteLater()
 

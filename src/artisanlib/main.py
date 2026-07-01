@@ -4615,6 +4615,8 @@ class ApplicationWindow(QMainWindow):
             create_workspace_status_widget,
         )
         self.workspaceStatusModel = WorkspaceStatusModel(self.workspace_mode, self.workspaceStatusDock)
+        self.workspaceStatusModel.set_renderer_selection(
+            getattr(getattr(self, 'qmc', None), 'plot_renderer_selection', None))
         self.workspaceStatusWidget = create_workspace_status_widget(
             self.workspaceStatusModel,
             self.workspaceStatusDock)
@@ -4623,6 +4625,9 @@ class ApplicationWindow(QMainWindow):
     def syncWorkspaceStatusModel(self) -> None:
         if self.workspaceStatusModel is not None:
             self.workspaceStatusModel.set_workspace_mode(self.workspace_mode) # type: ignore[attr-defined]
+            if hasattr(self.workspaceStatusModel, 'set_renderer_selection'):
+                self.workspaceStatusModel.set_renderer_selection( # type: ignore[attr-defined]
+                    getattr(getattr(self, 'qmc', None), 'plot_renderer_selection', None))
 
     @pyqtSlot()
     @pyqtSlot(bool)

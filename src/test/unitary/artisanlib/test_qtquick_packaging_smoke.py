@@ -78,7 +78,7 @@ def test_qtquick_packaging_smoke_runs_widget_path() -> None:
         timeout=30)
 
     assert result.returncode == 0, result.stderr
-    assert 'Workspace Status QML widget: ready 320x132' in result.stdout
+    assert 'Workspace Status QML widget: ready 320x156' in result.stdout
 
 
 def test_pyinstaller_is_available_for_packaging_smoke() -> None:
