@@ -283,6 +283,36 @@ def test_mapper_unknown_ui_mode_falls_back_to_roast_control() -> None:
     assert workspaces.workspace_for_ui_mode_value(999) is workspaces.WorkspaceMode.ROAST_CONTROL
 
 
+def test_workspace_setting_value_round_trips_every_mode() -> None:
+    workspaces = workspace_module()
+
+    for mode in workspaces.WorkspaceMode:
+        stored_value = workspaces.workspace_setting_value(mode)
+
+        assert stored_value == mode.value
+        assert workspaces.workspace_from_setting_value(
+            stored_value, workspaces.WorkspaceMode.ROAST_CONTROL) is mode
+
+
+def test_workspace_from_setting_value_falls_back_on_unknown_values() -> None:
+    workspaces = workspace_module()
+
+    fallback = workspaces.WorkspaceMode.DEVICE_SETUP
+
+    assert workspaces.workspace_from_setting_value('', fallback) is fallback
+    assert workspaces.workspace_from_setting_value('future_workspace', fallback) is fallback
+    assert workspaces.workspace_from_setting_value(None, fallback) is fallback
+
+
+def test_workspace_from_setting_value_accepts_workspace_mode() -> None:
+    workspaces = workspace_module()
+
+    assert workspaces.workspace_from_setting_value(
+        workspaces.WorkspaceMode.QC_ANALYSIS,
+        workspaces.WorkspaceMode.ROAST_CONTROL,
+    ) is workspaces.WorkspaceMode.QC_ANALYSIS
+
+
 def test_production_workspace_keeps_roast_controls_without_expert_surface() -> None:
     workspaces = workspace_module()
 

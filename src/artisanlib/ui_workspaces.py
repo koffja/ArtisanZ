@@ -176,13 +176,28 @@ def workspace_for_ui_mode_value(ui_mode_value: int) -> WorkspaceMode:
     return WorkspaceMode.ROAST_CONTROL
 
 
+def workspace_setting_value(mode: WorkspaceMode) -> str:
+    return mode.value
+
+
+def workspace_from_setting_value(value: object, fallback: WorkspaceMode) -> WorkspaceMode:
+    if isinstance(value, WorkspaceMode):
+        return value
+    try:
+        return WorkspaceMode(str(value))
+    except ValueError:
+        return fallback
+
+
 __all__ = [
     'WorkspaceArea',
     'WorkspaceMode',
     'WorkspacePolicy',
     'WorkspaceSpec',
+    'workspace_from_setting_value',
     'workspace_for_ui_mode_value',
     'workspace_policy',
+    'workspace_setting_value',
     'workspace_spec',
     'workspace_specs',
 ]

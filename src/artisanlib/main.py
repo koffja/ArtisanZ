@@ -29,8 +29,10 @@ from artisanlib.performance import export_gui_perf_metrics
 from artisanlib.ui_workspaces import (
     WorkspaceMode,
     WorkspacePolicy,
+    workspace_from_setting_value,
     workspace_for_ui_mode_value,
     workspace_policy as workspace_policy_for_mode,
+    workspace_setting_value,
 )
 
 
@@ -18552,7 +18554,11 @@ class ApplicationWindow(QMainWindow):
             self.qmc.AUCshowFlag = toBool(settings.value('AUCshowFlag',self.qmc.AUCshowFlag))
             self.keyboardmoveflag = toInt(settings.value('keyboardmoveflag',int(self.keyboardmoveflag)))
             self.ui_mode = UI_MODE(toInt(settings.value('UI_mode',int(self.ui_mode))))
-            self.workspace_mode = workspace_for_ui_mode_value(int(self.ui_mode))
+            fallback_workspace_mode = workspace_for_ui_mode_value(int(self.ui_mode))
+            self.workspace_mode = workspace_from_setting_value(
+                settings.value('workspace_mode', workspace_setting_value(fallback_workspace_mode)),
+                fallback_workspace_mode)
+            self.ui_mode = legacy_ui_mode_for_workspace(self.workspace_mode)
             self.workspace_policy = workspace_policy_for_mode(self.workspace_mode)
             self.qmc.ambientTempSource = toInt(settings.value('AmbientTempSource',int(self.qmc.ambientTempSource)))
             self.qmc.ambientHumiditySource = toInt(settings.value('AmbientHumiditySource',int(self.qmc.ambientHumiditySource)))
@@ -20593,6 +20599,7 @@ class ApplicationWindow(QMainWindow):
             #save UI Mode
             if not read_defaults:
                 settings.setValue('UI_mode',int(self.ui_mode)) # 'UI_mode' is always stored to ease the transition (old settings default to Expert, new to Default)
+                settings.setValue('workspace_mode',workspace_setting_value(self.workspace_mode))
             #save ambient temperature source
             self.settingsSetValue(settings, default_settings, 'AmbientTempSource',self.qmc.ambientTempSource, read_defaults)
             self.settingsSetValue(settings, default_settings, 'AmbientHumiditySource',self.qmc.ambientHumiditySource, read_defaults)
