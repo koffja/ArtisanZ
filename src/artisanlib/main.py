@@ -4507,14 +4507,15 @@ class ApplicationWindow(QMainWindow):
         return tools_menu
 
     def create_view_menu(self, ui_mode:UI_MODE) -> QMenu:
-        del ui_mode
+        workspace_mode = workspace_for_ui_mode_value(int(ui_mode))
+        policy = workspace_policy_for_mode(workspace_mode)
         view_menu = QMenu(f"&{QApplication.translate('Menu', 'View')}")
         view_menu.addAction(self.controlsAction)
         view_menu.addAction(self.readingsAction)
         view_menu.addAction(self.eventsEditorAction)
-        if self.ui_mode is not UI_MODE.PRODUCTION or len(self.extraeventslabels) > 0:
+        if policy.show_full_menus or len(self.extraeventslabels) > 0:
             view_menu.addAction(self.buttonsAction)
-        if self.ui_mode is not UI_MODE.PRODUCTION or self.slidersVisible():
+        if policy.show_full_menus or self.slidersVisible():
             view_menu.addAction(self.slidersAction)
         view_menu.addSeparator()
         view_menu.addAction(self.scheduleAction)
@@ -4523,12 +4524,12 @@ class ApplicationWindow(QMainWindow):
         view_menu.addSeparator()
         view_menu.addAction(self.lcdsAction)
         view_menu.addAction(self.deltalcdsAction)
-        if self.ui_mode is not UI_MODE.PRODUCTION or self.qmc.Controlbuttonflag:
+        if policy.show_full_menus or self.qmc.Controlbuttonflag:
             view_menu.addAction(self.pidlcdsAction)
-        if self.ui_mode is not UI_MODE.PRODUCTION or len(self.qmc.extradevices)>0:
+        if policy.show_full_menus or len(self.qmc.extradevices)>0:
             view_menu.addAction(self.extralcdsAction)
         view_menu.addAction(self.phaseslcdsAction)
-        if self.ui_mode is not UI_MODE.PRODUCTION or self.scale1_model is not None:
+        if policy.show_full_menus or self.scale1_model is not None:
             view_menu.addAction(self.scalelcdsAction)
         view_menu.addSeparator()
         if not (platform.system() == 'Darwin' and self.qmc.locale_str == 'en'): # macOS automatically adds the fullscreen action to View menu

@@ -23,6 +23,15 @@ class FakeAction:
         self.checked = checked
 
 
+class FakeMenuAction:
+    def __init__(self, label: str) -> None:
+        self.label = label
+        self.enabled: bool | None = None
+
+    def setEnabled(self, enabled: bool) -> None:
+        self.enabled = enabled
+
+
 class FakeToolbar:
     def __init__(self) -> None:
         self.actions: list[str] = []
@@ -217,6 +226,44 @@ class FakeToolsMenuApplicationWindow:
         self.transformAction = 'transform'
         self.temperatureMenu = 'temperature'
         self.calculatorAction = 'calculator'
+
+
+class FakeViewQmc:
+    def __init__(self) -> None:
+        self.Controlbuttonflag = False
+        self.extradevices: list[str] = []
+        self.locale_str = 'en_US'
+
+
+class FakeViewApp:
+    def __init__(self) -> None:
+        self.artisanviewerMode = False
+
+
+class FakeViewMenuApplicationWindow:
+    def __init__(self) -> None:
+        # Intentionally no ui_mode attribute: create_view_menu should use its parameter.
+        self.controlsAction = 'controls'
+        self.readingsAction = 'readings'
+        self.eventsEditorAction = 'events-editor'
+        self.buttonsAction = 'buttons'
+        self.slidersAction = 'sliders'
+        self.scheduleAction = FakeMenuAction('schedule')
+        self.lcdsAction = 'lcds'
+        self.deltalcdsAction = 'delta-lcds'
+        self.pidlcdsAction = 'pid-lcds'
+        self.extralcdsAction = 'extra-lcds'
+        self.phaseslcdsAction = 'phases-lcds'
+        self.scalelcdsAction = 'scale-lcds'
+        self.fullscreenAction = 'fullscreen'
+        self.extraeventslabels: list[str] = []
+        self.qmc = FakeViewQmc()
+        self.app = FakeViewApp()
+        self.scale1_model: object | None = None
+        self._sliders_visible = False
+
+    def slidersVisible(self) -> bool:
+        return self._sliders_visible
 
 
 def test_workspace_for_existing_ui_modes_maps_standard_to_roast_control() -> None:
@@ -876,6 +923,197 @@ def test_application_window_create_tools_menu_separates_advanced_policy(
         'temperature',
         'separator',
         'calculator',
+    ]
+
+
+def test_application_window_create_view_menu_preserves_current_policy_visibility(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    main = main_module()
+    monkeypatch.setattr(main, 'QMenu', FakeMenu)
+    monkeypatch.setattr(main.platform, 'system', lambda: 'Linux')
+
+    full_menu_items = [
+        'controls',
+        'readings',
+        'events-editor',
+        'buttons',
+        'sliders',
+        'separator',
+        'schedule',
+        'separator',
+        'lcds',
+        'delta-lcds',
+        'pid-lcds',
+        'extra-lcds',
+        'phases-lcds',
+        'scale-lcds',
+        'separator',
+        'fullscreen',
+    ]
+    expected_items = {
+        main.UI_MODE.EXPERT: full_menu_items,
+        main.UI_MODE.DEFAULT: full_menu_items,
+        main.UI_MODE.PRODUCTION: [
+            'controls',
+            'readings',
+            'events-editor',
+            'separator',
+            'schedule',
+            'separator',
+            'lcds',
+            'delta-lcds',
+            'phases-lcds',
+            'separator',
+            'fullscreen',
+        ],
+    }
+
+    for ui_mode, items in expected_items.items():
+        window = FakeViewMenuApplicationWindow()
+        menu = main.ApplicationWindow.create_view_menu(window, ui_mode)
+
+        assert menu.items == items
+
+
+def test_application_window_create_view_menu_preserves_production_runtime_fallbacks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    main = main_module()
+    monkeypatch.setattr(main, 'QMenu', FakeMenu)
+    monkeypatch.setattr(main.platform, 'system', lambda: 'Linux')
+    window = FakeViewMenuApplicationWindow()
+    window.extraeventslabels = ['fan']
+    window._sliders_visible = True
+    window.qmc.Controlbuttonflag = True
+    window.qmc.extradevices = ['extra-device']
+    window.scale1_model = object()
+
+    menu = main.ApplicationWindow.create_view_menu(window, main.UI_MODE.PRODUCTION)
+
+    assert menu.items == [
+        'controls',
+        'readings',
+        'events-editor',
+        'buttons',
+        'sliders',
+        'separator',
+        'schedule',
+        'separator',
+        'lcds',
+        'delta-lcds',
+        'pid-lcds',
+        'extra-lcds',
+        'phases-lcds',
+        'scale-lcds',
+        'separator',
+        'fullscreen',
+    ]
+
+
+@pytest.mark.parametrize(
+    ('field', 'expected_item'),
+    (
+        ('extraeventslabels', 'buttons'),
+        ('sliders', 'sliders'),
+        ('control_button', 'pid-lcds'),
+        ('extra_device', 'extra-lcds'),
+        ('scale', 'scale-lcds'),
+    ),
+)
+def test_application_window_create_view_menu_keeps_each_production_fallback_independent(
+    monkeypatch: pytest.MonkeyPatch,
+    field: str,
+    expected_item: str,
+) -> None:
+    main = main_module()
+    monkeypatch.setattr(main, 'QMenu', FakeMenu)
+    monkeypatch.setattr(main.platform, 'system', lambda: 'Linux')
+    window = FakeViewMenuApplicationWindow()
+    if field == 'extraeventslabels':
+        window.extraeventslabels = ['fan']
+    elif field == 'sliders':
+        window._sliders_visible = True
+    elif field == 'control_button':
+        window.qmc.Controlbuttonflag = True
+    elif field == 'extra_device':
+        window.qmc.extradevices = ['extra-device']
+    elif field == 'scale':
+        window.scale1_model = object()
+
+    menu = main.ApplicationWindow.create_view_menu(window, main.UI_MODE.PRODUCTION)
+
+    runtime_items = {'buttons', 'sliders', 'pid-lcds', 'extra-lcds', 'scale-lcds'}
+    assert expected_item in menu.items
+    assert runtime_items.intersection(menu.items) == {expected_item}
+
+
+def test_application_window_create_view_menu_disables_schedule_in_viewer_mode(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    main = main_module()
+    monkeypatch.setattr(main, 'QMenu', FakeMenu)
+    monkeypatch.setattr(main.platform, 'system', lambda: 'Linux')
+    window = FakeViewMenuApplicationWindow()
+    window.app.artisanviewerMode = True
+
+    main.ApplicationWindow.create_view_menu(window, main.UI_MODE.DEFAULT)
+
+    assert window.scheduleAction.enabled is False
+
+
+def test_application_window_create_view_menu_omits_macos_english_fullscreen(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    main = main_module()
+    monkeypatch.setattr(main, 'QMenu', FakeMenu)
+    monkeypatch.setattr(main.platform, 'system', lambda: 'Darwin')
+    window = FakeViewMenuApplicationWindow()
+    window.qmc.locale_str = 'en'
+
+    menu = main.ApplicationWindow.create_view_menu(window, main.UI_MODE.DEFAULT)
+
+    assert 'fullscreen' not in menu.items
+
+
+def test_application_window_create_view_menu_uses_workspace_policy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    main = main_module()
+    workspaces = workspace_module()
+    monkeypatch.setattr(main, 'QMenu', FakeMenu)
+    monkeypatch.setattr(main.platform, 'system', lambda: 'Linux')
+    production_policy = workspaces.workspace_policy(workspaces.WorkspaceMode.PRODUCTION)
+    full_menu_policy = dataclasses.replace(
+        production_policy,
+        show_full_menus=True,
+    )
+
+    def fake_workspace_policy(_mode: object) -> object:
+        return full_menu_policy
+
+    monkeypatch.setattr(main, 'workspace_policy_for_mode', fake_workspace_policy)
+    window = FakeViewMenuApplicationWindow()
+
+    menu = main.ApplicationWindow.create_view_menu(window, main.UI_MODE.PRODUCTION)
+
+    assert menu.items == [
+        'controls',
+        'readings',
+        'events-editor',
+        'buttons',
+        'sliders',
+        'separator',
+        'schedule',
+        'separator',
+        'lcds',
+        'delta-lcds',
+        'pid-lcds',
+        'extra-lcds',
+        'phases-lcds',
+        'scale-lcds',
+        'separator',
+        'fullscreen',
     ]
 
 
