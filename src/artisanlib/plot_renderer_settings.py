@@ -16,6 +16,7 @@ type RendererFallbackReason = Literal[
     'unknown',
     'unavailable',
     'default_unavailable',
+    'selection_error',
 ]
 
 

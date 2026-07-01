@@ -74,6 +74,26 @@ def test_select_renderer_falls_back_to_default_for_unavailable_id() -> None:
     assert selection.fallback_reason == 'unavailable'
 
 
+def test_select_renderer_treats_bad_dotted_dependency_as_unavailable() -> None:
+    registry = create_default_renderer_registry()
+    registry.register(RendererPluginSpec(
+        renderer_id='bad-dotted-dependency-renderer',
+        label='Bad Dotted Dependency Renderer',
+        description='Renderer with a dependency whose parent module is unavailable.',
+        class_path='artisanlib.plot_matplotlib_adapter.MatplotlibSnapshotRenderer',
+        surface='matplotlib-axis',
+        dependencies=('definitely_missing_renderer_parent.child',),
+    ))
+
+    selection = select_renderer(
+        registry=registry,
+        env={ARTISANZ_RENDERER_ID: 'bad-dotted-dependency-renderer'},
+    )
+
+    assert selection.renderer_id == DEFAULT_RENDERER_ID
+    assert selection.fallback_reason == 'unavailable'
+
+
 def test_available_renderer_ids_lists_only_available_plugins() -> None:
     registry = RendererPluginRegistry((
         RendererPluginSpec(

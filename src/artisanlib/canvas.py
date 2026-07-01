@@ -112,6 +112,12 @@ from artisanlib.plot_live_frame import (
     apply_matplotlib_live_curve_data,
     apply_matplotlib_live_curve_sequences,
 )
+from artisanlib.plot_renderer_registry import create_default_renderer_registry
+from artisanlib.plot_renderer_settings import (
+    DEFAULT_RENDERER_ID,
+    RendererSelection,
+    select_renderer,
+)
 from artisanlib.sample_processing import (
     build_live_processed_sample_frame,
     connected_curve_point,
@@ -182,6 +188,21 @@ type Interp1dKind = Literal['linear', 'nearest', 'nearest-up', 'zero', 'slinear'
 #        return retval
 #    return wrapper
 ##### END Profiling
+
+
+def select_canvas_renderer() -> RendererSelection:
+    try:
+        return select_renderer()
+    except Exception as exc: # pylint: disable=broad-exception-caught
+        _log.warning('falling back to default plot renderer after selection failure: %s', exc)
+        registry = create_default_renderer_registry()
+        return RendererSelection(
+            requested_renderer_id=DEFAULT_RENDERER_ID,
+            renderer_id=DEFAULT_RENDERER_ID,
+            plugin=registry.get(DEFAULT_RENDERER_ID),
+            registry=registry,
+            fallback_reason='selection_error',
+        )
 
 
 #######################################################################################
@@ -418,7 +439,8 @@ class tgraphcanvas(QObject):
         'CO2kg_per_BTU_default', 'CO2kg_per_BTU', 'Biogas_CO2_Reduction', 'Biogas_CO2_Reduction_default',
         'meterunitnames', 'meterreads_default', 'meterreads', 'meterlabels_setup', 'meterlabels', 'meterunits_setup', 'meterunits',
         'meterfuels_setup', 'meterfuels', 'metersources_setup', 'metersources', 'playbackdrop_min_roasttime', 'TP_max_roasttime',
-        'single_click_mpl_upperleft_corner_timer', 'single_click_mpl_upperleft_corner_TIMEOUT'
+        'single_click_mpl_upperleft_corner_timer', 'single_click_mpl_upperleft_corner_TIMEOUT',
+        'plot_renderer_selection'
         ]
 
 
@@ -431,6 +453,7 @@ class tgraphcanvas(QObject):
 
         self.aw = aw
         self.canvas = MplCanvas(parent, dpi, self.tight_layout_params, aw)
+        self.plot_renderer_selection = select_canvas_renderer()
         self.charge_manager: ChargeTargetManager | None = None
         self.charge_target_annotation: Annotation | None = None
 

@@ -104,7 +104,10 @@ def load_renderer_class(plugin: RendererPluginSpec) -> type[object]:
 
 
 def _module_available(module_name: str) -> bool:
-    return importlib.util.find_spec(module_name) is not None
+    try:
+        return importlib.util.find_spec(module_name) is not None
+    except (ImportError, AttributeError, TypeError, ValueError):
+        return False
 
 
 __all__ = [
