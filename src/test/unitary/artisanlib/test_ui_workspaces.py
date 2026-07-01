@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import dataclasses
 import importlib
-from typing import Any
+from typing import Any, ClassVar
 
 import pytest
 
@@ -52,14 +52,34 @@ class FakeMenu:
         self.title = title
         self.items: list[str] = []
 
-    def addAction(self, action: str) -> None:
-        self.items.append(action)
+    def addAction(self, action: object) -> None:
+        self.items.append(getattr(action, 'label', action))
 
     def addMenu(self, menu: str) -> None:
         self.items.append(menu)
 
     def addSeparator(self) -> None:
         self.items.append('separator')
+
+
+class FakeSignal:
+    def __init__(self) -> None:
+        self.connected_to: object | None = None
+
+    def connect(self, slot: object) -> None:
+        self.connected_to = slot
+
+
+class FakeQAction:
+    instances: ClassVar[list[FakeQAction]] = []
+
+    def __init__(self, text: str, _parent: object | None = None) -> None:
+        self.label = text
+        self.triggered = FakeSignal()
+        self.instances.append(self)
+
+    def __repr__(self) -> str:
+        return repr(self.label)
 
 
 class FakeApplicationWindow:
@@ -172,6 +192,19 @@ class FakeConfigMenuApplicationWindow:
         self.temperatureConfMenu = 'temperature'
         self.languageMenu = 'language'
         self.UIModeMenu = 'ui-mode'
+
+
+class FakeRoastMenuApplicationWindow:
+    def __init__(self) -> None:
+        self.editGraphAction = 'properties'
+        self.backgroundAction = 'background'
+        self.flavorAction = 'flavor'
+        self.switchAction = 'switch'
+        self.switchETBTAction = 'switch-et-bt'
+        self.charge_target_dialog_calls = 0
+
+    def showChargeTargetDialog(self) -> None:
+        self.charge_target_dialog_calls += 1
 
 
 class FakeToolsMenuApplicationWindow:
@@ -620,6 +653,126 @@ def test_application_window_create_config_menu_separates_device_policy(
         'separator',
         'separator',
         'ui-mode',
+    ]
+
+
+def test_application_window_create_roast_menu_preserves_current_policy_visibility(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    main = main_module()
+    monkeypatch.setattr(main, 'QMenu', FakeMenu)
+    monkeypatch.setattr(main, 'QAction', FakeQAction)
+
+    expected_items = {
+        main.UI_MODE.EXPERT: [
+            'properties',
+            'background',
+            'flavor',
+            '投豆目标...',
+            'separator',
+            'switch',
+            'switch-et-bt',
+        ],
+        main.UI_MODE.DEFAULT: [
+            'properties',
+            'background',
+            'flavor',
+            '投豆目标...',
+            'separator',
+            'switch',
+        ],
+        main.UI_MODE.PRODUCTION: [
+            'properties',
+            'background',
+            'flavor',
+            '投豆目标...',
+        ],
+    }
+
+    for ui_mode, items in expected_items.items():
+        window = FakeRoastMenuApplicationWindow()
+        menu = main.ApplicationWindow.create_roast_menu(window, ui_mode)
+
+        assert menu.items == items
+
+
+def test_application_window_create_roast_menu_connects_charge_target_action(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    main = main_module()
+    monkeypatch.setattr(main, 'QMenu', FakeMenu)
+    monkeypatch.setattr(main, 'QAction', FakeQAction)
+    FakeQAction.instances.clear()
+    window = FakeRoastMenuApplicationWindow()
+
+    main.ApplicationWindow.create_roast_menu(window, main.UI_MODE.PRODUCTION)
+
+    charge_target_action = FakeQAction.instances[-1]
+    assert charge_target_action.label == '投豆目标...'
+    assert charge_target_action.triggered.connected_to == window.showChargeTargetDialog
+
+
+def test_application_window_create_roast_menu_separates_full_menu_policy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    main = main_module()
+    workspaces = workspace_module()
+    monkeypatch.setattr(main, 'QMenu', FakeMenu)
+    monkeypatch.setattr(main, 'QAction', FakeQAction)
+    production_policy = workspaces.workspace_policy(workspaces.WorkspaceMode.PRODUCTION)
+    full_menu_policy = dataclasses.replace(
+        production_policy,
+        show_full_menus=True,
+    )
+
+    def fake_workspace_policy(_mode: object) -> object:
+        return full_menu_policy
+
+    monkeypatch.setattr(main, 'workspace_policy_for_mode', fake_workspace_policy)
+    window = FakeRoastMenuApplicationWindow()
+
+    menu = main.ApplicationWindow.create_roast_menu(window, main.UI_MODE.PRODUCTION)
+
+    assert menu.items == [
+        'properties',
+        'background',
+        'flavor',
+        '投豆目标...',
+        'separator',
+        'switch',
+    ]
+
+
+def test_application_window_create_roast_menu_separates_advanced_policy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    main = main_module()
+    workspaces = workspace_module()
+    monkeypatch.setattr(main, 'QMenu', FakeMenu)
+    monkeypatch.setattr(main, 'QAction', FakeQAction)
+    production_policy = workspaces.workspace_policy(workspaces.WorkspaceMode.PRODUCTION)
+    advanced_policy = dataclasses.replace(
+        production_policy,
+        show_full_menus=True,
+        show_advanced_controls=True,
+    )
+
+    def fake_workspace_policy(_mode: object) -> object:
+        return advanced_policy
+
+    monkeypatch.setattr(main, 'workspace_policy_for_mode', fake_workspace_policy)
+    window = FakeRoastMenuApplicationWindow()
+
+    menu = main.ApplicationWindow.create_roast_menu(window, main.UI_MODE.PRODUCTION)
+
+    assert menu.items == [
+        'properties',
+        'background',
+        'flavor',
+        '投豆目标...',
+        'separator',
+        'switch',
+        'switch-et-bt',
     ]
 
 

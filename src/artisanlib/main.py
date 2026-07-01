@@ -4431,6 +4431,8 @@ class ApplicationWindow(QMainWindow):
         return edit_menu
 
     def create_roast_menu(self, ui_mode:UI_MODE) -> QMenu:
+        workspace_mode = workspace_for_ui_mode_value(int(ui_mode))
+        policy = workspace_policy_for_mode(workspace_mode)
         roast_menu = QMenu(f"&{QApplication.translate('Menu', 'Roast')}")
         roast_menu.addAction(self.editGraphAction)
         roast_menu.addAction(self.backgroundAction)
@@ -4438,10 +4440,10 @@ class ApplicationWindow(QMainWindow):
         charge_target_action = QAction(QApplication.translate('Menu', '投豆目标...'), self)
         charge_target_action.triggered.connect(self.showChargeTargetDialog)
         roast_menu.addAction(charge_target_action)
-        if ui_mode in {UI_MODE.EXPERT, UI_MODE.DEFAULT}:
+        if policy.show_full_menus:
             roast_menu.addSeparator()
             roast_menu.addAction(self.switchAction)
-            if ui_mode is UI_MODE.EXPERT:
+            if policy.show_advanced_controls:
                 roast_menu.addAction(self.switchETBTAction)
         return roast_menu
 
