@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import importlib
+from pathlib import Path
+
 from PyQt6.QtCore import QUrl
 from PyQt6.QtQml import QQmlComponent, QQmlEngine
 from PyQt6.QtWidgets import QApplication
@@ -8,6 +11,8 @@ from artisanlib.ui_workspaces import WorkspaceMode
 from artisanlib.workspace_status_model import (
     WORKSPACE_STATUS_PANEL_QML,
     WorkspaceStatusModel,
+    create_workspace_status_widget,
+    qml_data_url,
 )
 
 
@@ -89,3 +94,57 @@ def test_workspace_status_panel_qml_accepts_python_model() -> None:
     finally:
         if item is not None:
             item.deleteLater()
+
+
+def test_workspace_status_widget_factory_loads_qml_with_python_model() -> None:
+    _app = QApplication.instance() or QApplication([])
+    model = WorkspaceStatusModel(WorkspaceMode.QC_ANALYSIS)
+
+    widget = create_workspace_status_widget(model)
+
+    try:
+        assert widget.status() == widget.Status.Ready, [
+            error.toString() for error in widget.errors()
+        ]
+        assert widget.resizeMode() == widget.ResizeMode.SizeRootObjectToView
+        root_object = widget.rootObject()
+        assert root_object is not None
+        assert root_object.property('workspaceModel') is model
+        assert widget.sizeHint().width() == 320
+        assert widget.sizeHint().height() == 96
+    finally:
+        widget.deleteLater()
+
+
+def test_qml_data_url_encodes_inline_qml_source() -> None:
+    url = qml_data_url('import QtQuick\nItem { property string label: "QC Analysis" }')
+
+    url_text = url.toString()
+    assert url.scheme() == 'data'
+    assert url_text.startswith('data:text/plain;charset=utf-8,')
+    assert '%0A' in url_text
+    assert '%7B' in url_text
+
+
+def test_qtquick_pyinstaller_hidden_imports_reference_real_pyqt_modules() -> None:
+    src_dir = Path(__file__).parents[3]
+    hidden_imports = (
+        'PyQt6.QtQml',
+        'PyQt6.QtQuick',
+        'PyQt6.QtQuickWidgets',
+    )
+    phantom_imports = (
+        'PyQt6.QtQmlMeta',
+        'PyQt6.QtQmlModels',
+        'PyQt6.QtQmlWorkerScript',
+    )
+
+    for module_name in hidden_imports:
+        importlib.import_module(module_name)
+
+    for spec_name in ('artisan-linux.spec', 'artisan-mac.spec', 'artisan-win.spec'):
+        spec_text = (src_dir / spec_name).read_text(encoding='utf-8')
+        for module_name in hidden_imports:
+            assert module_name in spec_text
+        for module_name in phantom_imports:
+            assert module_name not in spec_text

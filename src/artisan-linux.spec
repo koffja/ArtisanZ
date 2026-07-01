@@ -24,7 +24,10 @@ if not os.path.isdir(path):
 hiddenimports_list=[
     'matplotlib.backends.backend_pdf',
     'matplotlib.backends.backend_svg',
-    'babel.numbers'  # should not be needed as it got fixed in pyinstaller 6.11
+    'babel.numbers',  # should not be needed as it got fixed in pyinstaller 6.11
+    'PyQt6.QtQuick',
+    'PyQt6.QtQuickWidgets',
+    'PyQt6.QtQml'
 ] + collect_submodules('dbus_fast')
 
 EXCLUDES = [
@@ -39,12 +42,6 @@ EXCLUDES = [
     'PyQt6.QtSpatialAudio',
     'PyQt6.QtTest',
     'PyQt6.QtTextToSpeech',
-# the following are required by QtWebEngineWidgets and thus by QtWebEngine for the HTML2PDF export
-#    'PyQt6.QtQuick',
-#    'PyQt6.QtQml',
-#    'PyQt6.QtQmlMeta',
-#    'PyQt6.QtQmlModels',
-#    'PyQt6.QtQmlWorkerScript',
 #    'PyQt6.OpenGL',
 #    'PyQt6.QtWebChannel',
 #    'PyQt6.QtPositioning',

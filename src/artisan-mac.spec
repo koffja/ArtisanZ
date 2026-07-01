@@ -127,7 +127,12 @@ BINARIES.extend([(os.path.join(get_package_paths('Phidget22')[1], '.libs/libphid
 a = Analysis(['artisan.py'],
              binaries=BINARIES,
              datas=DATA_FILES,
-             hiddenimports=['babel.numbers'], # should not be needed as it got fixed in pyinstaller 6.11
+             hiddenimports=[
+                 'babel.numbers', # should not be needed as it got fixed in pyinstaller 6.11
+                 'PyQt6.QtQuick',
+                 'PyQt6.QtQuickWidgets',
+                 'PyQt6.QtQml',
+             ],
              hooksconfig={
                 'matplotlib': {
                 'backends': ['QtAgg', 'svg', 'pdf'] # 'auto',  # auto-detect; the default behavior (QtAgg

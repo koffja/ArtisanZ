@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 from typing import Final
+from urllib.parse import quote
 
-from PyQt6.QtCore import QObject, pyqtProperty, pyqtSignal, pyqtSlot
+from PyQt6.QtCore import QObject, QUrl, pyqtProperty, pyqtSignal, pyqtSlot
+from PyQt6.QtQuickWidgets import QQuickWidget
+from PyQt6.QtWidgets import QWidget
 
 from artisanlib.ui_workspaces import (
     WorkspaceMode,
@@ -134,3 +137,17 @@ class WorkspaceStatusModel(QObject):
     @pyqtProperty(bool, notify=workspaceChanged)
     def showDeviceSetupTools(self) -> bool:
         return workspace_policy(self._mode).show_device_setup_tools
+
+
+def qml_data_url(qml_source: str) -> QUrl:
+    return QUrl(f"data:text/plain;charset=utf-8,{quote(qml_source)}")
+
+
+def create_workspace_status_widget(
+        model: WorkspaceStatusModel,
+        parent: QWidget | None = None) -> QQuickWidget:
+    widget = QQuickWidget(parent)
+    widget.setResizeMode(QQuickWidget.ResizeMode.SizeRootObjectToView)
+    widget.setInitialProperties({'workspaceModel': model})
+    widget.setSource(qml_data_url(WORKSPACE_STATUS_PANEL_QML))
+    return widget

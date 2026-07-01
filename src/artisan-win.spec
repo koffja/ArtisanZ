@@ -133,6 +133,9 @@ hiddenimports_list=['charset_normalizer.md__mypyc', # part of requests 2.28.2 # 
                             'babel.numbers',  # should not be needed as it got fixed in pyinstaller 6.11
                             'PyQt6.QtWebChannel',
                             'PyQt6.QtWebEngineCore',
+                            'PyQt6.QtQuick',
+                            'PyQt6.QtQuickWidgets',
+                            'PyQt6.QtQml',
                             'importlib_resources',
                             'winrt.windows.foundation.collections'
                             ]
