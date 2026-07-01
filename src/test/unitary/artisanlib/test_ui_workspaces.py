@@ -101,6 +101,8 @@ class FakeApplicationWindow:
         self.workspace_policy = workspaces.workspace_policy(self.workspace_mode)
         self.productionModeAction = FakeAction()
         self.defaultModeAction = FakeAction()
+        self.qcAnalysisModeAction = FakeAction()
+        self.deviceSetupModeAction = FakeAction()
         self.expertModeAction = FakeAction()
         self.ntb = FakeToolbar()
         self.menus: list[object] = []
@@ -329,6 +331,8 @@ def test_application_window_set_ui_mode_syncs_workspace_and_toolbar_policy() -> 
     assert window.workspace_policy is workspaces.workspace_policy(workspaces.WorkspaceMode.EXPERT)
     assert window.expertModeAction.checked is True
     assert window.defaultModeAction.checked is False
+    assert window.qcAnalysisModeAction.checked is False
+    assert window.deviceSetupModeAction.checked is False
     assert window.productionModeAction.checked is False
     assert window.ntb.actions[-1] == 'add'
 
@@ -336,12 +340,16 @@ def test_application_window_set_ui_mode_syncs_workspace_and_toolbar_policy() -> 
     assert window.workspace_mode is workspaces.WorkspaceMode.ROAST_CONTROL
     assert window.workspace_policy is workspaces.workspace_policy(workspaces.WorkspaceMode.ROAST_CONTROL)
     assert window.defaultModeAction.checked is True
+    assert window.qcAnalysisModeAction.checked is False
+    assert window.deviceSetupModeAction.checked is False
     assert window.ntb.actions[-1] == 'remove'
 
     main.ApplicationWindow.set_ui_mode(window, main.UI_MODE.PRODUCTION)
     assert window.workspace_mode is workspaces.WorkspaceMode.PRODUCTION
     assert window.workspace_policy is workspaces.workspace_policy(workspaces.WorkspaceMode.PRODUCTION)
     assert window.productionModeAction.checked is True
+    assert window.qcAnalysisModeAction.checked is False
+    assert window.deviceSetupModeAction.checked is False
     assert window.ntb.actions[-1] == 'remove'
     assert window.menus == [
         main.UI_MODE.EXPERT,
@@ -349,6 +357,50 @@ def test_application_window_set_ui_mode_syncs_workspace_and_toolbar_policy() -> 
         main.UI_MODE.PRODUCTION,
     ]
     assert window.announcements == 3
+
+
+def test_application_window_set_workspace_mode_syncs_task_workspace_policy() -> None:
+    main = main_module()
+    workspaces = workspace_module()
+    window = FakeApplicationWindow()
+
+    main.ApplicationWindow.set_workspace_mode(window, workspaces.WorkspaceMode.QC_ANALYSIS)
+
+    assert window.ui_mode is main.UI_MODE.DEFAULT
+    assert window.workspace_mode is workspaces.WorkspaceMode.QC_ANALYSIS
+    assert window.workspace_policy is workspaces.workspace_policy(workspaces.WorkspaceMode.QC_ANALYSIS)
+    assert window.defaultModeAction.checked is False
+    assert window.qcAnalysisModeAction.checked is True
+    assert window.deviceSetupModeAction.checked is False
+    assert window.productionModeAction.checked is False
+    assert window.expertModeAction.checked is False
+    assert window.ntb.actions[-1] == 'remove'
+
+    main.ApplicationWindow.set_workspace_mode(window, workspaces.WorkspaceMode.DEVICE_SETUP)
+
+    assert window.ui_mode is main.UI_MODE.DEFAULT
+    assert window.workspace_mode is workspaces.WorkspaceMode.DEVICE_SETUP
+    assert window.workspace_policy is workspaces.workspace_policy(workspaces.WorkspaceMode.DEVICE_SETUP)
+    assert window.qcAnalysisModeAction.checked is False
+    assert window.deviceSetupModeAction.checked is True
+    assert window.ntb.actions[-1] == 'add'
+    assert window.menus == [main.UI_MODE.DEFAULT, main.UI_MODE.DEFAULT]
+    assert window.announcements == 2
+
+
+def test_application_window_default_mode_switches_back_from_task_workspace() -> None:
+    main = main_module()
+    workspaces = workspace_module()
+    window = FakeApplicationWindow()
+
+    main.ApplicationWindow.set_workspace_mode(window, workspaces.WorkspaceMode.QC_ANALYSIS)
+    main.ApplicationWindow.setDefaultMode(window)
+
+    assert window.ui_mode is main.UI_MODE.DEFAULT
+    assert window.workspace_mode is workspaces.WorkspaceMode.ROAST_CONTROL
+    assert window.defaultModeAction.checked is True
+    assert window.qcAnalysisModeAction.checked is False
+    assert window.menus == [main.UI_MODE.DEFAULT, main.UI_MODE.DEFAULT]
 
 
 def test_application_window_set_toolbar_uses_workspace_policy() -> None:
@@ -360,6 +412,18 @@ def test_application_window_set_toolbar_uses_workspace_policy() -> None:
     main.ApplicationWindow.set_toolbar(window, main.UI_MODE.PRODUCTION)
 
     assert window.ntb.actions == ['add', 'remove', 'remove']
+
+
+def test_application_window_set_toolbar_uses_current_task_workspace_policy() -> None:
+    main = main_module()
+    workspaces = workspace_module()
+    window = FakeApplicationWindow()
+    window.workspace_mode = workspaces.WorkspaceMode.DEVICE_SETUP
+    window.workspace_policy = workspaces.workspace_policy(workspaces.WorkspaceMode.DEVICE_SETUP)
+
+    main.ApplicationWindow.set_toolbar(window, main.UI_MODE.DEFAULT)
+
+    assert window.ntb.actions == ['add']
 
 
 def test_application_window_set_menu_preserves_current_tools_visibility() -> None:
@@ -880,6 +944,30 @@ def test_application_window_create_tools_menu_separates_analysis_policy(
     window = FakeToolsMenuApplicationWindow()
 
     menu = main.ApplicationWindow.create_tools_menu(window, main.UI_MODE.PRODUCTION)
+
+    assert menu.items == [
+        'analyze',
+        'compare',
+        'designer',
+        'separator',
+        'temperature',
+        'separator',
+        'calculator',
+    ]
+
+
+def test_application_window_create_tools_menu_uses_current_task_workspace_policy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    main = main_module()
+    workspaces = workspace_module()
+    monkeypatch.setattr(main, 'QMenu', FakeMenu)
+    window = FakeToolsMenuApplicationWindow()
+    window.ui_mode = main.UI_MODE.DEFAULT
+    window.workspace_mode = workspaces.WorkspaceMode.QC_ANALYSIS
+    window.workspace_policy = workspaces.workspace_policy(workspaces.WorkspaceMode.QC_ANALYSIS)
+
+    menu = main.ApplicationWindow.create_tools_menu(window, main.UI_MODE.DEFAULT)
 
     assert menu.items == [
         'analyze',

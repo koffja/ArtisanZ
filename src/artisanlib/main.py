@@ -1412,6 +1412,40 @@ class UI_MODE(IntEnum):
     PRODUCTION = 3
 
 
+_WORKSPACE_LEGACY_UI_MODE: dict[WorkspaceMode, UI_MODE] = {
+    WorkspaceMode.ROAST_CONTROL: UI_MODE.DEFAULT,
+    WorkspaceMode.QC_ANALYSIS: UI_MODE.DEFAULT,
+    WorkspaceMode.DEVICE_SETUP: UI_MODE.DEFAULT,
+    WorkspaceMode.PRODUCTION: UI_MODE.PRODUCTION,
+    WorkspaceMode.EXPERT: UI_MODE.EXPERT,
+}
+
+
+def legacy_ui_mode_for_workspace(mode:WorkspaceMode) -> UI_MODE:
+    return _WORKSPACE_LEGACY_UI_MODE[mode]
+
+
+def workspace_policy_for_window_state(window:object, ui_mode:UI_MODE) -> WorkspacePolicy:
+    current_ui_mode = getattr(window, 'ui_mode', None)
+    current_policy = getattr(window, 'workspace_policy', None)
+    if current_ui_mode is ui_mode and current_policy is not None:
+        return current_policy
+    workspace_mode = workspace_for_ui_mode_value(int(ui_mode))
+    return workspace_policy_for_mode(workspace_mode)
+
+
+def translated_workspace_label(mode:WorkspaceMode) -> str:
+    if mode is WorkspaceMode.ROAST_CONTROL:
+        return QApplication.translate('Menu', 'Roast Control')
+    if mode is WorkspaceMode.QC_ANALYSIS:
+        return QApplication.translate('Menu', 'QC Analysis')
+    if mode is WorkspaceMode.DEVICE_SETUP:
+        return QApplication.translate('Menu', 'Device Setup')
+    if mode is WorkspaceMode.PRODUCTION:
+        return QApplication.translate('Menu', 'Production')
+    return QApplication.translate('Menu', 'Expert')
+
+
 class InvalidProfileHash(Exception):
     pass
 
@@ -1543,7 +1577,7 @@ class ApplicationWindow(QMainWindow):
         'bbp_begin_to_bottom_ror', 'bbp_bottom_to_charge_ror', 'bbp_time_added_from_prev', 'bbp_begin', 'bbp_endroast_epoch_msec', 'bbp_endevents',
         'bbp_dropevents', 'bbp_dropbt', 'bbp_dropet', 'bbp_drop_to_end', 'schedule_day_filter', 'schedule_user_filter', 'schedule_machine_filter',
         'schedule_visible_filter', 'scheduler_tasks_visible', 'scheduler_completed_details_visible', 'scheduler_filters_visible', 'scheduler_auto_open',
-        'main_menu_actions_with_shortcuts', 'ui_mode', 'workspace_mode', 'workspace_policy', 'UIModeMenu',  'productionModeAction', 'defaultModeAction', 'expertModeAction', 'calculatorAction',
+        'main_menu_actions_with_shortcuts', 'ui_mode', 'workspace_mode', 'workspace_policy', 'UIModeMenu',  'productionModeAction', 'defaultModeAction', 'qcAnalysisModeAction', 'deviceSetupModeAction', 'expertModeAction', 'calculatorAction',
         'helpAboutAction', 'checkUpdateAction', 'errorAction', 'messageAction', 'serialAction', 'platformAction', 'aboutQtAction',
         'helpDocumentationAction', 'KshortCAction', 'profile_data_type_adapter', 'official_build' ]
 
@@ -2619,19 +2653,31 @@ class ApplicationWindow(QMainWindow):
 
 
         self.UIModeMenu:QMenu = QMenu(QApplication.translate('Menu', 'Mode'))
-        self.productionModeAction:QAction = QAction(QApplication.translate('Menu', 'Production'), self)
-        self.productionModeAction.triggered.connect(self.setProductionMode)
-        self.productionModeAction.setCheckable(True)
-        self.productionModeAction.setChecked(False)
-        self.UIModeMenu.addAction(self.productionModeAction)
-        #
-        self.defaultModeAction:QAction = QAction(QApplication.translate('Menu', 'Standard'), self)
+        self.defaultModeAction:QAction = QAction(translated_workspace_label(WorkspaceMode.ROAST_CONTROL), self)
         self.defaultModeAction.triggered.connect(self.setDefaultMode)
         self.defaultModeAction.setCheckable(True)
         self.defaultModeAction.setChecked(True)
         self.UIModeMenu.addAction(self.defaultModeAction)
         #
-        self.expertModeAction:QAction = QAction(QApplication.translate('Menu', 'Expert'), self)
+        self.qcAnalysisModeAction:QAction = QAction(translated_workspace_label(WorkspaceMode.QC_ANALYSIS), self)
+        self.qcAnalysisModeAction.triggered.connect(self.setQCAnalysisMode)
+        self.qcAnalysisModeAction.setCheckable(True)
+        self.qcAnalysisModeAction.setChecked(False)
+        self.UIModeMenu.addAction(self.qcAnalysisModeAction)
+        #
+        self.deviceSetupModeAction:QAction = QAction(translated_workspace_label(WorkspaceMode.DEVICE_SETUP), self)
+        self.deviceSetupModeAction.triggered.connect(self.setDeviceSetupMode)
+        self.deviceSetupModeAction.setCheckable(True)
+        self.deviceSetupModeAction.setChecked(False)
+        self.UIModeMenu.addAction(self.deviceSetupModeAction)
+        #
+        self.productionModeAction:QAction = QAction(translated_workspace_label(WorkspaceMode.PRODUCTION), self)
+        self.productionModeAction.triggered.connect(self.setProductionMode)
+        self.productionModeAction.setCheckable(True)
+        self.productionModeAction.setChecked(False)
+        self.UIModeMenu.addAction(self.productionModeAction)
+        #
+        self.expertModeAction:QAction = QAction(translated_workspace_label(WorkspaceMode.EXPERT), self)
         self.expertModeAction.triggered.connect(self.setExpertMode)
         self.expertModeAction.setCheckable(True)
         self.expertModeAction.setChecked(False)
@@ -4393,8 +4439,7 @@ class ApplicationWindow(QMainWindow):
         return False
 
     def create_file_menu(self, ui_mode:UI_MODE) -> QMenu:
-        workspace_mode = workspace_for_ui_mode_value(int(ui_mode))
-        policy = workspace_policy_for_mode(workspace_mode)
+        policy = workspace_policy_for_window_state(self, ui_mode)
         file_menu = QMenu(f"&{QApplication.translate('Menu', 'File')}")
         file_menu.addMenu(self.newRoastMenu)
         file_menu.addAction(self.fileLoadAction)       # Open
@@ -4431,8 +4476,7 @@ class ApplicationWindow(QMainWindow):
         return edit_menu
 
     def create_roast_menu(self, ui_mode:UI_MODE) -> QMenu:
-        workspace_mode = workspace_for_ui_mode_value(int(ui_mode))
-        policy = workspace_policy_for_mode(workspace_mode)
+        policy = workspace_policy_for_window_state(self, ui_mode)
         roast_menu = QMenu(f"&{QApplication.translate('Menu', 'Roast')}")
         roast_menu.addAction(self.editGraphAction)
         roast_menu.addAction(self.backgroundAction)
@@ -4448,8 +4492,7 @@ class ApplicationWindow(QMainWindow):
         return roast_menu
 
     def create_config_menu(self, ui_mode:UI_MODE) -> QMenu:
-        workspace_mode = workspace_for_ui_mode_value(int(ui_mode))
-        policy = workspace_policy_for_mode(workspace_mode)
+        policy = workspace_policy_for_window_state(self, ui_mode)
         config_menu = QMenu(f"&{QApplication.translate('Menu', 'Config')}")
         if policy.show_full_menus:
             config_menu.addMenu(self.machineMenu)
@@ -4487,8 +4530,7 @@ class ApplicationWindow(QMainWindow):
         return config_menu
 
     def create_tools_menu(self, ui_mode:UI_MODE) -> QMenu:
-        workspace_mode = workspace_for_ui_mode_value(int(ui_mode))
-        policy = workspace_policy_for_mode(workspace_mode)
+        policy = workspace_policy_for_window_state(self, ui_mode)
         tools_menu = QMenu(f"&{QApplication.translate('Menu', 'Tools')}")
         if policy.show_full_menus:
             if policy.show_analysis_tools:
@@ -4507,8 +4549,7 @@ class ApplicationWindow(QMainWindow):
         return tools_menu
 
     def create_view_menu(self, ui_mode:UI_MODE) -> QMenu:
-        workspace_mode = workspace_for_ui_mode_value(int(ui_mode))
-        policy = workspace_policy_for_mode(workspace_mode)
+        policy = workspace_policy_for_window_state(self, ui_mode)
         view_menu = QMenu(f"&{QApplication.translate('Menu', 'View')}")
         view_menu.addAction(self.controlsAction)
         view_menu.addAction(self.readingsAction)
@@ -4544,8 +4585,7 @@ class ApplicationWindow(QMainWindow):
 
 
     def create_help_menu(self, ui_mode:UI_MODE) -> QMenu:
-        workspace_mode = workspace_for_ui_mode_value(int(ui_mode))
-        policy = workspace_policy_for_mode(workspace_mode)
+        policy = workspace_policy_for_window_state(self, ui_mode)
         help_menu = QMenu(f"&{QApplication.translate('Menu', 'Help')}")
         help_menu.addAction(self.helpAboutAction)
         help_menu.addAction(self.aboutQtAction)
@@ -4574,8 +4614,7 @@ class ApplicationWindow(QMainWindow):
     def set_menu(self, ui_mode:UI_MODE) -> None:
         menuBar:QMenuBar|None = self.menuBar()
         if menuBar is not None:
-            workspace_mode = workspace_for_ui_mode_value(int(ui_mode))
-            policy = workspace_policy_for_mode(workspace_mode)
+            policy = workspace_policy_for_window_state(self, ui_mode)
             menuBar.clear()
             # File menu
             self.fileMenu = self.create_file_menu(ui_mode)
@@ -4601,8 +4640,7 @@ class ApplicationWindow(QMainWindow):
             menuBar.addMenu(self.helpMenu)
 
     def set_toolbar(self, ui_mode:UI_MODE) -> None:
-        workspace_mode = workspace_for_ui_mode_value(int(ui_mode))
-        policy = workspace_policy_for_mode(workspace_mode)
+        policy = workspace_policy_for_window_state(self, ui_mode)
         if policy.show_advanced_controls:
             self.ntb.add_toolbar_lines_configuration()
         else:
@@ -4612,37 +4650,54 @@ class ApplicationWindow(QMainWindow):
     @pyqtSlot()
     @pyqtSlot(bool)
     def setProductionMode(self, _:bool = False) -> None:
-        if self.ui_mode is not UI_MODE.PRODUCTION:
-            self.set_ui_mode(UI_MODE.PRODUCTION)
+        if self.workspace_mode is not WorkspaceMode.PRODUCTION:
+            ApplicationWindow.set_workspace_mode(self, WorkspaceMode.PRODUCTION)
+
     @pyqtSlot()
     @pyqtSlot(bool)
     def setDefaultMode(self, _:bool = False) -> None:
-        if self.ui_mode is not UI_MODE.DEFAULT:
-            self.set_ui_mode(UI_MODE.DEFAULT)
+        if self.workspace_mode is not WorkspaceMode.ROAST_CONTROL:
+            ApplicationWindow.set_workspace_mode(self, WorkspaceMode.ROAST_CONTROL)
+
+    @pyqtSlot()
+    @pyqtSlot(bool)
+    def setQCAnalysisMode(self, _:bool = False) -> None:
+        if self.workspace_mode is not WorkspaceMode.QC_ANALYSIS:
+            ApplicationWindow.set_workspace_mode(self, WorkspaceMode.QC_ANALYSIS)
+
+    @pyqtSlot()
+    @pyqtSlot(bool)
+    def setDeviceSetupMode(self, _:bool = False) -> None:
+        if self.workspace_mode is not WorkspaceMode.DEVICE_SETUP:
+            ApplicationWindow.set_workspace_mode(self, WorkspaceMode.DEVICE_SETUP)
+
     @pyqtSlot()
     @pyqtSlot(bool)
     def setExpertMode(self, _:bool = False) -> None:
-        if self.ui_mode is not UI_MODE.EXPERT:
-            self.set_ui_mode(UI_MODE.EXPERT)
+        if self.workspace_mode is not WorkspaceMode.EXPERT:
+            ApplicationWindow.set_workspace_mode(self, WorkspaceMode.EXPERT)
 
     def announce_current_ui_mode(self) -> None:
-        if self.ui_mode is UI_MODE.PRODUCTION:
-            mode_name = QApplication.translate('Menu', 'Production')
-        elif self.ui_mode is UI_MODE.EXPERT:
-            mode_name = QApplication.translate('Menu', 'Expert')
-        else:
-            mode_name = QApplication.translate('Menu', 'Standard')
+        mode_name = translated_workspace_label(self.workspace_mode)
         self.sendmessageSignal.emit(
             f"{QApplication.translate('Menu', 'Mode')}: {mode_name}",True,None)
 
     # configures apps UI for different usage scenario by adjusting menus, dialogs, and shortcuts
     def set_ui_mode(self, ui_mode:UI_MODE) -> None:
+        ApplicationWindow.set_workspace_mode(
+            self, workspace_for_ui_mode_value(int(ui_mode)), ui_mode)
+
+    def set_workspace_mode(self, workspace_mode:WorkspaceMode, ui_mode:UI_MODE|None = None) -> None:
+        if ui_mode is None:
+            ui_mode = legacy_ui_mode_for_workspace(workspace_mode)
         self.ui_mode = ui_mode
-        self.workspace_mode = workspace_for_ui_mode_value(int(ui_mode))
+        self.workspace_mode = workspace_mode
         self.workspace_policy = workspace_policy_for_mode(self.workspace_mode)
-        self.productionModeAction.setChecked(ui_mode is UI_MODE.PRODUCTION)
-        self.defaultModeAction.setChecked(ui_mode is UI_MODE.DEFAULT)
-        self.expertModeAction.setChecked(ui_mode is UI_MODE.EXPERT)
+        self.productionModeAction.setChecked(workspace_mode is WorkspaceMode.PRODUCTION)
+        self.defaultModeAction.setChecked(workspace_mode is WorkspaceMode.ROAST_CONTROL)
+        self.qcAnalysisModeAction.setChecked(workspace_mode is WorkspaceMode.QC_ANALYSIS)
+        self.deviceSetupModeAction.setChecked(workspace_mode is WorkspaceMode.DEVICE_SETUP)
+        self.expertModeAction.setChecked(workspace_mode is WorkspaceMode.EXPERT)
         # configure menus
         self.set_menu(ui_mode)
         # configure toolbar
