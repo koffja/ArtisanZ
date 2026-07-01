@@ -453,6 +453,72 @@ def test_application_window_set_ui_mode_syncs_workspace_and_toolbar_policy() -> 
     assert window.announcements == 3
 
 
+def test_workspace_control_policy_helpers_follow_current_workspace_policy() -> None:
+    main = main_module()
+    workspaces = workspace_module()
+    window = FakeApplicationWindow()
+    window.ui_mode = main.UI_MODE.DEFAULT
+    window.workspace_mode = workspaces.WorkspaceMode.PRODUCTION
+    window.workspace_policy = workspaces.workspace_policy(workspaces.WorkspaceMode.PRODUCTION)
+
+    assert main.workspace_allows_legacy_shortcuts(window) is False
+    assert main.workspace_uses_compact_controls(window) is True
+
+    window.workspace_mode = workspaces.WorkspaceMode.DEVICE_SETUP
+    window.workspace_policy = workspaces.workspace_policy(workspaces.WorkspaceMode.DEVICE_SETUP)
+
+    assert main.workspace_allows_legacy_shortcuts(window) is True
+    assert main.workspace_uses_compact_controls(window) is False
+
+
+@pytest.mark.parametrize((
+    'workspace_mode',
+    'expected_advanced_controls',
+    'expected_compact_controls',
+), (
+    ('ROAST_CONTROL', True, False),
+    ('QC_ANALYSIS', True, False),
+    ('DEVICE_SETUP', True, False),
+    ('EXPERT', True, False),
+    ('PRODUCTION', False, True),
+))
+def test_workspace_control_policy_helpers_preserve_shortcuts_outside_compact_mode(
+        workspace_mode: str,
+        expected_advanced_controls: bool,
+        expected_compact_controls: bool) -> None:
+    main = main_module()
+    workspaces = workspace_module()
+    window = FakeApplicationWindow()
+    mode = getattr(workspaces.WorkspaceMode, workspace_mode)
+    window.ui_mode = main.legacy_ui_mode_for_workspace(mode)
+    window.workspace_mode = mode
+    window.workspace_policy = workspaces.workspace_policy(mode)
+
+    assert main.workspace_allows_legacy_shortcuts(window) is expected_advanced_controls
+    assert main.workspace_uses_compact_controls(window) is expected_compact_controls
+
+
+@pytest.mark.parametrize(('ui_mode', 'expected_advanced_controls', 'expected_compact_controls'), (
+    ('EXPERT', True, False),
+    ('DEFAULT', True, False),
+    ('PRODUCTION', False, True),
+))
+def test_workspace_control_policy_helpers_fall_back_to_legacy_ui_mode(
+        ui_mode: str,
+        expected_advanced_controls: bool,
+        expected_compact_controls: bool) -> None:
+    main = main_module()
+
+    class LegacyWindow:
+        pass
+
+    window = LegacyWindow()
+    window.ui_mode = getattr(main.UI_MODE, ui_mode)
+
+    assert main.workspace_allows_legacy_shortcuts(window) is expected_advanced_controls
+    assert main.workspace_uses_compact_controls(window) is expected_compact_controls
+
+
 def test_application_window_set_workspace_mode_syncs_task_workspace_policy() -> None:
     main = main_module()
     workspaces = workspace_module()

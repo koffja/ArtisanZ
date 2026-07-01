@@ -1436,6 +1436,16 @@ def workspace_policy_for_window_state(window:object, ui_mode:UI_MODE) -> Workspa
     return workspace_policy_for_mode(workspace_mode)
 
 
+def workspace_allows_legacy_shortcuts(window:object) -> bool:
+    ui_mode = getattr(window, 'ui_mode', UI_MODE.DEFAULT)
+    return not workspace_policy_for_window_state(window, ui_mode).compact_chrome
+
+
+def workspace_uses_compact_controls(window:object) -> bool:
+    ui_mode = getattr(window, 'ui_mode', UI_MODE.DEFAULT)
+    return workspace_policy_for_window_state(window, ui_mode).compact_chrome
+
+
 def translated_workspace_label(mode:WorkspaceMode) -> str:
     if mode is WorkspaceMode.ROAST_CONTROL:
         return QApplication.translate('Menu', 'Roast Control')
@@ -12684,7 +12694,7 @@ class ApplicationWindow(QMainWindow):
                             filename = self.ArtisanOpenFileDialog(msg=QApplication.translate('Message','Load Background'),path =path, ext='*.alog')
                             if len(filename) != 0:
                                 self.loadBackgroundSignal.emit(filename, False)
-                elif k == Qt.Key.Key_L and no_modifier and self.ui_mode is not UI_MODE.PRODUCTION: # 76:       #L (load alarms)
+                elif k == Qt.Key.Key_L and no_modifier and workspace_allows_legacy_shortcuts(self): # 76:       #L (load alarms)
                     if not self.qmc.designerflag and self.comparator is None:
                         filename = self.ArtisanOpenFileDialog(msg=QApplication.translate('Message','Load Alarms'),ext='*.alrm')
                         if len(filename) == 0:
@@ -12731,10 +12741,10 @@ class ApplicationWindow(QMainWindow):
                     elif self.qmc.background_event_last_picked_ind is not None and self.qmc.background_event_last_picked_pos is not None:
                         # a background event is selected; move it up
                         self.qmc.move_custom_event(False, self.qmc.background_event_last_picked_ind, self.qmc.background_event_last_picked_pos, ystep=-1)
-                    elif self.qmc.device == 0 and self.qmc.Controlbuttonflag and self.ui_mode is not UI_MODE.PRODUCTION: # FUJI PID
+                    elif self.qmc.device == 0 and self.qmc.Controlbuttonflag and workspace_allows_legacy_shortcuts(self): # FUJI PID
                         self.fujipid.lookahead = max(0,self.fujipid.lookahead-1)
                         self.sendmessage(QApplication.translate('Message','PID Lookahead: {0}').format(self.fujipid.lookahead))
-                    elif self.qmc.Controlbuttonflag and self.ui_mode is not UI_MODE.PRODUCTION: # MODBUS hardware PID
+                    elif self.qmc.Controlbuttonflag and workspace_allows_legacy_shortcuts(self): # MODBUS hardware PID
                         self.pidcontrol.svLookahead = max(0,self.pidcontrol.svLookahead-1)
                         self.sendmessage(QApplication.translate('Message','PID Lookahead: {0}').format(self.pidcontrol.svLookahead))
                 elif k_txt == '+'and no_modifier: #k == Qt.Key.Key_Plus: k == 43:         #+ (increase dpi, zoom in / increase PID lookahead)
@@ -12748,10 +12758,10 @@ class ApplicationWindow(QMainWindow):
                     elif self.qmc.background_event_last_picked_ind is not None and self.qmc.background_event_last_picked_pos is not None:
                         # a background event is selected; move it up
                         self.qmc.move_custom_event(False, self.qmc.background_event_last_picked_ind, self.qmc.background_event_last_picked_pos, ystep=1)
-                    elif self.qmc.device == 0 and self.qmc.Controlbuttonflag and self.ui_mode is not UI_MODE.PRODUCTION: # FUJI PID
+                    elif self.qmc.device == 0 and self.qmc.Controlbuttonflag and workspace_allows_legacy_shortcuts(self): # FUJI PID
                         self.fujipid.lookahead = self.fujipid.lookahead+1
                         self.sendmessage(QApplication.translate('Message','PID Lookahead: {0}').format(self.fujipid.lookahead))
-                    elif self.qmc.Controlbuttonflag and self.ui_mode is not UI_MODE.PRODUCTION: # MODBUS hardware PID
+                    elif self.qmc.Controlbuttonflag and workspace_allows_legacy_shortcuts(self): # MODBUS hardware PID
                         self.pidcontrol.svLookahead = self.pidcontrol.svLookahead+1
                         self.sendmessage(QApplication.translate('Message','PID Lookahead: {0}').format(self.pidcontrol.svLookahead))
                 elif k == Qt.Key.Key_Space and no_modifier: # 32:                       #SPACE (selects active button)
@@ -13029,9 +13039,9 @@ class ApplicationWindow(QMainWindow):
                             self.quickEventShortCut = (eventNr,eventValueStr)
                             self.outputQuickEventShortCutState()
                 # note Qt/PyQt maps the ';' and ',' keys reversed from the ASCII mapping
-                elif k_txt == ';' and no_modifier and not self.qmc.flagon and self.ui_mode is not UI_MODE.PRODUCTION: #k == Qt.Key.Key_Semicolon : k == 58    # ";" (application screenshots only if not sampling)
+                elif k_txt == ';' and no_modifier and not self.qmc.flagon and workspace_allows_legacy_shortcuts(self): #k == Qt.Key.Key_Semicolon : k == 58    # ";" (application screenshots only if not sampling)
                     self.applicationscreenshot()
-                elif k_txt == ':' and no_modifier and not self.qmc.flagon and self.ui_mode is not UI_MODE.PRODUCTION:  #k == Qt.Key.Key_Colon:    k == 59    # ":" (desktop screenshots only if not sampling)
+                elif k_txt == ':' and no_modifier and not self.qmc.flagon and workspace_allows_legacy_shortcuts(self):  #k == Qt.Key.Key_Colon:    k == 59    # ":" (desktop screenshots only if not sampling)
                     self.desktopscreenshot()
                 else:
                     QWidget.keyPressEvent(self, a0)
@@ -25203,7 +25213,7 @@ class ApplicationWindow(QMainWindow):
         #FUJI/DELTA pid
         if self.qmc.device in {0, 26}:
             modifiers = QApplication.keyboardModifiers()
-            if (self.ui_mode is UI_MODE.PRODUCTION or modifiers == Qt.KeyboardModifier.ControlModifier) and self.qmc.device == 0:
+            if (workspace_uses_compact_controls(self) or modifiers == Qt.KeyboardModifier.ControlModifier) and self.qmc.device == 0:
                 # a right-click on the Control button will toggle PID Standby on and off
                 standby = self.fujipid.getONOFFstandby()
                 if standby == 0:
@@ -25241,7 +25251,7 @@ class ApplicationWindow(QMainWindow):
         # all other devices
         else:
             modifiers = QApplication.keyboardModifiers()
-            if self.ui_mode is UI_MODE.PRODUCTION or modifiers == Qt.KeyboardModifier.ControlModifier:
+            if workspace_uses_compact_controls(self) or modifiers == Qt.KeyboardModifier.ControlModifier:
                 self.pidcontrol.togglePID()
             else:
                 dialog = PID_DlgControl(self,self,self.PID_DlgControl_activeTab)
