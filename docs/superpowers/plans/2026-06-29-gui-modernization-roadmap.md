@@ -46,6 +46,7 @@ Important observations from the code review:
 | 1.15 | Saved Profile Export Parity | Closed: real `.alog` profile export parity evidence | Saved profile snapshot adapter and `--profile-file` parity CLI | Export parity is proven on real saved profile data before user-facing report/export wiring |
 | 1.16 | Saved Profile Export Matrix | Closed: four-profile `.alog` matrix plus WebSocket regression evidence | Profile matrix CLI, aggregate parity summary, default sanity fixtures | Report/export replacement evidence covers multiple saved profiles, not a single fixture |
 | 1.17 | Opt-In PyQtGraph PNG Export Action | Closed: user-visible Save Graph action added | `File > Save Graph > PyQtGraph PNG...` plus user-export helper | Users can manually export the modern renderer without replacing Matplotlib report/export paths |
+| 1.18 | Report Graph Export Comparison | Closed: report-ready graph asset comparison added | Matplotlib/PyQtGraph report graph image assets with file URLs | Future report replacement can compare backend assets before changing `roastReport()` |
 | 2 | Plot Renderer Boundary and PyQtGraph POC | Guarded PyQtGraph main-splitter embed implemented and benchmarked in offscreen/native-window simulator smokes | Read-only plot snapshot model, Matplotlib adapter, PyQtGraph live adapter prototype | POC is benchmarkable before any live renderer swap |
 | 3 | Sampling Post-Processing Decoupling | Pure helper extraction surface audited; remaining work is orchestration/renderer payload | Pure data pipeline for filtering, RoR, PID inputs, alarm/event decisions | GUI thread consumes snapshots instead of doing heavy processing inline |
 | 4 | Main UI Information Architecture | Closed at IA/policy/status-hint layer | Scenario-oriented Roast Control, QC Analysis, Device Setup, Production, and Expert workspaces | Users can switch task modes without losing existing expert controls |
@@ -268,6 +269,18 @@ Important observations from the code review:
 **Evidence:** Focused user-export/parity/widget tests produced `27 passed`. Offscreen saved-profile validation with `export_current_graph_pyqtgraph_png(ProfileSnapshotSource(deserialize('test/data/profile1.alog')), '/tmp/artisanz-phase117-user-export-profile1', width=1280, height=720, use_opengl=False)` produced `/tmp/artisanz-phase117-user-export-profile1.png`, `byte_count=69659`, `sampled_non_background_pixel_count=14492`, `temperature_item_count=13`, `ror_item_count=2`, `event_item_count=28`, `event_value_item_count=10`, and `area_item_count=1`.
 
 **Remaining Gate:** This is an opt-in user action only. Matplotlib remains the default report/export compatibility path until report-specific output parity is designed and compared.
+
+## Phase 1.18: Report Graph Export Comparison
+
+**Goal:** Create a report-oriented comparison adapter for Matplotlib and PyQtGraph graph images, so the future report/export replacement can be evaluated with report-ready assets before changing `roastReport()`.
+
+**Closed:** 2026-07-03 with `artisanlib.plot_report_export`, which loads saved profiles through the renderer-neutral snapshot path, produces Matplotlib and PyQtGraph report graph image assets, returns report-style `file://` URLs with optional cache busters, and reports dimensions, byte counts, PyQtGraph nonblank pixels, view-state equality, and overlay counts. `roastReport()` and the existing Matplotlib HTML/PDF report path remain unchanged.
+
+**Tracking Plan:** `docs/superpowers/plans/2026-07-03-gui-modernization-phase-1-18-report-graph-export-comparison.md`
+
+**Evidence:** Report export tests produced `6 passed`. CLI validation with `QT_QPA_PLATFORM=offscreen .venv/bin/python -m artisanlib.plot_report_export test/data/profile1.alog --output-dir /tmp/artisanz-phase118-report-graph --prefix phase118-profile1-report --width 1280 --height 720 --dpi 100 --cache-buster 118` produced `source_kind=profile`, `title=Guji Shakiso`, `sample_count=1735`, `view_state_matches=true`, `view_state_max_delta=0.0`, `event_count=14`, `event_value_count=10`, `phase_band_count=3`, `area_count=1`, Matplotlib `byte_count=233509`, PyQtGraph `byte_count=69659`, and PyQtGraph `sampled_non_background_pixel_count=14492`. Reviewer follow-up fixed relative `--output-dir` URL resolution and strengthened the saved-profile-only helper guard.
+
+**Remaining Gate:** This produces report-ready comparison assets but still does not switch `roastReport()`. The next report step should either run this comparison across the Phase 1.16 profile matrix or add an env-gated report image backend switch with Matplotlib fallback.
 
 ## Phase 2: Plot Renderer Boundary and PyQtGraph POC
 
