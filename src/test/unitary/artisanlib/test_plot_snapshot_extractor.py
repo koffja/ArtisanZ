@@ -2,7 +2,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from artisanlib.plot_snapshot import AxisSnapshot, EventMarkerSnapshot, PhaseBandSnapshot
+from artisanlib.plot_snapshot import (
+    AxisSnapshot,
+    EventMarkerSnapshot,
+    EventValueSnapshot,
+    GuideLineSnapshot,
+    PhaseBandSnapshot,
+)
 from artisanlib.plot_snapshot_extractor import build_roast_plot_snapshot
 
 
@@ -97,6 +103,12 @@ class FakeOverlayCanvas(FakeCanvas):
     backgroundEtypes = [1]
     backgroundEvalues = [45.0]
     backgroundEStrings = ['bg power']
+    AUCguideFlag = True
+    AUCguideTime = 10.0
+    endofx = 12.0
+    compareBBP = True
+    BBPindex = 1
+    charge_manager = type('FakeChargeManager', (), {'enabled': True, 'target_temp': 182.0})()
     palette = {
         **FakeCanvas.palette,
         'markers': '#666666',
@@ -104,6 +116,8 @@ class FakeOverlayCanvas(FakeCanvas):
         'rect2': '#B0B0B0',
         'rect3': '#C0C0C0',
         'bgeventtext': '#777777',
+        'aucguide': '#336677',
+        'timeguide': '#557766',
     }
 
 
@@ -136,6 +150,10 @@ def test_build_roast_plot_snapshot_extracts_foreground_event_markers() -> None:
     assert snapshot.events == (
         EventMarkerSnapshot(time=1.0, label='power up', event_type=1, color='#222222', value=55.0),
         EventMarkerSnapshot(time=2.0, label='Fan', event_type=2, color='#333333', value=25.0),
+    )
+    assert snapshot.event_values == (
+        EventValueSnapshot(time=1.0, value=55.0, event_type=1, color='#222222', label='power up'),
+        EventValueSnapshot(time=2.0, value=25.0, event_type=2, color='#333333', label='Fan'),
     )
 
 
@@ -174,3 +192,44 @@ def test_build_roast_plot_snapshot_extracts_main_and_background_event_markers() 
         value=45.0,
         kind='background',
     ) in snapshot.events
+    assert EventValueSnapshot(
+        time=1.0,
+        value=45.0,
+        event_type=1,
+        color='#222222',
+        label='bg power',
+        kind='background',
+        opacity=0.34,
+    ) in snapshot.event_values
+
+
+def test_build_roast_plot_snapshot_extracts_guides_when_source_data_exists() -> None:
+    snapshot = build_roast_plot_snapshot(FakeOverlayCanvas())
+
+    assert GuideLineSnapshot(
+        position=10.0,
+        label='AUC guide',
+        color='#336677',
+        orientation='vertical',
+        line_style='-',
+        opacity=0.5,
+        kind='auc',
+    ) in snapshot.guides
+    assert GuideLineSnapshot(
+        position=1.0,
+        label='BBP',
+        color='#557766',
+        orientation='vertical',
+        line_style='--',
+        opacity=0.45,
+        kind='bbp',
+    ) in snapshot.guides
+    assert GuideLineSnapshot(
+        position=182.0,
+        label='Charge target',
+        color='#B4685C',
+        orientation='horizontal',
+        line_style='--',
+        opacity=0.42,
+        kind='charge_target',
+    ) in snapshot.guides

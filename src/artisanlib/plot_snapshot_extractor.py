@@ -7,6 +7,8 @@ from artisanlib.plot_snapshot import (
     AxisSnapshot,
     CurveSnapshot,
     EventMarkerSnapshot,
+    EventValueSnapshot,
+    GuideLineSnapshot,
     PhaseBandSnapshot,
     RoastPlotSnapshot,
     YAxisName,
@@ -43,6 +45,7 @@ _MAIN_EVENTS = (
 
 
 def build_roast_plot_snapshot(source: object) -> RoastPlotSnapshot:
+    events = _event_markers(source)
     curves = (
         _curve(source, name='BT', y_attr='temp2', color_key='bt', visible_attr='BTcurve'),
         _curve(source, name='ET', y_attr='temp1', color_key='et', visible_attr='ETcurve'),
@@ -66,8 +69,10 @@ def build_roast_plot_snapshot(source: object) -> RoastPlotSnapshot:
         time_axis=_time_axis(source),
         temperature_axis=_temperature_axis(source),
         ror_axis=_ror_axis(source),
-        events=_event_markers(source),
+        events=events,
+        event_values=_event_value_snapshots(events),
         phase_bands=_phase_bands(source),
+        guides=_guide_lines(source),
     )
 
 
@@ -308,8 +313,34 @@ def _palette_color(source: object, color_key: str) -> str:
     return _DEFAULT_COLORS[color_key]
 
 
+def _palette_color_with_default(source: object, color_key: str, default: str) -> str:
+    palette = getattr(source, 'palette', {})
+    if isinstance(palette, dict):
+        color = palette.get(color_key)
+        if isinstance(color, str) and color:
+            return color
+    return default
+
+
 def _event_markers(source: object) -> tuple[EventMarkerSnapshot, ...]:
     return _main_event_markers(source) + _foreground_event_markers(source) + _background_event_markers(source)
+
+
+def _event_value_snapshots(events: tuple[EventMarkerSnapshot, ...]) -> tuple[EventValueSnapshot, ...]:
+    values: list[EventValueSnapshot] = []
+    for event in events:
+        if event.value is None or event.kind == 'main':
+            continue
+        values.append(EventValueSnapshot(
+            time=event.time,
+            value=event.value,
+            event_type=event.event_type,
+            color=event.color,
+            label=event.label,
+            kind=event.kind,
+            opacity=0.55 if event.kind == 'special' else 0.34,
+        ))
+    return tuple(values)
 
 
 def _main_event_markers(source: object) -> tuple[EventMarkerSnapshot, ...]:
@@ -409,6 +440,88 @@ def _phase_bands(source: object) -> tuple[PhaseBandSnapshot, ...]:
             opacity=0.22,
         ))
     return tuple(bands)
+
+
+def _guide_lines(source: object) -> tuple[GuideLineSnapshot, ...]:
+    guides: list[GuideLineSnapshot] = []
+    guides.extend(_auc_guides(source))
+    bbp_guide = _bbp_guide(source)
+    if bbp_guide is not None:
+        guides.append(bbp_guide)
+    charge_target_guide = _charge_target_guide(source)
+    if charge_target_guide is not None:
+        guides.append(charge_target_guide)
+    return tuple(guides)
+
+
+def _auc_guides(source: object) -> tuple[GuideLineSnapshot, ...]:
+    if not bool(getattr(source, 'AUCguideFlag', False)):
+        return ()
+    guide_time = _numeric_attr(source, 'AUCguideTime')
+    if guide_time is None or guide_time <= 0:
+        return ()
+    maximum_time = _numeric_attr(source, 'endofx')
+    if maximum_time is not None and guide_time >= maximum_time:
+        return ()
+    return (
+        GuideLineSnapshot(
+            position=guide_time,
+            label='AUC guide',
+            color=_palette_color_with_default(source, 'aucguide', '#8FA39C'),
+            orientation='vertical',
+            line_style='-',
+            opacity=0.5,
+            kind='auc',
+        ),
+    )
+
+
+def _bbp_guide(source: object) -> GuideLineSnapshot | None:
+    autotimex_mode = _integer_attr(source, 'autotimexMode', 0)
+    if not bool(getattr(source, 'compareBBP', False)) and autotimex_mode == 0:
+        return None
+    index = _first_index(source, ('BBPindex', 'bbp_index', 'bbpIndex'))
+    timex = _sequence(source, 'timex')
+    if index is None:
+        timeindex = _sequence(source, 'timeindex')
+        if len(timeindex) > 0:
+            try:
+                index = int(timeindex[0])
+            except (TypeError, ValueError):
+                index = None
+    if index is None or index < 0 or index >= len(timex):
+        return None
+    return GuideLineSnapshot(
+        position=float(timex[index]),
+        label='BBP',
+        color=_palette_color_with_default(source, 'timeguide', '#53756F'),
+        orientation='vertical',
+        line_style='--',
+        opacity=0.45,
+        kind='bbp',
+    )
+
+
+def _charge_target_guide(source: object) -> GuideLineSnapshot | None:
+    manager = getattr(source, 'charge_manager', None)
+    if manager is not None:
+        enabled = bool(getattr(manager, 'enabled', False))
+        target_temp = _numeric_value(getattr(manager, 'target_temp', None))
+    else:
+        enabled = bool(getattr(source, 'chargeTargetEnabled', False))
+        target_temp = _first_numeric_attr(source, ('target_charge_temp', 'TargetChargeTemp', 'charge_target_temp'))
+    if not enabled or target_temp is None or target_temp <= 0:
+        return None
+    return GuideLineSnapshot(
+        position=target_temp,
+        label='Charge target',
+        color='#B4685C',
+        orientation='horizontal',
+        y_axis='temperature',
+        line_style='--',
+        opacity=0.42,
+        kind='charge_target',
+    )
 
 
 def _event_type_visible(source: object, event_type: int) -> bool:
@@ -543,3 +656,42 @@ def _sequence(source: object, attr_name: str) -> list[Any]:
     if isinstance(value, list):
         return value
     return list(value)
+
+
+def _first_index(source: object, attr_names: tuple[str, ...]) -> int | None:
+    for attr_name in attr_names:
+        value = getattr(source, attr_name, None)
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            continue
+    return None
+
+
+def _first_numeric_attr(source: object, attr_names: tuple[str, ...]) -> float | None:
+    for attr_name in attr_names:
+        value = _numeric_attr(source, attr_name)
+        if value is not None:
+            return value
+    return None
+
+
+def _numeric_attr(source: object, attr_name: str) -> float | None:
+    return _numeric_value(getattr(source, attr_name, None))
+
+
+def _numeric_value(value: object) -> float | None:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    if math.isnan(number):
+        return None
+    return number
+
+
+def _integer_attr(source: object, attr_name: str, default: int) -> int:
+    try:
+        return int(getattr(source, attr_name, default))
+    except (TypeError, ValueError):
+        return default

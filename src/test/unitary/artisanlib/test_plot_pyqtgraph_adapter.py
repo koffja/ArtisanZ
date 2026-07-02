@@ -10,6 +10,8 @@ from artisanlib.plot_snapshot import (
     AxisSnapshot,
     CurveSnapshot,
     EventMarkerSnapshot,
+    EventValueSnapshot,
+    GuideLineSnapshot,
     PhaseBandSnapshot,
     RendererViewState,
     RoastPlotSnapshot,
@@ -87,11 +89,15 @@ class FakePlot:
 def _snapshot(
         *curves: CurveSnapshot,
         events: tuple[EventMarkerSnapshot, ...] = (),
-        phase_bands: tuple[PhaseBandSnapshot, ...] = ()) -> RoastPlotSnapshot:
+        event_values: tuple[EventValueSnapshot, ...] = (),
+        phase_bands: tuple[PhaseBandSnapshot, ...] = (),
+        guides: tuple[GuideLineSnapshot, ...] = ()) -> RoastPlotSnapshot:
     return RoastPlotSnapshot(
         curves=curves,
         events=events,
+        event_values=event_values,
         phase_bands=phase_bands,
+        guides=guides,
         time_axis=AxisSnapshot(minimum=-1.0, maximum=12.0, label='Time'),
         temperature_axis=AxisSnapshot(minimum=70.0, maximum=270.0, label='Temperature'),
         ror_axis=AxisSnapshot(minimum=-15.0, maximum=25.0, label='RoR'),
@@ -235,6 +241,7 @@ def test_set_snapshot_renders_and_replaces_event_items() -> None:
 
 def test_set_snapshot_renders_phase_bands_and_live_updates_preserve_static_overlays() -> None:
     temperature_plot = FakePlot()
+    ror_plot = FakePlot()
 
     def phase_item_factory(band: PhaseBandSnapshot, _: RoastPlotSnapshot) -> FakeEventItem:
         return FakeEventItem('phase', f'{band.minimum}:{band.maximum}', band.color)
@@ -247,10 +254,19 @@ def test_set_snapshot_renders_phase_bands_and_live_updates_preserve_static_overl
         item.setPos(event.time, snapshot.temperature_axis.maximum)
         return item
 
+    def event_value_factory(event_value: EventValueSnapshot, _: RoastPlotSnapshot) -> FakeEventItem:
+        return FakeEventItem('event-value', event_value.label, event_value.color)
+
+    def guide_item_factory(guide: GuideLineSnapshot, _: RoastPlotSnapshot) -> FakeEventItem:
+        return FakeEventItem('guide', guide.label, guide.color)
+
     renderer = PyQtGraphSnapshotRenderer(
         temperature_plot=temperature_plot,
+        ror_plot=ror_plot,
         event_line_factory=event_line_factory,
         event_label_factory=event_label_factory,
+        event_value_factory=event_value_factory,
+        guide_item_factory=guide_item_factory,
         phase_item_factory=phase_item_factory,
         pen_factory=_fake_pen_factory,
     )
@@ -258,12 +274,26 @@ def test_set_snapshot_renders_phase_bands_and_live_updates_preserve_static_overl
     renderer.set_snapshot(_snapshot(
         CurveSnapshot.from_sequences(name='BT', x=[0], y=[140], color='#4E7180'),
         events=(EventMarkerSnapshot(time=4.5, label='charge', event_type=100, color='#CC0000', kind='main'),),
+        event_values=(EventValueSnapshot(time=4.5, value=55.0, event_type=1, color='#CC0000', label='power'),),
         phase_bands=(PhaseBandSnapshot(minimum=100.0, maximum=150.0, color='#E5E5E5'),),
+        guides=(
+            GuideLineSnapshot(position=4.0, label='AUC guide', color='#336677', kind='auc'),
+            GuideLineSnapshot(position=6.0, label='RoR guide', color='#78905D', y_axis='ror'),
+        ),
     ))
 
     assert renderer.phase_item_count() == 1
     assert renderer.event_item_count() == 2
-    assert [item.kind for item in temperature_plot.added_items] == ['phase', 'line', 'label']
+    assert renderer.event_value_item_count() == 1
+    assert renderer.guide_item_count() == 2
+    assert [item.kind for item in temperature_plot.added_items] == [
+        'phase',
+        'event-value',
+        'line',
+        'label',
+        'guide',
+    ]
+    assert [item.kind for item in ror_plot.added_items] == ['guide']
 
     renderer.update_live_frame(_snapshot(
         CurveSnapshot.from_sequences(name='BT', x=[0, 1], y=[140, 142], color='#4E7180'),
@@ -271,13 +301,19 @@ def test_set_snapshot_renders_phase_bands_and_live_updates_preserve_static_overl
 
     assert renderer.phase_item_count() == 1
     assert renderer.event_item_count() == 2
+    assert renderer.event_value_item_count() == 1
+    assert renderer.guide_item_count() == 2
 
     old_items = temperature_plot.added_items[:]
+    old_ror_items = ror_plot.added_items[:]
     renderer.set_snapshot(_snapshot())
 
     assert temperature_plot.removed_items == old_items
+    assert ror_plot.removed_items == old_ror_items
     assert renderer.phase_item_count() == 0
     assert renderer.event_item_count() == 0
+    assert renderer.event_value_item_count() == 0
+    assert renderer.guide_item_count() == 0
 
 
 def test_event_markers_are_optional_when_pyqtgraph_is_not_installed(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -8,12 +8,16 @@ from artisanlib.plot_snapshot import (
     AxisSnapshot,
     CurveSnapshot,
     EventMarkerSnapshot,
+    EventValueSnapshot,
+    GuideLineSnapshot,
     PhaseBandSnapshot,
     RendererViewState,
     RoastPlotSnapshot,
 )
 
 EventItemFactory = Callable[[EventMarkerSnapshot, RoastPlotSnapshot], object | None]
+EventValueItemFactory = Callable[[EventValueSnapshot, RoastPlotSnapshot], object | None]
+GuideItemFactory = Callable[[GuideLineSnapshot, RoastPlotSnapshot], object | None]
 PhaseItemFactory = Callable[[PhaseBandSnapshot, RoastPlotSnapshot], object | None]
 CurvePenFactory = Callable[[CurveSnapshot], object]
 
@@ -26,17 +30,23 @@ class PyQtGraphSnapshotRenderer:
             ror_plot: object | None = None,
             event_line_factory: EventItemFactory | None = None,
             event_label_factory: EventItemFactory | None = None,
+            event_value_factory: EventValueItemFactory | None = None,
+            guide_item_factory: GuideItemFactory | None = None,
             phase_item_factory: PhaseItemFactory | None = None,
             pen_factory: CurvePenFactory | None = None) -> None:
         self._temperature_plot = temperature_plot
         self._ror_plot = ror_plot
         self._event_line_factory = event_line_factory or _default_event_line_factory
         self._event_label_factory = event_label_factory or _default_event_label_factory
+        self._event_value_factory = event_value_factory or _default_event_value_factory
+        self._guide_item_factory = guide_item_factory or _default_guide_item_factory
         self._phase_item_factory = phase_item_factory or _default_phase_item_factory
         self._pen_factory = pen_factory or _default_pen_factory
         self._items: dict[str, object] = {}
         self._phase_items: list[object] = []
         self._event_items: list[object] = []
+        self._event_value_items: list[tuple[object, object]] = []
+        self._guide_items: list[tuple[object, object]] = []
         self._last_view_state = RendererViewState(
             time_axis=AxisSnapshot(minimum=0.0, maximum=0.0, label='Time'),
             temperature_axis=AxisSnapshot(minimum=0.0, maximum=0.0, label='Temperature'),
@@ -45,7 +55,9 @@ class PyQtGraphSnapshotRenderer:
     def set_snapshot(self, snapshot: RoastPlotSnapshot) -> None:
         self._apply_phase_bands(snapshot)
         self._apply_curves(snapshot)
+        self._apply_event_values(snapshot)
         self._apply_events(snapshot)
+        self._apply_guides(snapshot)
         self.reset_view(snapshot.export_view_state())
 
     def update_live_frame(self, snapshot: RoastPlotSnapshot) -> None:
@@ -73,6 +85,12 @@ class PyQtGraphSnapshotRenderer:
 
     def phase_item_count(self) -> int:
         return len(self._phase_items)
+
+    def event_value_item_count(self) -> int:
+        return len(self._event_value_items)
+
+    def guide_item_count(self) -> int:
+        return len(self._guide_items)
 
     def _apply_curves(self, snapshot: RoastPlotSnapshot) -> None:
         active_names = {curve.name for curve in snapshot.curves}
@@ -132,6 +150,36 @@ class PyQtGraphSnapshotRenderer:
         if label_item is not None:
             items.append(label_item)
         return items
+
+    def _apply_event_values(self, snapshot: RoastPlotSnapshot) -> None:
+        self._clear_event_value_items()
+        for event_value in snapshot.event_values:
+            item = self._event_value_factory(event_value, snapshot)
+            if item is None:
+                continue
+            _call_if_available(self._temperature_plot, 'addItem', item)
+            self._event_value_items.append((self._temperature_plot, item))
+
+    def _clear_event_value_items(self) -> None:
+        _clear_item_pairs(self._event_value_items)
+
+    def _apply_guides(self, snapshot: RoastPlotSnapshot) -> None:
+        self._clear_guide_items()
+        for guide in snapshot.guides:
+            item = self._guide_item_factory(guide, snapshot)
+            if item is None:
+                continue
+            plot = self._plot_for_guide(guide)
+            _call_if_available(plot, 'addItem', item)
+            self._guide_items.append((plot, item))
+
+    def _clear_guide_items(self) -> None:
+        _clear_item_pairs(self._guide_items)
+
+    def _plot_for_guide(self, guide: GuideLineSnapshot) -> object:
+        if guide.y_axis == 'ror' and self._ror_plot is not None:
+            return self._ror_plot
+        return self._temperature_plot
 
 
 def _pen_for_curve(curve: CurveSnapshot) -> dict[str, object]:
@@ -212,6 +260,12 @@ def _call_if_available(target: object, method_name: str, *args: object) -> None:
         method(*args)
 
 
+def _clear_item_pairs(items: list[tuple[object, object]]) -> None:
+    for plot, item in items:
+        _call_if_available(plot, 'removeItem', item)
+    items.clear()
+
+
 def _default_event_line_factory(event: EventMarkerSnapshot, _: RoastPlotSnapshot) -> object | None:
     try:
         import pyqtgraph as pg  # type: ignore[import-not-found,unused-ignore]
@@ -226,6 +280,22 @@ def _default_event_line_factory(event: EventMarkerSnapshot, _: RoastPlotSnapshot
         movable=False,
     )
     _call_if_available(item, 'setZValue', 20)
+    return item
+
+
+def _default_event_value_factory(event_value: EventValueSnapshot, snapshot: RoastPlotSnapshot) -> object | None:
+    try:
+        import pyqtgraph as pg  # type: ignore[import-not-found,unused-ignore]
+    except ImportError:
+        return None
+    y_value = _event_value_y_position(event_value, snapshot)
+    baseline = _clamp(event_value.baseline, snapshot.temperature_axis.minimum, snapshot.temperature_axis.maximum)
+    item = pg.PlotDataItem(
+        [event_value.time, event_value.time],
+        [baseline, y_value],
+        pen=pg.mkPen(color=_color_with_alpha(pg, event_value.color, event_value.opacity), width=4),
+    )
+    _call_if_available(item, 'setZValue', 18)
     return item
 
 
@@ -247,6 +317,25 @@ def _default_event_label_factory(event: EventMarkerSnapshot, snapshot: RoastPlot
     )
     item.setPos(event.time, _event_label_y_position(event, snapshot))
     _call_if_available(item, 'setZValue', 30)
+    return item
+
+
+def _default_guide_item_factory(guide: GuideLineSnapshot, _: RoastPlotSnapshot) -> object | None:
+    try:
+        import pyqtgraph as pg  # type: ignore[import-not-found,unused-ignore]
+    except ImportError:
+        return None
+    angle = 90 if guide.orientation == 'vertical' else 0
+    item = pg.InfiniteLine(
+        pos=guide.position,
+        angle=angle,
+        pen=pg.mkPen(
+            color=_color_with_alpha(pg, guide.color, guide.opacity),
+            width=guide.line_width,
+            style=_qt_pen_style(guide.line_style)),
+        movable=False,
+    )
+    _call_if_available(item, 'setZValue', 22)
     return item
 
 
@@ -279,6 +368,21 @@ def _event_label_y_position(event: EventMarkerSnapshot, snapshot: RoastPlotSnaps
         return snapshot.temperature_axis.maximum - span * (0.035 + row * 0.045)
     row = event.event_type % 4
     return snapshot.temperature_axis.maximum - span * (0.06 + row * 0.05)
+
+
+def _event_value_y_position(event_value: EventValueSnapshot, snapshot: RoastPlotSnapshot) -> float:
+    minimum = snapshot.temperature_axis.minimum
+    maximum = snapshot.temperature_axis.maximum
+    if minimum <= event_value.value <= maximum:
+        return event_value.value
+    span = max(1.0, maximum - minimum)
+    if 0.0 <= event_value.value <= 100.0:
+        return minimum + span * (event_value.value / 100.0)
+    return _clamp(event_value.value, minimum, maximum)
+
+
+def _clamp(value: float, minimum: float, maximum: float) -> float:
+    return max(minimum, min(maximum, value))
 
 
 def _color_with_alpha(pg: object, color: str, opacity: float) -> object:

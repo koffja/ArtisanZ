@@ -21,10 +21,16 @@ def test_default_renderer_registry_exposes_builtin_renderers() -> None:
         'matplotlib-snapshot',
         'pyqtgraph-snapshot',
     )
+    assert tuple(plugin.renderer_id for plugin in registry.plugins(category='renderer')) == (
+        'matplotlib-snapshot',
+        'pyqtgraph-snapshot',
+    )
     assert registry.get('matplotlib-snapshot').stability == 'stable'
     assert registry.get('matplotlib-snapshot').surface == 'matplotlib-axis'
+    assert registry.get('matplotlib-snapshot').category == 'renderer'
     assert registry.get('pyqtgraph-snapshot').stability == 'experimental'
     assert registry.get('pyqtgraph-snapshot').surface == 'pyqtgraph-plot'
+    assert registry.get('pyqtgraph-snapshot').category == 'renderer'
 
 
 def test_default_renderer_registry_loads_builtin_renderer_classes() -> None:
@@ -57,6 +63,43 @@ def test_renderer_registry_supports_external_plugin_registration() -> None:
 
     assert registry.get('external-renderer') == plugin
     assert registry.load_renderer_class('external-renderer') is MatplotlibSnapshotRenderer
+
+
+def test_renderer_registry_tracks_non_renderer_plugin_boundaries() -> None:
+    registry = create_default_renderer_registry()
+    report_plugin = RendererPluginSpec(
+        renderer_id='production-report',
+        label='Production Report',
+        description='Future report plugin boundary.',
+        class_path='artisanlib.plot_renderer_registry.RendererPluginRegistry',
+        category='report',
+        dependencies=(),
+    )
+    analyzer_plugin = RendererPluginSpec(
+        renderer_id='profile-analyzer',
+        label='Profile Analyzer',
+        description='Future analyzer plugin boundary.',
+        class_path='artisanlib.plot_renderer_registry.RendererPluginRegistry',
+        category='analyzer',
+        dependencies=(),
+    )
+
+    registry.register(report_plugin)
+    registry.register(analyzer_plugin)
+
+    assert registry.get('production-report') == report_plugin
+    assert tuple(plugin.renderer_id for plugin in registry.plugins(category='report')) == (
+        'production-report',
+    )
+    assert tuple(plugin.renderer_id for plugin in registry.plugins(category='analyzer')) == (
+        'profile-analyzer',
+    )
+    assert tuple(plugin.renderer_id for plugin in registry.plugins(category='renderer')) == (
+        'matplotlib-snapshot',
+        'pyqtgraph-snapshot',
+    )
+    with pytest.raises(TypeError, match='not a renderer'):
+        registry.load_renderer_class('production-report')
 
 
 def test_renderer_registry_filters_unavailable_plugins() -> None:

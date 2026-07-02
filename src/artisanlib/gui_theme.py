@@ -63,6 +63,93 @@ def modern_application_stylesheet(theme: ModernTheme | None = None) -> str:
         QDialog QLabel {{
             color: {t.text};
         }}
+        QDialog[modernDialog="true"] {{
+            background-color: {t.window};
+        }}
+        QDialog[modernDialog="true"] QGroupBox {{
+            background-color: {t.surface};
+            border: 1px solid {t.border};
+            border-radius: 7px;
+            margin-top: 14px;
+            padding: 10px 8px 8px 8px;
+        }}
+        QDialog[modernDialog="true"] QGroupBox::title {{
+            subcontrol-origin: margin;
+            left: 10px;
+            padding: 0 5px;
+            color: {t.text_muted};
+            font-weight: 600;
+        }}
+        QDialog[modernDialog="true"] QTabWidget::pane {{
+            border: 1px solid {t.border};
+            border-radius: 7px;
+            background-color: {t.surface};
+            top: -1px;
+        }}
+        QDialog[modernDialog="true"] QTabBar::tab {{
+            background-color: {t.surface_alt};
+            border: 1px solid {t.border};
+            border-bottom: 0;
+            border-top-left-radius: 5px;
+            border-top-right-radius: 5px;
+            padding: 6px 10px;
+            margin-right: 2px;
+        }}
+        QDialog[modernDialog="true"] QTabBar::tab:selected {{
+            background-color: {t.surface};
+            color: {t.primary};
+            font-weight: 600;
+        }}
+        QDialog[modernDialog="true"] QTableWidget,
+        QDialog[modernDialog="true"] QTableView,
+        QDialog[modernDialog="true"] QTreeView,
+        QDialog[modernDialog="true"] QListView {{
+            background-color: {t.surface};
+            alternate-background-color: {t.surface_alt};
+            border: 1px solid {t.border};
+            border-radius: 7px;
+            gridline-color: {t.border};
+        }}
+        QDialog[modernDialog="true"] QHeaderView::section {{
+            background-color: {t.surface_muted};
+            border: 0;
+            border-right: 1px solid {t.border};
+            border-bottom: 1px solid {t.border};
+            padding: 5px 7px;
+            color: {t.text_muted};
+            font-weight: 600;
+        }}
+        QDialog[modernDialog="true"] QLineEdit,
+        QDialog[modernDialog="true"] QTextEdit,
+        QDialog[modernDialog="true"] QPlainTextEdit,
+        QDialog[modernDialog="true"] QComboBox,
+        QDialog[modernDialog="true"] QSpinBox,
+        QDialog[modernDialog="true"] QDoubleSpinBox,
+        QDialog[modernDialog="true"] QTimeEdit,
+        QDialog[modernDialog="true"] QDateEdit {{
+            background-color: {t.surface};
+            border: 1px solid {t.border};
+            border-radius: 6px;
+            padding: 5px 8px;
+            min-height: 23px;
+        }}
+        QDialog[modernDialog="true"] QPushButton {{
+            background-color: {t.surface_alt};
+            border: 1px solid {t.border};
+            border-radius: 6px;
+            padding: 6px 12px;
+            min-height: 24px;
+        }}
+        QDialog[modernDialogRole="axes"] QTabBar::tab:selected,
+        QDialog[modernDialogRole="curves"] QTabBar::tab:selected {{
+            color: {t.primary};
+        }}
+        QDialog[modernDialogRole="events"] QTabBar::tab:selected {{
+            color: #3C7A88;
+        }}
+        QDialog[modernDialogRole="alarms"] QTabBar::tab:selected {{
+            color: {t.accent};
+        }}
         QMessageBox, QFileDialog {{
             background-color: {t.window};
         }}

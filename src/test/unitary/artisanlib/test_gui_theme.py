@@ -24,6 +24,12 @@ def test_modern_application_stylesheet_contains_core_surfaces() -> None:
     assert '#53756F' in stylesheet
     assert 'QDialog QPushButton' in stylesheet
     assert 'QMessageBox, QFileDialog' in stylesheet
+    assert 'QDialog[modernDialog="true"] QGroupBox' in stylesheet
+    assert 'QDialog[modernDialog="true"] QTabWidget::pane' in stylesheet
+    assert 'QDialog[modernDialog="true"] QTableWidget' in stylesheet
+    assert 'QDialog[modernDialogRole="axes"] QTabBar::tab:selected' in stylesheet
+    assert 'QDialog[modernDialogRole="events"] QTabBar::tab:selected' in stylesheet
+    assert 'QDialog[modernDialogRole="alarms"] QTabBar::tab:selected' in stylesheet
 
 
 def test_modern_application_stylesheet_uses_supplied_theme() -> None:

@@ -24,6 +24,7 @@ class WorkspaceArea(Enum):
 class WorkspaceSpec:
     mode: WorkspaceMode
     label_key: str
+    action_hint_key: str
     primary_area: WorkspaceArea
     visible_areas: tuple[WorkspaceArea, ...]
     compact_chrome: bool
@@ -49,6 +50,7 @@ _WORKSPACE_SPECS: dict[WorkspaceMode, WorkspaceSpec] = {
     WorkspaceMode.ROAST_CONTROL: WorkspaceSpec(
         mode=WorkspaceMode.ROAST_CONTROL,
         label_key='Roast Control',
+        action_hint_key='Monitor, record, and mark the roast.',
         primary_area=WorkspaceArea.ROAST_CONTROL,
         visible_areas=(
             WorkspaceArea.ROAST_CONTROL,
@@ -60,6 +62,7 @@ _WORKSPACE_SPECS: dict[WorkspaceMode, WorkspaceSpec] = {
     WorkspaceMode.QC_ANALYSIS: WorkspaceSpec(
         mode=WorkspaceMode.QC_ANALYSIS,
         label_key='QC Analysis',
+        action_hint_key='Compare curves and review roast quality.',
         primary_area=WorkspaceArea.QC_ANALYSIS,
         visible_areas=(
             WorkspaceArea.QC_ANALYSIS,
@@ -72,6 +75,7 @@ _WORKSPACE_SPECS: dict[WorkspaceMode, WorkspaceSpec] = {
     WorkspaceMode.DEVICE_SETUP: WorkspaceSpec(
         mode=WorkspaceMode.DEVICE_SETUP,
         label_key='Device Setup',
+        action_hint_key='Configure machines, devices, and alarms.',
         primary_area=WorkspaceArea.DEVICE_SETUP,
         visible_areas=(
             WorkspaceArea.DEVICE_SETUP,
@@ -83,6 +87,7 @@ _WORKSPACE_SPECS: dict[WorkspaceMode, WorkspaceSpec] = {
     WorkspaceMode.PRODUCTION: WorkspaceSpec(
         mode=WorkspaceMode.PRODUCTION,
         label_key='Production',
+        action_hint_key='Run batches with reduced controls.',
         primary_area=WorkspaceArea.ROAST_CONTROL,
         visible_areas=(
             WorkspaceArea.ROAST_CONTROL,
@@ -94,6 +99,7 @@ _WORKSPACE_SPECS: dict[WorkspaceMode, WorkspaceSpec] = {
     WorkspaceMode.EXPERT: WorkspaceSpec(
         mode=WorkspaceMode.EXPERT,
         label_key='Expert',
+        action_hint_key='Access every control and diagnostic.',
         primary_area=WorkspaceArea.ROAST_CONTROL,
         visible_areas=_ALL_AREAS,
         compact_chrome=False,
@@ -108,6 +114,10 @@ def workspace_spec(mode: WorkspaceMode) -> WorkspaceSpec:
 
 def workspace_specs() -> tuple[WorkspaceSpec, ...]:
     return tuple(_WORKSPACE_SPECS[mode] for mode in WorkspaceMode)
+
+
+def workspace_action_hint(mode: WorkspaceMode) -> str:
+    return workspace_spec(mode).action_hint_key
 
 
 _WORKSPACE_POLICIES: dict[WorkspaceMode, WorkspacePolicy] = {
@@ -194,6 +204,7 @@ __all__ = [
     'WorkspaceMode',
     'WorkspacePolicy',
     'WorkspaceSpec',
+    'workspace_action_hint',
     'workspace_from_setting_value',
     'workspace_for_ui_mode_value',
     'workspace_policy',

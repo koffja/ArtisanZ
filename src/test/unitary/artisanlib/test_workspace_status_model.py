@@ -29,6 +29,7 @@ def test_workspace_status_model_exposes_policy_properties() -> None:
     assert model.modeValue == 'qc_analysis'
     assert model.label == 'QC Analysis'
     assert model.primaryArea == 'qc_analysis'
+    assert model.actionHint == 'Compare curves and review roast quality.'
     assert model.showAnalysisTools is True
     assert model.showDeviceSetupTools is False
     assert model.showAdvancedControls is False
@@ -49,6 +50,7 @@ def test_workspace_status_model_updates_from_workspace_mode() -> None:
     assert model.workspace_mode() is WorkspaceMode.DEVICE_SETUP
     assert model.modeValue == 'device_setup'
     assert model.label == 'Device Setup'
+    assert model.actionHint == 'Configure machines, devices, and alarms.'
     assert model.showDeviceSetupTools is True
     assert model.showAdvancedControls is True
     assert len(notifications) == 1
@@ -169,7 +171,7 @@ def test_workspace_status_panel_qml_accepts_python_model() -> None:
         assert item is not None, [error.toString() for error in component.errors()]
         assert item.setProperty('workspaceModel', model)
         assert item.property('implicitWidth') == 320
-        assert item.property('implicitHeight') == 156
+        assert item.property('implicitHeight') == 176
     finally:
         if item is not None:
             item.deleteLater()
@@ -190,9 +192,9 @@ def test_workspace_status_widget_factory_loads_qml_with_python_model() -> None:
         assert root_object is not None
         assert root_object.property('workspaceModel') is model
         assert widget.sizeHint().width() == 320
-        assert widget.sizeHint().height() == 156
+        assert widget.sizeHint().height() == 176
         assert widget.minimumWidth() == 320
-        assert widget.minimumHeight() == 156
+        assert widget.minimumHeight() == 176
     finally:
         widget.deleteLater()
 

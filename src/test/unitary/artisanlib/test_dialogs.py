@@ -96,7 +96,7 @@ class TestBaseDialogFunctionality:
 
     # Level 2 UAT Tests
     def test_dialog_creation_provides_standard_buttons(
-        self, mock_aw: Mock  # noqa: ARG002
+        self, qapp: QApplication, mock_aw: Mock  # noqa: ARG002
     ) -> None:
         """
         ARRANGE: Create base dialog
@@ -113,6 +113,8 @@ class TestBaseDialogFunctionality:
         assert cancel_button is not None, 'User should see Cancel button'
         assert ok_button.isDefault(), 'OK button should be default for Enter key'
         assert ok_button.autoDefault(), 'OK button should respond to Enter'
+        assert dialog.property('modernDialog') is True
+        assert dialog.property('modernDialogRole') == 'ArtisanDialog'
 
         dialog.close()
 

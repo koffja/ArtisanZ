@@ -46,6 +46,7 @@ _log: Final[logging.Logger] = logging.getLogger(__name__)
 class EventsDlg(ArtisanResizeablDialog):
     def __init__(self, parent:QWidget, aw:'ApplicationWindow', activeTab:int = 0) -> None:
         super().__init__(parent, aw)
+        self.setProperty('modernDialogRole', 'events')
         self.app = self.aw.app
         self.activeTab = activeTab
 

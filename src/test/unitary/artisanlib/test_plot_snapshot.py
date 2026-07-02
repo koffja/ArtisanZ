@@ -1,6 +1,12 @@
 import pytest
 
-from artisanlib.plot_snapshot import AxisSnapshot, CurveSnapshot, RoastPlotSnapshot
+from artisanlib.plot_snapshot import (
+    AxisSnapshot,
+    CurveSnapshot,
+    EventValueSnapshot,
+    GuideLineSnapshot,
+    RoastPlotSnapshot,
+)
 
 
 def test_curve_snapshot_from_sequences_normalizes_to_immutable_tuples() -> None:
@@ -35,3 +41,30 @@ def test_roast_plot_snapshot_filters_visible_curves_and_exports_view_state() -> 
 
     assert snapshot.visible_curves() == (visible,)
     assert snapshot.export_view_state().time_axis == AxisSnapshot(minimum=-1.0, maximum=12.0)
+
+
+def test_roast_plot_snapshot_carries_overlay_contracts() -> None:
+    event_value = EventValueSnapshot(
+        time=3.0,
+        value=55.0,
+        event_type=1,
+        color='#4E7180',
+        label='Power',
+    )
+    guide = GuideLineSnapshot(
+        position=180.0,
+        label='Charge target',
+        color='#B4685C',
+        orientation='horizontal',
+        kind='charge_target',
+    )
+    snapshot = RoastPlotSnapshot(
+        curves=(),
+        temperature_axis=AxisSnapshot(minimum=70.0, maximum=270.0),
+        time_axis=AxisSnapshot(minimum=-1.0, maximum=12.0),
+        event_values=(event_value,),
+        guides=(guide,),
+    )
+
+    assert snapshot.event_values == (event_value,)
+    assert snapshot.guides == (guide,)

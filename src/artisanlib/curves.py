@@ -289,6 +289,7 @@ class CurvesDlg(ArtisanDialog):
 
     def __init__(self, parent:QWidget, aw:'ApplicationWindow', activeTab:int = 0) -> None:
         super().__init__(parent, aw)
+        self.setProperty('modernDialogRole', 'curves')
         self.activeTab = activeTab
         self.app = aw.app
 

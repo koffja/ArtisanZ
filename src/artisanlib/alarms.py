@@ -57,6 +57,7 @@ class AlignDelegate(QStyledItemDelegate):
 class AlarmDlg(ArtisanResizeablDialog):
     def __init__(self, parent:QWidget, aw:'ApplicationWindow', activeTab:int = 0) -> None:
         super().__init__(parent, aw)
+        self.setProperty('modernDialogRole', 'alarms')
         self.activeTab = activeTab
         self.setModal(True)
         self.setWindowTitle(QApplication.translate('Form Caption','Alarms'))

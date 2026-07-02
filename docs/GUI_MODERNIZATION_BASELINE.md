@@ -160,6 +160,8 @@ Phase 1.5 decision: PyQtGraph is now the default selected renderer. Matplotlib r
 
 Phase 1.6 decision: the PyQtGraph grid should be drawn by a dedicated overlay rather than relying on built-in `PlotItem.showGrid()` styling, because the default light theme makes the built-in grid too faint. Default phase bands should use visible Morandi colors while preserving user/custom colors. LCD telemetry should avoid nested outer-card/value compositions; transparent containers plus self-contained value surfaces are less fragile.
 
+Phase 1.6/4/5/6 closure decision: the 2026-07-02 closure work adds renderer-neutral event value rails and guide-line snapshots, renders those overlays in PyQtGraph, applies scoped modern dialog chrome to Axes/Curves/Events/Alarms, exposes workspace action hints in the QML status island, and adds typed plugin categories for renderer/report/analyzer/filter/profile-comparison boundaries. This is a visual/runtime and architecture-boundary closure, not a new performance baseline; Matplotlib remains the compatibility/export renderer, and real-device/OpenGL validation remains a future gate.
+
 ## Capture Troubleshooting
 
 - If no metrics appear, confirm Artisan was launched from `src/` with `ARTISANZ_GUI_PERF=1`.

@@ -20,6 +20,11 @@
 - [x] Default phase bands now use soft Morandi colors instead of barely visible gray defaults.
 - [x] Right LCD telemetry no longer uses an outer visual frame; only the value surface is drawn.
 - [x] Standard dialogs now inherit a flatter light Morandi base style.
+- [x] PyQtGraph snapshots now carry foreground/background event value rails plus AUC, BBP, and charge-target guide lines when source data exists.
+- [x] `PyQtGraphSnapshotRenderer` now renders event value rails and guide lines through the snapshot adapter boundary.
+- [x] Axes, Curves, Events, and Alarms dialogs now have scoped modern dialog roles with Morandi group-box/tab/table/header/input/button styling.
+- [x] Workspace Status now exposes a concrete action hint per workspace mode.
+- [x] Plugin registry now has typed renderer/report/analyzer/filter/profile-comparison categories while keeping only renderer plugins instantiable.
 
 ## Task 1: Grid and Phase Visual Verification
 
@@ -72,11 +77,13 @@
 - Modify: `src/test/unitary/artisanlib/test_plot_pyqtgraph_adapter.py`
 
 - [ ] Add extra-device background curves and verify their legend/color/visibility behavior.
-- [ ] Add event value rail/bar rendering for the existing event graph modes.
+- [x] Add event value rail/bar rendering for foreground/background event values available in the snapshot path.
 - [ ] Add event label overlap avoidance and richer label placement.
-- [ ] Add AUC guide/area visuals.
+- [x] Add AUC guide line visuals when `AUCguideFlag` and `AUCguideTime` are active.
+- [ ] Add AUC area fill visuals.
+- [x] Add BBP and charge-target guide line visuals when source data exists.
 - [ ] Add roast-analysis overlays that still exist only in the Matplotlib path, including masks/statistics/guide marks.
-- [ ] Add charge-target annotations when charge-target data is active.
+- [ ] Add full charge-target annotation text/callout parity; current PyQtGraph parity is a target guide line only.
 - [ ] Improve projection line visual differentiation and verify RoR projection placement.
 - [ ] Define the export/report compatibility decision: Matplotlib-only fallback, PyQtGraph export adapter, or explicit hybrid export.
 
@@ -84,9 +91,11 @@
 
 **Files:** to be narrowed per dialog after inspection.
 
-- [ ] Modernize Config > Axes first because it is now part of the PyQtGraph renderer controls.
-- [ ] Modernize Config > Curves second because curve visibility/color controls determine PyQtGraph parity.
-- [ ] Modernize Events, Devices, Alarms, and Roasting Properties after screenshot review.
+- [x] Apply scoped modern dialog roles to Axes, Curves, Events, and Alarms.
+- [x] Add Morandi group-box, tab, table, header, input, and button styling under `modernDialog=true`.
+- [ ] Modernize Config > Axes layout internals beyond scoped styling because it is now part of the PyQtGraph renderer controls.
+- [ ] Modernize Config > Curves layout internals beyond scoped styling because curve visibility/color controls determine PyQtGraph parity.
+- [ ] Modernize Devices and Roasting Properties after screenshot review.
 - [ ] Avoid nested cards and heavy gray widget wells.
 - [ ] Preserve all current settings persistence, validation, shortcuts, and translations.
 
@@ -97,6 +106,7 @@
 - [x] `ruff check` for touched files.
 - [x] PyQtGraph smoke for nonblank rendering.
 - [x] Screenshot evidence for main-window phase bands and explicit PyQtGraph grid/phase rendering.
+- [x] Focused tests cover event value rails, guide extraction/rendering, scoped dialog properties/selectors, workspace action hints, and typed plugin categories.
 - [ ] Screenshot evidence for profile, live simulator, background profile, event-heavy profile, long Chinese LCD labels, Config > Axes, and Config > Curves.
 
 ## Evidence
@@ -104,7 +114,8 @@
 - Main-window phase-band screenshot: `/tmp/artisanz-phase16-grid-phase-v2.png`
 - Explicit PyQtGraph grid/phase screenshot: `/tmp/artisanz-phase16-grid-unit.png`
 - Main-window profile redraw metrics from `/tmp/artisanz-phase16-grid-phase-v2.jsonl`: `redraw max=87.658ms avg=53.171ms`, `updateBackground max=30.605ms avg=24.606ms`, `updategraphics max=0.006ms avg=0.003ms`.
+- Closure code evidence: `GuideLineSnapshot`, `EventValueSnapshot`, scoped dialog roles, workspace `actionHint`, and typed plugin categories are covered by focused unit tests. Export/report compatibility remains intentionally Matplotlib-backed.
 
 ## Exit Gate
 
-Phase 1.6 is complete when the default PyQtGraph view has visible gridlines, visible phase bands, high-value event/background overlays, stable LCD telemetry, and the first two settings dialogs no longer read as unstyled gray desktop forms.
+Phase 1.6 high-value parity is closed when the default PyQtGraph view has visible gridlines, visible phase bands, event labels, event value rails, AUC/BBP/charge-target guide lines, stable LCD telemetry, and scoped modern chrome for Axes/Curves/Events/Alarms. Full export parity, AUC area fills, dense analysis masks/statistics overlays, drag/edit event interactions, and real-device OpenGL validation remain future gates rather than hidden unfinished work.

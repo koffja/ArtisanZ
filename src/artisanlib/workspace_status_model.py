@@ -14,6 +14,7 @@ from artisanlib.plot_renderer_settings import (
 )
 from artisanlib.ui_workspaces import (
     WorkspaceMode,
+    workspace_action_hint,
     workspace_from_setting_value,
     workspace_policy,
     workspace_spec,
@@ -27,7 +28,7 @@ Item {
     id: root
     property var workspaceModel
     implicitWidth: 320
-    implicitHeight: 156
+    implicitHeight: 176
     readonly property color accentColor: !root.workspaceModel
         ? "#0087b3"
         : root.workspaceModel.modeValue === "qc_analysis"
@@ -150,10 +151,22 @@ Item {
         elide: Text.ElideRight
     }
 
-    Row {
+    Text {
+        id: actionHint
         anchors.left: title.left
         anchors.right: title.right
         anchors.top: controlSummary.bottom
+        anchors.topMargin: 5
+        color: "#526265"
+        font.pixelSize: 12
+        text: root.workspaceModel ? root.workspaceModel.actionHint : ""
+        elide: Text.ElideRight
+    }
+
+    Row {
+        anchors.left: title.left
+        anchors.right: title.right
+        anchors.top: actionHint.bottom
         anchors.topMargin: 9
         spacing: 6
 
@@ -235,6 +248,10 @@ class WorkspaceStatusModel(QObject):
     @pyqtProperty(str, notify=workspaceChanged)
     def primaryArea(self) -> str:
         return workspace_spec(self._mode).primary_area.value
+
+    @pyqtProperty(str, notify=workspaceChanged)
+    def actionHint(self) -> str:
+        return workspace_action_hint(self._mode)
 
     @pyqtProperty(bool, notify=workspaceChanged)
     def compactChrome(self) -> bool:

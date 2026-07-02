@@ -43,6 +43,8 @@ class ArtisanDialog(QDialog):
     def __init__(self, parent:QWidget|None, aw:'ApplicationWindow') -> None:
         super().__init__(parent)
         self.aw = aw # the Artisan application window
+        self.setProperty('modernDialog', True)
+        self.setProperty('modernDialogRole', self.__class__.__name__)
 
         # IMPORTANT NOTE: if dialog items have to be access after it has been closed, this Qt.WidgetAttribute.WA_DeleteOnClose attribute
         # has to be set to False explicitly in its initializer (like in comportDlg) to avoid the early GC and one might

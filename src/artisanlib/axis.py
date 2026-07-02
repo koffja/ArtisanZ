@@ -36,6 +36,7 @@ if TYPE_CHECKING:
 class WindowsDlg(ArtisanDialog):
     def __init__(self, parent:'QWidget', aw:'ApplicationWindow') -> None:
         super().__init__(parent, aw)
+        self.setProperty('modernDialogRole', 'axes')
 
         # remember previous original settings
 

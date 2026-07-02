@@ -8,6 +8,7 @@ from typing import Literal
 
 type RendererStability = Literal['stable', 'experimental']
 type RendererSurface = Literal['matplotlib-axis', 'pyqtgraph-plot']
+type PluginCategory = Literal['renderer', 'report', 'analyzer', 'filter', 'profile-comparison']
 
 REQUIRED_RENDERER_METHODS: tuple[str, ...] = (
     'set_snapshot',
@@ -23,7 +24,8 @@ class RendererPluginSpec:
     label: str
     description: str
     class_path: str
-    surface: RendererSurface
+    surface: RendererSurface | None = None
+    category: PluginCategory = 'renderer'
     dependencies: tuple[str, ...] = ()
     stability: RendererStability = 'experimental'
 
@@ -48,8 +50,14 @@ class RendererPluginRegistry:
         except KeyError as exc:
             raise KeyError(f'unknown renderer plugin: {renderer_id}') from exc
 
-    def plugins(self, *, include_unavailable: bool = True) -> tuple[RendererPluginSpec, ...]:
+    def plugins(
+            self,
+            *,
+            category: PluginCategory | None = None,
+            include_unavailable: bool = True) -> tuple[RendererPluginSpec, ...]:
         plugins = tuple(self._plugins[renderer_id] for renderer_id in sorted(self._plugins))
+        if category is not None:
+            plugins = tuple(plugin for plugin in plugins if plugin.category == category)
         if include_unavailable:
             return plugins
         return tuple(plugin for plugin in plugins if plugin.is_available())
@@ -86,6 +94,10 @@ def create_default_renderer_registry() -> RendererPluginRegistry:
 
 
 def load_renderer_class(plugin: RendererPluginSpec) -> type[object]:
+    if plugin.category != 'renderer':
+        raise TypeError(f'plugin is not a renderer: {plugin.renderer_id}')
+    if plugin.surface is None:
+        raise TypeError(f'renderer plugin is missing a render surface: {plugin.renderer_id}')
     module_name, _, class_name = plugin.class_path.rpartition('.')
     if not module_name or not class_name:
         raise ValueError(f'invalid renderer class path: {plugin.class_path}')
@@ -113,6 +125,7 @@ def _module_available(module_name: str) -> bool:
 __all__ = [
     'BUILTIN_RENDERER_PLUGINS',
     'REQUIRED_RENDERER_METHODS',
+    'PluginCategory',
     'RendererPluginRegistry',
     'RendererPluginSpec',
     'RendererStability',

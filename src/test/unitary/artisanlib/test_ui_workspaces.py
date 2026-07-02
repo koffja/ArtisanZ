@@ -415,7 +415,28 @@ def test_all_workspace_specs_have_stable_labels_and_primary_areas() -> None:
 
     assert tuple(spec.mode for spec in specs) == tuple(workspaces.WorkspaceMode)
     assert all(spec.label_key for spec in specs)
+    assert all(spec.action_hint_key for spec in specs)
     assert all(spec.primary_area in spec.visible_areas for spec in specs)
+
+
+def test_workspace_action_hints_are_stable_per_mode() -> None:
+    workspaces = workspace_module()
+
+    assert workspaces.workspace_action_hint(workspaces.WorkspaceMode.ROAST_CONTROL) == (
+        'Monitor, record, and mark the roast.'
+    )
+    assert workspaces.workspace_action_hint(workspaces.WorkspaceMode.QC_ANALYSIS) == (
+        'Compare curves and review roast quality.'
+    )
+    assert workspaces.workspace_action_hint(workspaces.WorkspaceMode.DEVICE_SETUP) == (
+        'Configure machines, devices, and alarms.'
+    )
+    assert workspaces.workspace_action_hint(workspaces.WorkspaceMode.PRODUCTION) == (
+        'Run batches with reduced controls.'
+    )
+    assert workspaces.workspace_action_hint(workspaces.WorkspaceMode.EXPERT) == (
+        'Access every control and diagnostic.'
+    )
 
 
 def test_application_window_set_ui_mode_syncs_workspace_and_toolbar_policy() -> None:

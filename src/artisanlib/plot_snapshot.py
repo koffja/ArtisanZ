@@ -6,6 +6,8 @@ from typing import Literal, Protocol
 
 YAxisName = Literal['temperature', 'ror']
 EventMarkerKind = Literal['main', 'special', 'background']
+GuideOrientation = Literal['vertical', 'horizontal']
+GuideKind = Literal['auc', 'bbp', 'charge_target', 'time', 'custom']
 
 
 @dataclass(frozen=True, slots=True)
@@ -24,6 +26,31 @@ class EventMarkerSnapshot:
     value: float | None = None
     kind: EventMarkerKind = 'special'
     y_position: float | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class EventValueSnapshot:
+    time: float
+    value: float
+    event_type: int
+    color: str
+    label: str = ''
+    kind: EventMarkerKind = 'special'
+    baseline: float = 0.0
+    opacity: float = 0.55
+
+
+@dataclass(frozen=True, slots=True)
+class GuideLineSnapshot:
+    position: float
+    label: str
+    color: str
+    orientation: GuideOrientation = 'vertical'
+    y_axis: YAxisName = 'temperature'
+    line_style: str = '--'
+    line_width: float = 1.0
+    opacity: float = 0.55
+    kind: GuideKind = 'custom'
 
 
 @dataclass(frozen=True, slots=True)
@@ -92,7 +119,9 @@ class RoastPlotSnapshot:
     time_axis: AxisSnapshot
     ror_axis: AxisSnapshot | None = None
     events: tuple[EventMarkerSnapshot, ...] = ()
+    event_values: tuple[EventValueSnapshot, ...] = ()
     phase_bands: tuple[PhaseBandSnapshot, ...] = ()
+    guides: tuple[GuideLineSnapshot, ...] = ()
 
     def visible_curves(self) -> tuple[CurveSnapshot, ...]:
         return tuple(curve for curve in self.curves if curve.visible)
@@ -124,6 +153,10 @@ __all__ = [
     'CurveSnapshot',
     'EventMarkerKind',
     'EventMarkerSnapshot',
+    'EventValueSnapshot',
+    'GuideKind',
+    'GuideLineSnapshot',
+    'GuideOrientation',
     'LivePlotRenderer',
     'PhaseBandSnapshot',
     'RendererViewState',
