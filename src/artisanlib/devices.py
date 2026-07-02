@@ -51,6 +51,7 @@ from PyQt6.QtWidgets import (QApplication, QWidget, QCheckBox, QVBoxLayout, QHBo
 class DeviceAssignmentDlg(ArtisanResizeablDialog):
     def __init__(self, parent:QWidget, aw:'ApplicationWindow', activeTab:int = 0) -> None:
         super().__init__(parent,aw)
+        self.setProperty('modernDialogRole', 'devices')
         self.activeTab = activeTab
         self.setWindowTitle(QApplication.translate('Form Caption','Device Assignment'))
         self.setModal(True)

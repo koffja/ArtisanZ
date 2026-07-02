@@ -4,6 +4,8 @@ from dataclasses import dataclass
 import os
 from typing import Any
 
+_DENSE_DIALOG_ROLES = {'devices', 'roast_properties'}
+
 
 @dataclass(frozen=True)
 class ModernTheme:
@@ -48,6 +50,10 @@ def apply_modern_dialog_polish(dialog: object) -> None:
         return
 
     property_setter('modernDialogPolished', True)
+    dialog_role = str(property_getter('modernDialogRole') or '')
+    dense_dialog = dialog_role in _DENSE_DIALOG_ROLES
+    if dense_dialog:
+        property_setter('modernDenseDialog', True)
 
     root_layout = getattr(dialog, 'layout', lambda: None)()
     if isinstance(root_layout, QLayout):
@@ -81,6 +87,8 @@ def apply_modern_dialog_polish(dialog: object) -> None:
         _refresh_widget_style(scroll_area)
         _refresh_widget_style(viewport)
         if isinstance(scroll_area, QTableView):
+            if dense_dialog:
+                _polish_dense_dialog_table(scroll_area)
             scroll_area.setAlternatingRowColors(True)
             horizontal_header = scroll_area.horizontalHeader()
             vertical_header = scroll_area.verticalHeader()
@@ -142,6 +150,17 @@ def _polish_dialog_button(button_box: Any, button: Any) -> None:
     elif standard_button in secondary_buttons:
         button.setProperty('modernDialogSecondaryButton', True)
     _refresh_widget_style(button)
+
+
+def _polish_dense_dialog_table(table_view: Any) -> None:
+    table_view.setProperty('modernDenseTable', True)
+    horizontal_header = table_view.horizontalHeader()
+    vertical_header = table_view.verticalHeader()
+    for header in (horizontal_header, vertical_header):
+        if header is not None:
+            header.setProperty('modernDenseHeader', True)
+            _refresh_widget_style(header)
+    _refresh_widget_style(table_view)
 
 
 def _find_children(parent: object, widget_type: type[Any]) -> list[Any]:
@@ -332,6 +351,27 @@ def modern_application_stylesheet(theme: ModernTheme | None = None) -> str:
         }}
         QDialog[modernDialogRole="alarms"] QTabBar::tab:selected {{
             color: {t.accent};
+        }}
+        QDialog[modernDialogRole="devices"] QTabBar::tab:selected {{
+            color: {t.primary};
+        }}
+        QDialog[modernDialogRole="roast_properties"] QTabBar::tab:selected {{
+            color: {t.accent};
+        }}
+        QDialog[modernDenseDialog="true"] QTableWidget,
+        QDialog[modernDenseDialog="true"] QTableView {{
+            background-color: {t.surface};
+            alternate-background-color: {t.surface_alt};
+            border-color: {t.border};
+        }}
+        QDialog[modernDenseDialog="true"] QTableView::item {{
+            padding: 3px 6px;
+        }}
+        QDialog[modernDenseDialog="true"] QHeaderView::section {{
+            background-color: {t.surface_muted};
+            color: {t.text_muted};
+            padding: 6px 8px;
+            font-weight: 600;
         }}
         QMessageBox, QFileDialog {{
             background-color: {t.window};

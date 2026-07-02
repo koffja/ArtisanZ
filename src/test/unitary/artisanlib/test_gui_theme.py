@@ -62,6 +62,9 @@ def test_modern_application_stylesheet_contains_core_surfaces() -> None:
     assert 'QDialog[modernDialogRole="axes"] QTabBar::tab:selected' in stylesheet
     assert 'QDialog[modernDialogRole="events"] QTabBar::tab:selected' in stylesheet
     assert 'QDialog[modernDialogRole="alarms"] QTabBar::tab:selected' in stylesheet
+    assert 'QDialog[modernDialogRole="devices"] QTabBar::tab:selected' in stylesheet
+    assert 'QDialog[modernDialogRole="roast_properties"] QTabBar::tab:selected' in stylesheet
+    assert 'QDialog[modernDenseDialog="true"] QTableView::item' in stylesheet
 
 
 def test_modern_application_stylesheet_uses_supplied_theme() -> None:
@@ -153,6 +156,25 @@ def test_apply_modern_dialog_polish_preserves_table_cell_layouts(qapp: QApplicat
     assert cell_layout.contentsMargins().left() == 0
     assert cell_layout.contentsMargins().top() == 0
     assert cell_layout.spacing() == 0
+
+
+def test_apply_modern_dialog_polish_marks_dense_dialog_tables(qapp: QApplication) -> None: # noqa: ARG001
+    dialog = QDialog()
+    dialog.setProperty('modernDialog', True)
+    dialog.setProperty('modernDialogRole', 'devices')
+    layout = QVBoxLayout()
+    table_widget = QTableWidget(1, 1)
+    table_widget.setShowGrid(True)
+    layout.addWidget(table_widget)
+    dialog.setLayout(layout)
+
+    apply_modern_dialog_polish(dialog)
+
+    assert dialog.property('modernDenseDialog') is True
+    assert table_widget.property('modernDenseTable') is True
+    assert table_widget.horizontalHeader().property('modernDenseHeader') is True
+    assert table_widget.verticalHeader().property('modernDenseHeader') is True
+    assert table_widget.showGrid()
 
 
 def test_apply_modern_dialog_polish_respects_legacy_ui_flag(

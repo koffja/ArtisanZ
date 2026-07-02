@@ -705,6 +705,7 @@ class editGraphDlg(ArtisanResizeablDialog):
     # and the flags "Open on CHARGE" and "Open on DROP" are not set
     def __init__(self, parent:QWidget, aw:'ApplicationWindow', activeTab:int = 0, start_recording_on_exit:bool = False) -> None:
         super().__init__(parent, aw)
+        self.setProperty('modernDialogRole', 'roast_properties')
 
         self.start_recording_on_exit = start_recording_on_exit
 
