@@ -312,9 +312,13 @@ class FakeWorkspaceStatusWindow:
     def __init__(self) -> None:
         self.workspaceStatusDock = FakeWorkspaceStatusDock()
         self.ensure_calls = 0
+        self.sync_calls = 0
 
     def ensureWorkspaceStatusWidget(self) -> None:
         self.ensure_calls += 1
+
+    def syncWorkspaceStatusModel(self) -> None:
+        self.sync_calls += 1
 
 
 class FakeGuiPerfScreenshotWindow:
@@ -597,6 +601,17 @@ def test_application_window_toggle_workspace_status_dock() -> None:
     assert window.ensure_calls == 1
     assert window.workspaceStatusDock.visible == [True, False]
     assert window.workspaceStatusDock.raise_count == 1
+
+
+def test_application_window_workspace_status_dock_visibility_syncs_lazy_widget() -> None:
+    main = main_module()
+    window = FakeWorkspaceStatusWindow()
+
+    main.ApplicationWindow.syncWorkspaceStatusDockVisibility(window, True)
+    main.ApplicationWindow.syncWorkspaceStatusDockVisibility(window, False)
+
+    assert window.ensure_calls == 1
+    assert window.sync_calls == 1
 
 
 def test_gui_perf_screenshot_prep_switches_workspace_and_opens_status_dock(

@@ -4317,6 +4317,7 @@ class ApplicationWindow(QMainWindow):
             QDockWidget.DockWidgetFeature.DockWidgetMovable |
             QDockWidget.DockWidgetFeature.DockWidgetFloatable)
         self.workspaceStatusDock.visibilityChanged.connect(self.workspaceStatusAction.setChecked)
+        self.workspaceStatusDock.visibilityChanged.connect(self.syncWorkspaceStatusDockVisibility)
         self.workspaceStatusDock.setVisible(False)
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.workspaceStatusDock)
 
@@ -4638,6 +4639,12 @@ class ApplicationWindow(QMainWindow):
             if hasattr(self.workspaceStatusModel, 'set_renderer_selection'):
                 self.workspaceStatusModel.set_renderer_selection( # type: ignore[attr-defined]
                     getattr(getattr(self, 'qmc', None), 'plot_renderer_selection', None))
+
+    @pyqtSlot(bool)
+    def syncWorkspaceStatusDockVisibility(self, visible:bool) -> None:
+        if visible:
+            self.ensureWorkspaceStatusWidget()
+            self.syncWorkspaceStatusModel()
 
     @pyqtSlot()
     @pyqtSlot(bool)
