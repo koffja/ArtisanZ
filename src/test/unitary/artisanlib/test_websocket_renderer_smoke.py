@@ -7,6 +7,7 @@ import pytest
 from dev_simulator.ws_server import ServerState
 
 from artisanlib.plot_snapshot import AreaFillSnapshot
+from artisanlib.plot_pyqtgraph_export import export_pyqtgraph_snapshot_png
 from artisanlib.websocket_renderer_smoke import (
     WebSocketPushEvent,
     WebSocketTemperatureSample,
@@ -82,6 +83,50 @@ def test_build_snapshot_from_websocket_stream_adds_auc_area_after_drop() -> None
     )
 
 
+def test_export_pyqtgraph_snapshot_png_writes_renderer_evidence(
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path) -> None:
+    monkeypatch.setenv('QT_QPA_PLATFORM', 'offscreen')
+    samples = (
+        WebSocketTemperatureSample(time_s=0.0, bt=180.0, et=190.0),
+        WebSocketTemperatureSample(time_s=60.0, bt=130.0, et=180.0),
+        WebSocketTemperatureSample(time_s=120.0, bt=165.0, et=190.0),
+        WebSocketTemperatureSample(time_s=180.0, bt=190.0, et=205.0),
+    )
+    events = (
+        WebSocketPushEvent(time_s=0.0, label='CHARGE', event_type=100, color='#5E6B6E', kind='main'),
+        WebSocketPushEvent(time_s=60.0, label='Power', event_type=1, color='#B4685C', value=72.0),
+        WebSocketPushEvent(time_s=180.0, label='DROP', event_type=106, color='#5E6B6E', kind='main'),
+    )
+    snapshot = build_snapshot_from_websocket_stream(samples, events)
+    output_path = tmp_path / 'snapshot.png'
+
+    result = export_pyqtgraph_snapshot_png(
+        snapshot,
+        output_path,
+        width=640,
+        height=360,
+        use_opengl=False,
+        pixel_sample_stride=8,
+    )
+
+    assert result.path == str(output_path)
+    assert output_path.exists()
+    assert result.byte_count == output_path.stat().st_size
+    assert result.byte_count > 0
+    assert result.width > 0
+    assert result.height > 0
+    assert result.sampled_pixel_count > 0
+    assert result.sampled_non_background_pixel_count > 0
+    assert result.temperature_item_count >= 4
+    assert result.ror_item_count >= 2
+    assert result.renderer_event_item_count >= 3
+    assert result.renderer_event_value_item_count == 1
+    assert result.renderer_guide_item_count == 3
+    assert result.renderer_area_item_count == 1
+    assert result.view_state.time_axis.maximum > result.view_state.time_axis.minimum
+
+
 def test_websocket_pyqtgraph_validation_runs_with_virtual_data(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv('QT_QPA_PLATFORM', 'offscreen')
 
@@ -128,5 +173,13 @@ def test_websocket_pyqtgraph_validation_runs_event_heavy_screenshot(
     assert result.area_count == 1
     assert result.renderer_area_item_count == 1
     assert result.screenshot_file == str(screenshot_file)
+    assert result.screenshot_width is not None and result.screenshot_width > 0
+    assert result.screenshot_height is not None and result.screenshot_height > 0
+    assert result.screenshot_byte_count is not None and result.screenshot_byte_count > 0
+    assert result.screenshot_sampled_pixel_count is not None and result.screenshot_sampled_pixel_count > 0
+    assert (
+        result.screenshot_sampled_non_background_pixel_count is not None
+        and result.screenshot_sampled_non_background_pixel_count > 0
+    )
     assert screenshot_file.exists()
     assert screenshot_file.stat().st_size > 0

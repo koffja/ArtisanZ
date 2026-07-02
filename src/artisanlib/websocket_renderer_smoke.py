@@ -7,13 +7,13 @@ import math
 import socket
 import time
 from dataclasses import asdict, dataclass
-from pathlib import Path
 from typing import Any
 
 from dev_simulator.event_scheduler import EventScheduler
 from dev_simulator.profile import RoastSpec, generate_profile
 from dev_simulator.ws_server import AsyncServer
 
+from artisanlib.plot_pyqtgraph_export import PyQtGraphWidgetPngResult, save_pyqtgraph_widget_png
 from artisanlib.plot_pyqtgraph_widget import create_pyqtgraph_plot_target
 from artisanlib.plot_snapshot import (
     AreaFillSnapshot,
@@ -75,6 +75,11 @@ class WebSocketRendererSmokeResult:
     avg_update_ms: float
     view_state: RendererViewState
     screenshot_file: str | None = None
+    screenshot_width: int | None = None
+    screenshot_height: int | None = None
+    screenshot_byte_count: int | None = None
+    screenshot_sampled_pixel_count: int | None = None
+    screenshot_sampled_non_background_pixel_count: int | None = None
 
 
 def run_websocket_pyqtgraph_validation(
@@ -183,6 +188,7 @@ def render_websocket_stream_with_pyqtgraph(
     live_update_count = 0
     previous_event_count = -1
     final_snapshot = build_snapshot_from_websocket_stream(capture.samples, capture.events)
+    screenshot_result: PyQtGraphWidgetPngResult | None = None
 
     try:
         for index in range(1, len(capture.samples) + 1):
@@ -207,7 +213,11 @@ def render_websocket_stream_with_pyqtgraph(
         target.renderer.set_snapshot(final_snapshot)
         application.processEvents()
         if screenshot_file is not None:
-            _save_widget_screenshot(target.widget, screenshot_file, application)
+            screenshot_result = save_pyqtgraph_widget_png(
+                target.widget,
+                screenshot_file,
+                application=application,
+            )
         return WebSocketRendererSmokeResult(
             sample_count=len(capture.samples),
             data_message_count=capture.data_message_count,
@@ -228,6 +238,13 @@ def render_websocket_stream_with_pyqtgraph(
             avg_update_ms=sum(update_durations_ms) / len(update_durations_ms),
             view_state=target.renderer.export_view_state(),
             screenshot_file=screenshot_file,
+            screenshot_width=None if screenshot_result is None else screenshot_result.width,
+            screenshot_height=None if screenshot_result is None else screenshot_result.height,
+            screenshot_byte_count=None if screenshot_result is None else screenshot_result.byte_count,
+            screenshot_sampled_pixel_count=None if screenshot_result is None else screenshot_result.sampled_pixel_count,
+            screenshot_sampled_non_background_pixel_count=(
+                None if screenshot_result is None else screenshot_result.sampled_non_background_pixel_count
+            ),
         )
     finally:
         target.close()
@@ -496,29 +513,6 @@ def _unused_tcp_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.bind(('127.0.0.1', 0))
         return int(sock.getsockname()[1])
-
-
-def _save_widget_screenshot(widget: object, screenshot_file: str, application: object) -> None:
-    path = Path(screenshot_file)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    _call_if_available(widget, 'resize', 1280, 720)
-    _call_if_available(widget, 'show')
-    process_events = getattr(application, 'processEvents', None)
-    if callable(process_events):
-        process_events()
-    grab = getattr(widget, 'grab', None)
-    if not callable(grab):
-        raise RuntimeError('PyQtGraph widget does not support grab() for screenshot capture')
-    pixmap = grab()
-    save = getattr(pixmap, 'save', None)
-    if not callable(save) or not save(str(path)):
-        raise RuntimeError(f'Failed to save PyQtGraph screenshot to {path}')
-
-
-def _call_if_available(target: object, method_name: str, *args: object, **kwargs: object) -> None:
-    method = getattr(target, method_name, None)
-    if callable(method):
-        method(*args, **kwargs)
 
 
 __all__ = [
