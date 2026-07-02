@@ -2418,6 +2418,13 @@ class ApplicationWindow(QMainWindow):
         fullsizeAction.triggered.connect(self.resizeImg_0_1)
         self.saveGraphMenu.addAction(fullsizeAction)
 
+        pyqtgraphPNGAction = QAction(QApplication.translate('Menu', 'PyQtGraph PNG...'), self)
+        pyqtgraphPNGAction.setToolTip(QApplication.translate(
+            'Tooltip',
+            'Save image using the PyQtGraph renderer to a png format'))
+        pyqtgraphPNGAction.triggered.connect(self.savePyQtGraphPNG)
+        self.saveGraphMenu.addAction(pyqtgraphPNGAction)
+
         JPEGAction = QAction('JPEG...',self)
         JPEGAction.triggered.connect(self.resizeImg_0_1_JPEG)
         self.saveGraphMenu.addAction(JPEGAction)
@@ -26651,6 +26658,36 @@ class ApplicationWindow(QMainWindow):
     @pyqtSlot(bool)
     def resizeImg_0_1_JPEG(self, _:bool = False) -> None:
         self.resizeImgToSize(0,0,'JPEG')
+
+    @pyqtSlot()
+    @pyqtSlot(bool)
+    def savePyQtGraphPNG(self, _:bool = False) -> None:
+        try:
+            from artisanlib.plot_user_export import ( # pylint: disable=import-outside-toplevel
+                export_current_graph_pyqtgraph_png,
+                normalize_png_export_path,
+            )
+
+            filename = self.ArtisanSaveFileDialog(
+                msg=QApplication.translate('Message', 'Save Graph as PyQtGraph PNG'),
+                ext='*.png')
+            if not filename:
+                return
+            result = export_current_graph_pyqtgraph_png(
+                self.qmc,
+                normalize_png_export_path(filename),
+                use_opengl=False,
+            )
+            self.sendmessage(QApplication.translate('Message','{0}  size({1},{2}) saved').format(
+                str(result.path),
+                str(result.width),
+                str(result.height)))
+        except OSError as ex:
+            self.qmc.adderror((QApplication.translate('Error Message','IO Error:') + ' savePyQtGraphPNG() {0}').format(str(ex)))
+        except Exception as e: # pylint: disable=broad-except
+            _log.exception(e)
+            _a, _b, exc_tb = sys.exc_info()
+            self.qmc.adderror((QApplication.translate('Error Message','Exception:') + ' savePyQtGraphPNG() {0}').format(str(e)),getattr(exc_tb, 'tb_lineno', '?'))
 
     @pyqtSlot()
     @pyqtSlot(bool)

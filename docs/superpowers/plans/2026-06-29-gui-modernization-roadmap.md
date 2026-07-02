@@ -45,6 +45,7 @@ Important observations from the code review:
 | 1.14 | Export Parity Smoke | Closed: Matplotlib/PyQtGraph snapshot export parity evidence | Export parity CLI, Matplotlib overlay support, WebSocket event-heavy parity JSON | Report/export replacement has comparable snapshot evidence before UI wiring |
 | 1.15 | Saved Profile Export Parity | Closed: real `.alog` profile export parity evidence | Saved profile snapshot adapter and `--profile-file` parity CLI | Export parity is proven on real saved profile data before user-facing report/export wiring |
 | 1.16 | Saved Profile Export Matrix | Closed: four-profile `.alog` matrix plus WebSocket regression evidence | Profile matrix CLI, aggregate parity summary, default sanity fixtures | Report/export replacement evidence covers multiple saved profiles, not a single fixture |
+| 1.17 | Opt-In PyQtGraph PNG Export Action | Closed: user-visible Save Graph action added | `File > Save Graph > PyQtGraph PNG...` plus user-export helper | Users can manually export the modern renderer without replacing Matplotlib report/export paths |
 | 2 | Plot Renderer Boundary and PyQtGraph POC | Guarded PyQtGraph main-splitter embed implemented and benchmarked in offscreen/native-window simulator smokes | Read-only plot snapshot model, Matplotlib adapter, PyQtGraph live adapter prototype | POC is benchmarkable before any live renderer swap |
 | 3 | Sampling Post-Processing Decoupling | Pure helper extraction surface audited; remaining work is orchestration/renderer payload | Pure data pipeline for filtering, RoR, PID inputs, alarm/event decisions | GUI thread consumes snapshots instead of doing heavy processing inline |
 | 4 | Main UI Information Architecture | Closed at IA/policy/status-hint layer | Scenario-oriented Roast Control, QC Analysis, Device Setup, Production, and Expert workspaces | Users can switch task modes without losing existing expert controls |
@@ -255,6 +256,18 @@ Important observations from the code review:
 **Evidence:** Matrix tests produced `6 passed`. CLI validation with `QT_QPA_PLATFORM=offscreen .venv/bin/python -m artisanlib.plot_export_parity_matrix --profile-glob 'test/sanity/data/artisan/profile*.alog' --include-websocket-regression --websocket-samples 24 --websocket-fixed-step-ms 15000 --websocket-scenario event-heavy --output-dir /tmp/artisanz-phase116-profile-matrix-final --prefix phase116-matrix --width 1280 --height 720 --dpi 100` produced `profile_count=4`, `total_sample_count=2854`, `total_event_count=74`, `total_event_value_count=58`, `minimum_phase_band_count=2`, `maximum_phase_band_count=3`, `all_view_states_match=true`, `all_view_states_within_tolerance=true`, `maximum_view_state_delta=0.0`, `all_pyqtgraph_exports_nonblank=true`, `websocket_regression_included=true`, and `websocket_view_state_matches=true`. Reviewer follow-up also verified that typoed explicit globs now fail instead of silently shrinking the matrix.
 
 **Remaining Gate:** This broadens report/export parity evidence, but the production report/export UI is still intentionally not switched. The next safe step is an opt-in user-facing PyQtGraph export action or a report/export adapter comparison against the existing Matplotlib output.
+
+## Phase 1.17: Opt-In PyQtGraph PNG Export Action
+
+**Goal:** Make the PyQtGraph export work visible to users through an opt-in menu action, without replacing the existing Matplotlib save/report/export compatibility paths.
+
+**Closed:** 2026-07-03 with `artisanlib.plot_user_export`, which builds a renderer-neutral snapshot from the current graph source, exports it through the PyQtGraph PNG renderer, normalizes PNG filenames, and uses the current graph widget size when available. `File > Save Graph` now includes `PyQtGraph PNG...` beside the existing Matplotlib-backed PDF/SVG/PNG/JPEG actions.
+
+**Tracking Plan:** `docs/superpowers/plans/2026-07-03-gui-modernization-phase-1-17-pyqtgraph-png-export-action.md`
+
+**Evidence:** Focused user-export/parity/widget tests produced `27 passed`. Offscreen saved-profile validation with `export_current_graph_pyqtgraph_png(ProfileSnapshotSource(deserialize('test/data/profile1.alog')), '/tmp/artisanz-phase117-user-export-profile1', width=1280, height=720, use_opengl=False)` produced `/tmp/artisanz-phase117-user-export-profile1.png`, `byte_count=69659`, `sampled_non_background_pixel_count=14492`, `temperature_item_count=13`, `ror_item_count=2`, `event_item_count=28`, `event_value_item_count=10`, and `area_item_count=1`.
+
+**Remaining Gate:** This is an opt-in user action only. Matplotlib remains the default report/export compatibility path until report-specific output parity is designed and compared.
 
 ## Phase 2: Plot Renderer Boundary and PyQtGraph POC
 
