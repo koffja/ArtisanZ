@@ -28419,6 +28419,9 @@ def _schedule_gui_perf_autorun(appWindow:'ApplicationWindow') -> None:
 
     mode = os.environ.get('ARTISANZ_GUI_PERF_AUTORUN_MODE', 'redraw').strip().lower()
     _write_gui_perf_autorun_status(f'mode={mode}')
+    if mode in {'websocket', 'websocket-recording', 'ws-recording'}:
+        _schedule_gui_perf_websocket_recording_autorun(appWindow)
+        return
     if mode in {'simulator', 'simulator-recording', 'recording'}:
         _schedule_gui_perf_simulator_recording_autorun(appWindow)
         return
@@ -28518,6 +28521,170 @@ def _start_gui_perf_profile_simulator(appWindow:'ApplicationWindow') -> bool:
     appWindow.simulate(False)
     _write_gui_perf_autorun_status(f'simulator:curFile={appWindow.curFile} active={appWindow.simulator is not None}')
     return appWindow.simulator is not None
+
+
+def _schedule_gui_perf_websocket_recording_autorun(appWindow:'ApplicationWindow') -> None:
+    duration_ms = _gui_perf_env_int('ARTISANZ_GUI_PERF_AUTORUN_DURATION_MS', 16000)
+    start_delay_ms = _gui_perf_env_int('ARTISANZ_GUI_PERF_AUTORUN_START_MS', 1200)
+    stop_delay_ms = _gui_perf_env_int('ARTISANZ_GUI_PERF_AUTORUN_STOP_MS', 1000)
+    monitor_close_timeout_ms = _gui_perf_env_int('ARTISANZ_GUI_PERF_AUTORUN_MONITOR_CLOSE_TIMEOUT_MS', 5000)
+    state: dict[str, Any] = {}
+
+    def finish_after_monitor_close() -> None:
+        finish_websocket_autorun()
+
+    def finish_websocket_autorun() -> None:
+        if state.get('restored'):
+            return
+        state['restored'] = True
+        if state.get('monitor_close_connected'):
+            try:
+                appWindow.qmc.monitorClosedDown.disconnect(finish_after_monitor_close)
+            except Exception: # pylint: disable=broad-except
+                pass
+        _restore_gui_perf_websocket_state(appWindow, state)
+        QTimer.singleShot(stop_delay_ms, lambda: _finish_gui_perf_autorun(appWindow))
+
+    def abort_websocket_autorun(reason:str) -> None:
+        _write_gui_perf_autorun_status(reason)
+        finish_websocket_autorun()
+
+    def start_recording() -> None:
+        try:
+            _write_gui_perf_autorun_status('websocket-recording:start')
+            if not _start_gui_perf_websocket_simulator(appWindow, state):
+                abort_websocket_autorun('websocket-recording:start-failed')
+                return
+            QTimer.singleShot(450, lambda: appWindow.qmc.ToggleRecorder(False))
+            QTimer.singleShot(duration_ms, stop_recording)
+            _write_gui_perf_autorun_status('websocket-recording:scheduled')
+        except Exception as e: # pylint: disable=broad-except
+            _log.exception(e)
+            abort_websocket_autorun(f'websocket-recording:start-exception:{e!r}')
+
+    def stop_recording() -> None:
+        try:
+            _write_gui_perf_autorun_status(
+                'websocket-recording:stop '
+                f'flagon={appWindow.qmc.flagon} flagstart={appWindow.qmc.flagstart} '
+                f'samples={len(appWindow.qmc.timex)} timeindex={appWindow.qmc.timeindex}')
+            _save_gui_perf_autorun_screenshot(appWindow)
+            if appWindow.qmc.flagon:
+                appWindow.qmc.monitorClosedDown.connect(finish_after_monitor_close)
+                state['monitor_close_connected'] = True
+                appWindow.qmc.ToggleMonitor(False)
+                QTimer.singleShot(monitor_close_timeout_ms, finish_after_monitor_close)
+            else:
+                finish_after_monitor_close()
+        except Exception as e: # pylint: disable=broad-except
+            _log.exception(e)
+            abort_websocket_autorun(f'websocket-recording:stop-exception:{e!r}')
+
+    QTimer.singleShot(start_delay_ms, start_recording)
+
+
+def _start_gui_perf_websocket_simulator(appWindow:'ApplicationWindow', state:dict[str, Any]) -> bool:
+    try:
+        from dev_simulator.threaded_ws_server import build_threaded_artisan_simulator
+    except Exception as e: # pylint: disable=broad-except
+        _log.exception(e)
+        _write_gui_perf_autorun_status(f'websocket-recording:import-exception:{e!r}')
+        return False
+
+    host = os.environ.get('ARTISANZ_GUI_PERF_AUTORUN_WEBSOCKET_HOST', '127.0.0.1').strip() or '127.0.0.1'
+    port = _gui_perf_env_int('ARTISANZ_GUI_PERF_AUTORUN_WEBSOCKET_PORT', 0, minimum=0)
+    path = os.environ.get('ARTISANZ_GUI_PERF_AUTORUN_WEBSOCKET_PATH', 'WebSocket').strip().strip('/') or 'WebSocket'
+    sample_delay_ms = _gui_perf_env_int('ARTISANZ_GUI_PERF_AUTORUN_SAMPLE_DELAY_MS', 500, minimum=100)
+    fixed_step_ms = float(_gui_perf_env_int('ARTISANZ_GUI_PERF_AUTORUN_WEBSOCKET_FIXED_STEP_MS', 30000))
+
+    try:
+        server = build_threaded_artisan_simulator(
+            host=host,
+            port=port,
+            path=path,
+            fixed_step_ms=fixed_step_ms,
+            noise_model='none',
+            noise_std=0.0,
+        )
+        server.start()
+        state['server'] = server
+    except Exception as e: # pylint: disable=broad-except
+        _log.exception(e)
+        _write_gui_perf_autorun_status(f'websocket-recording:server-exception:{e!r}')
+        return False
+
+    state['qmc_device'] = appWindow.qmc.device
+    state['qmc_delay'] = appWindow.qmc.delay
+    state['ws_host'] = appWindow.ws.host
+    state['ws_port'] = appWindow.ws.port
+    state['ws_path'] = appWindow.ws.path
+    state['ws_compression'] = appWindow.ws.compression
+    state['ws_connect_timeout'] = appWindow.ws.connect_timeout
+    state['ws_request_timeout'] = appWindow.ws.request_timeout
+    state['ws_request_data_command'] = appWindow.ws.request_data_command
+    state['ws_start_on_charge'] = appWindow.ws.STARTonCHARGE
+    state['ws_off_on_drop'] = appWindow.ws.OFFonDROP
+    state['ws_channel_requests'] = list(appWindow.ws.channel_requests)
+    state['ws_channel_nodes'] = list(appWindow.ws.channel_nodes)
+    state['ws_channel_modes'] = list(appWindow.ws.channel_modes)
+    state['qmc_flag_keep_on'] = appWindow.qmc.flagKeepON
+    state['plus_beans_reminder_on_start'] = appWindow.qmc.plus_beans_reminder_on_start
+
+    appWindow.qmc.device = 111
+    appWindow.qmc.delay = sample_delay_ms
+    appWindow.qmc.flagKeepON = False
+    appWindow.qmc.plus_beans_reminder_on_start = False
+    appWindow.ws.host = server.server.host
+    appWindow.ws.port = server.server.port
+    appWindow.ws.path = server.server.path
+    appWindow.ws.compression = False
+    appWindow.ws.connect_timeout = 2.0
+    appWindow.ws.request_timeout = 1.5
+    appWindow.ws.request_data_command = 'getData'
+    appWindow.ws.STARTonCHARGE = False
+    appWindow.ws.OFFonDROP = False
+    appWindow.ws.channel_requests = [''] * appWindow.ws.channels
+    appWindow.ws.channel_nodes = ['BT', 'ET'] + [''] * max(0, appWindow.ws.channels - 2)
+    appWindow.ws.channel_modes = [1, 1] + [0] * max(0, appWindow.ws.channels - 2)
+    appWindow.qmc.generateNoneTempHints()
+
+    _write_gui_perf_autorun_status(
+        'websocket-recording:endpoint='
+        f'ws://{server.server.host}:{server.server.port}/{server.server.path} '
+        f'sample_delay_ms={sample_delay_ms} fixed_step_ms={fixed_step_ms:.0f}')
+    return True
+
+
+def _restore_gui_perf_websocket_state(appWindow:'ApplicationWindow', state:dict[str, Any]) -> None:
+    server = state.get('server')
+    try:
+        if server is not None:
+            server.stop()
+    except Exception as e: # pylint: disable=broad-except
+        _log.exception(e)
+        _write_gui_perf_autorun_status(f'websocket-recording:server-stop-exception:{e!r}')
+
+    if 'qmc_device' not in state:
+        return
+
+    appWindow.qmc.device = cast(int, state['qmc_device'])
+    appWindow.qmc.delay = cast(int, state['qmc_delay'])
+    appWindow.ws.host = cast(str, state['ws_host'])
+    appWindow.ws.port = cast(int, state['ws_port'])
+    appWindow.ws.path = cast(str, state['ws_path'])
+    appWindow.ws.compression = cast(bool, state['ws_compression'])
+    appWindow.ws.connect_timeout = cast(float, state['ws_connect_timeout'])
+    appWindow.ws.request_timeout = cast(float, state['ws_request_timeout'])
+    appWindow.ws.request_data_command = cast(str, state['ws_request_data_command'])
+    appWindow.ws.STARTonCHARGE = cast(bool, state['ws_start_on_charge'])
+    appWindow.ws.OFFonDROP = cast(bool, state['ws_off_on_drop'])
+    appWindow.ws.channel_requests = cast(list[str], state['ws_channel_requests'])
+    appWindow.ws.channel_nodes = cast(list[str], state['ws_channel_nodes'])
+    appWindow.ws.channel_modes = cast(list[int], state['ws_channel_modes'])
+    appWindow.qmc.flagKeepON = cast(bool, state['qmc_flag_keep_on'])
+    appWindow.qmc.plus_beans_reminder_on_start = cast(bool, state['plus_beans_reminder_on_start'])
+    appWindow.qmc.generateNoneTempHints()
+    _write_gui_perf_autorun_status('websocket-recording:state-restored')
 
 
 def _finish_gui_perf_autorun(appWindow:'ApplicationWindow') -> None:

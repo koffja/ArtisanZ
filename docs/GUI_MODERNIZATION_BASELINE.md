@@ -130,6 +130,29 @@ QT_QPA_PLATFORM=offscreen \
 
 This starts the in-process `dev_simulator` WebSocket server, requests Artisan-compatible `getData` samples, converts the stream into `RoastPlotSnapshot` frames, and feeds the PyQtGraph renderer. It validates live BT/ET/RoR curves plus event labels, event value rails, phase bands, and AUC/BBP/charge-target guide overlays.
 
+## WebSocket Main-Window Recording Scenario
+
+For deterministic WebSocket validation through the real Artisan main window and sampling path:
+
+```bash
+cd src
+QT_QPA_PLATFORM=offscreen \
+ARTISANZ_GUI_PERF=1 \
+ARTISANZ_GUI_PERF_AUTORUN=1 \
+ARTISANZ_GUI_PERF_AUTORUN_MODE=websocket-recording \
+ARTISANZ_GUI_PERF_AUTORUN_DURATION_MS=16000 \
+ARTISANZ_GUI_PERF_AUTORUN_SAMPLE_DELAY_MS=500 \
+ARTISANZ_GUI_PERF_AUTORUN_WEBSOCKET_FIXED_STEP_MS=30000 \
+ARTISANZ_GUI_PERF_AUTORUN_STATUS_FILE=/tmp/artisanz-ws-main-status.txt \
+ARTISANZ_GUI_PERF_FILE=/tmp/artisanz-ws-main-perf.jsonl \
+ARTISANZ_GUI_PERF_SCREENSHOT_FILE=/tmp/artisanz-ws-main.png \
+.venv/bin/python artisan.py
+
+.venv/bin/python -m artisanlib.performance_report /tmp/artisanz-ws-main-perf.jsonl
+```
+
+This starts a threaded in-process `dev_simulator` WebSocket server, temporarily configures the main WebSocket device (`qmc.device == 111`) in memory, records through the normal `ToggleRecorder()` path, captures screenshot/status/performance output, and restores the original WebSocket/device settings before quitting.
+
 ## Results Template
 
 | Date | Branch | Scenario | Sampling Interval | Visible Curves | Key Metrics | Notes |
@@ -155,6 +178,7 @@ This starts the in-process `dev_simulator` WebSocket server, requests Artisan-co
 | 2026-07-02 | ArtisanZ | Phase 1.5 PyQtGraph axis/LCD follow-up profile redraw | N/A | Historical profile `profile1.alog`, default PyQtGraph renderer | `redraw max=215.606ms avg=178.485ms`; `redraw_keep_view max=200.670ms avg=169.374ms`; `updateBackground max=137.921ms avg=81.471ms`; `updategraphics max=0.008ms avg=0.003ms` | Screenshot: `/tmp/artisanz-pyqtgraph-axis-fixes.png`; PyQtGraph renders RoR on the same plot with a right axis, default time labels are minute-style, LCD cards stay fixed-width with wrapped labels, and no PyQtGraph AxisItem errors were logged after the tick-spacing fix |
 | 2026-07-02 | ArtisanZ | Phase 1.6 PyQtGraph grid/phase visual follow-up | N/A | Historical profile redraw plus explicit PyQtGraph grid/phase target screenshot | `redraw max=87.658ms avg=53.171ms`; `redraw_keep_view max=50.516ms avg=48.676ms`; `updateBackground max=30.605ms avg=24.606ms`; `updategraphics max=0.006ms avg=0.003ms` | Main-window screenshot: `/tmp/artisanz-phase16-grid-phase-v2.png`; explicit grid/phase screenshot: `/tmp/artisanz-phase16-grid-unit.png`; PyQtGraph grid now uses a dedicated overlay and default phase bands use visible Morandi colors. The profile redraw run used settings with x/y grid disabled, so the explicit target screenshot verifies grid rendering with grid enabled. |
 | 2026-07-02 | ArtisanZ | Phase 1.7 WebSocket virtual roast PyQtGraph validation | 24 WebSocket `getData` samples, fixed 15s virtual step | In-process `dev_simulator` WebSocket stream with BT/ET/RoR, 6 push events, 2 event values, 3 guide overlays | `avg_update_ms=1.1859`; `max_update_ms=4.7771`; `data_message_count=24`; `push_message_count=6`; `event_count=6`; `event_value_count=2`; `guide_count=3`; `full_snapshot_count=6`; `live_update_count=18` | Command: `QT_QPA_PLATFORM=offscreen .venv/bin/python -m artisanlib.websocket_renderer_smoke --samples 24 --fixed-step-ms 15000`; validates the default PyQtGraph renderer with real WebSocket protocol traffic instead of only static profile snapshots. |
+| 2026-07-02 | ArtisanZ | Phase 1.8 WebSocket main-window recording autorun | 500ms wall-clock sample delay, fixed 30s virtual WebSocket step | Full Artisan main window, real WebSocket device path, default PyQtGraph renderer, virtual CHARGE/DRY/FCs/FCe/SCs/DROP traffic | `redraw max=100.403ms avg=65.904ms`; `updateBackground max=71.821ms avg=27.362ms`; `updategraphics max=17.878ms avg=6.110ms`; `sample_processing max=4.160ms avg=1.601ms`; `samples=30`; `timeindex=[1, 10, 19, 22, 26, 0, 26, 0]` | Screenshot: `/tmp/artisanz-ws-main.png`; status log confirms endpoint setup, active recording, restored state, and finish. Accelerated virtual time covers roast events quickly while the visible main timer remains wall-clock time, so this proves plumbing/renderer behavior but not physical-device timing. |
 
 ## Decision Log
 
@@ -176,6 +200,8 @@ Phase 1.6 decision: the PyQtGraph grid should be drawn by a dedicated overlay ra
 Phase 1.6/4/5/6 closure decision: the 2026-07-02 closure work adds renderer-neutral event value rails and guide-line snapshots, renders those overlays in PyQtGraph, applies scoped modern dialog chrome to Axes/Curves/Events/Alarms, exposes workspace action hints in the QML status island, and adds typed plugin categories for renderer/report/analyzer/filter/profile-comparison boundaries. This is a visual/runtime and architecture-boundary closure, not a new performance baseline; Matplotlib remains the compatibility/export renderer, and real-device/OpenGL validation remains a future gate.
 
 Phase 1.7 decision: deterministic WebSocket virtual-roast validation is now available as a repeatable bridge between static renderer smokes and real-device sessions. The first 24-sample run shows the PyQtGraph renderer can consume WebSocket-derived BT/ET/RoR frames, overlay push events/event values/guides, and keep renderer update work below 5ms max in this offscreen harness. This supports continuing PyQtGraph parity and event-heavy visual QA before physical-device testing, but it is still not a substitute for hardware timing.
+
+Phase 1.8 decision: the same deterministic WebSocket stream can now drive the full Artisan main-window recording path. The autorun temporarily configures `qmc.device == 111`, channel 0/1 as `BT`/`ET`, and the generated WebSocket endpoint without persisting those settings. The first full-app run produced 30 samples, CHARGE/DRY/FCs/FCe/SCs/DROP indexes, a non-empty PyQtGraph screenshot, and performance metrics in the same short-smoke range as prior simulator runs. This closes the virtual-data plumbing gate before hardware testing; real-time physical-device sessions remain pending.
 
 ## Capture Troubleshooting
 
