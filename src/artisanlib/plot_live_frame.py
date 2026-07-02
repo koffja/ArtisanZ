@@ -3,10 +3,15 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 import math
+from typing import Literal
 
 import numpy
 
 from artisanlib.plot_snapshot import YAxisName
+from artisanlib.plot_renderer_registry import RendererSurface
+from artisanlib.plot_renderer_settings import DEFAULT_RENDERER_ID, RendererSelection
+
+type LiveFrameFallbackReason = Literal['pyqtgraph_targets_unavailable']
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,6 +59,19 @@ class LivePlotFrame:
 
     def curve_names(self) -> tuple[str, ...]:
         return tuple(curve.name for curve in self.curves)
+
+
+@dataclass(frozen=True, slots=True)
+class LiveFrameApplyResult:
+    requested_renderer_id: str
+    renderer_id: str
+    surface: RendererSurface
+    applied_curves: tuple[str, ...]
+    fallback_reason: LiveFrameFallbackReason | None = None
+
+    @property
+    def used_fallback(self) -> bool:
+        return self.fallback_reason is not None
 
 
 def apply_matplotlib_live_curve_data(line: object | None, curve: LiveCurveData) -> bool:
@@ -121,6 +139,35 @@ def apply_pyqtgraph_live_frame(
     return tuple(applied)
 
 
+def apply_selected_live_frame(
+        selection: RendererSelection,
+        frame: LivePlotFrame,
+        *,
+        matplotlib_lines: Mapping[str, object | None],
+        pyqtgraph_items: Mapping[str, object | None] | None = None) -> LiveFrameApplyResult:
+    if selection.plugin.surface == 'pyqtgraph-plot':
+        if pyqtgraph_items:
+            return LiveFrameApplyResult(
+                requested_renderer_id=selection.requested_renderer_id,
+                renderer_id=selection.renderer_id,
+                surface='pyqtgraph-plot',
+                applied_curves=apply_pyqtgraph_live_frame(pyqtgraph_items, frame),
+            )
+        return LiveFrameApplyResult(
+            requested_renderer_id=selection.requested_renderer_id,
+            renderer_id=DEFAULT_RENDERER_ID,
+            surface='matplotlib-axis',
+            applied_curves=apply_matplotlib_live_frame(matplotlib_lines, frame),
+            fallback_reason='pyqtgraph_targets_unavailable',
+        )
+    return LiveFrameApplyResult(
+        requested_renderer_id=selection.requested_renderer_id,
+        renderer_id=selection.renderer_id,
+        surface='matplotlib-axis',
+        applied_curves=apply_matplotlib_live_frame(matplotlib_lines, frame),
+    )
+
+
 def _pyqtgraph_y_values(values: tuple[float | None, ...]) -> tuple[float, ...]:
     return tuple(math.nan if value is None else value for value in values)
 
@@ -128,6 +175,8 @@ def _pyqtgraph_y_values(values: tuple[float | None, ...]) -> tuple[float, ...]:
 __all__ = [
     'LiveAxisRange',
     'LiveCurveData',
+    'LiveFrameApplyResult',
+    'LiveFrameFallbackReason',
     'LivePlotFrame',
     'apply_matplotlib_live_axis_range',
     'apply_matplotlib_live_curve_data',
@@ -135,4 +184,5 @@ __all__ = [
     'apply_matplotlib_live_frame',
     'apply_pyqtgraph_live_curve_data',
     'apply_pyqtgraph_live_frame',
+    'apply_selected_live_frame',
 ]

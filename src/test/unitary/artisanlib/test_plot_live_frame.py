@@ -16,7 +16,10 @@ from artisanlib.plot_live_frame import (
     apply_matplotlib_live_frame,
     apply_pyqtgraph_live_curve_data,
     apply_pyqtgraph_live_frame,
+    apply_selected_live_frame,
 )
+from artisanlib.plot_renderer_registry import create_default_renderer_registry
+from artisanlib.plot_renderer_settings import RendererSelection
 
 
 class FakeLine:
@@ -59,6 +62,16 @@ class FakePyQtGraphItem:
         self.x = x
         self.y = y
         self.calls += 1
+
+
+def _renderer_selection(renderer_id: str) -> RendererSelection:
+    registry = create_default_renderer_registry()
+    return RendererSelection(
+        requested_renderer_id=renderer_id,
+        renderer_id=renderer_id,
+        plugin=registry.get(renderer_id),
+        registry=registry,
+    )
 
 
 def test_live_curve_data_from_sequences_normalizes_values() -> None:
@@ -241,3 +254,68 @@ def test_apply_pyqtgraph_live_frame_updates_known_curves_only() -> None:
     assert applied == ('ET', 'BT')
     assert et_item.y == (130.0, 131.0)
     assert bt_item.y == (120.0, 121.0)
+
+
+def test_apply_selected_live_frame_uses_matplotlib_surface() -> None:
+    bt_line = FakeLine()
+    frame = LivePlotFrame(curves=(
+        LiveCurveData.from_sequences(name='BT', x=[0, 1], y=[120, 121]),
+    ))
+
+    result = apply_selected_live_frame(
+        _renderer_selection('matplotlib-snapshot'),
+        frame,
+        matplotlib_lines={'BT': bt_line},
+    )
+
+    assert result.requested_renderer_id == 'matplotlib-snapshot'
+    assert result.renderer_id == 'matplotlib-snapshot'
+    assert result.surface == 'matplotlib-axis'
+    assert result.applied_curves == ('BT',)
+    assert result.used_fallback is False
+    assert bt_line.y is not None
+    assert bt_line.y.tolist() == [120.0, 121.0]
+
+
+def test_apply_selected_live_frame_uses_pyqtgraph_surface_when_targets_exist() -> None:
+    bt_item = FakePyQtGraphItem()
+    frame = LivePlotFrame(curves=(
+        LiveCurveData.from_sequences(name='BT', x=[0, 1], y=[120, None]),
+    ))
+
+    result = apply_selected_live_frame(
+        _renderer_selection('pyqtgraph-snapshot'),
+        frame,
+        matplotlib_lines={},
+        pyqtgraph_items={'BT': bt_item},
+    )
+
+    assert result.requested_renderer_id == 'pyqtgraph-snapshot'
+    assert result.renderer_id == 'pyqtgraph-snapshot'
+    assert result.surface == 'pyqtgraph-plot'
+    assert result.applied_curves == ('BT',)
+    assert result.used_fallback is False
+    assert bt_item.x == (0.0, 1.0)
+    assert math.isnan(bt_item.y[1])
+
+
+def test_apply_selected_live_frame_falls_back_without_pyqtgraph_targets() -> None:
+    bt_line = FakeLine()
+    frame = LivePlotFrame(curves=(
+        LiveCurveData.from_sequences(name='BT', x=[0, 1], y=[120, 121]),
+    ))
+
+    result = apply_selected_live_frame(
+        _renderer_selection('pyqtgraph-snapshot'),
+        frame,
+        matplotlib_lines={'BT': bt_line},
+    )
+
+    assert result.requested_renderer_id == 'pyqtgraph-snapshot'
+    assert result.renderer_id == 'matplotlib-snapshot'
+    assert result.surface == 'matplotlib-axis'
+    assert result.applied_curves == ('BT',)
+    assert result.fallback_reason == 'pyqtgraph_targets_unavailable'
+    assert result.used_fallback is True
+    assert bt_line.y is not None
+    assert bt_line.y.tolist() == [120.0, 121.0]

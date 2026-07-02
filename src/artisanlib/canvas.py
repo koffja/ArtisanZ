@@ -108,9 +108,12 @@ from artisanlib.phidgets import PhidgetManager
 from artisanlib.plot_live_frame import (
     LiveAxisRange,
     LiveCurveData,
+    LiveFrameApplyResult,
+    LivePlotFrame,
     apply_matplotlib_live_axis_range,
     apply_matplotlib_live_curve_data,
     apply_matplotlib_live_curve_sequences,
+    apply_selected_live_frame,
 )
 from artisanlib.plot_renderer_registry import create_default_renderer_registry
 from artisanlib.plot_renderer_settings import (
@@ -440,7 +443,7 @@ class tgraphcanvas(QObject):
         'meterunitnames', 'meterreads_default', 'meterreads', 'meterlabels_setup', 'meterlabels', 'meterunits_setup', 'meterunits',
         'meterfuels_setup', 'meterfuels', 'metersources_setup', 'metersources', 'playbackdrop_min_roasttime', 'TP_max_roasttime',
         'single_click_mpl_upperleft_corner_timer', 'single_click_mpl_upperleft_corner_TIMEOUT',
-        'plot_renderer_selection'
+        'plot_renderer_selection', 'plot_live_frame_apply_result'
         ]
 
 
@@ -454,6 +457,7 @@ class tgraphcanvas(QObject):
         self.aw = aw
         self.canvas = MplCanvas(parent, dpi, self.tight_layout_params, aw)
         self.plot_renderer_selection = select_canvas_renderer()
+        self.plot_live_frame_apply_result: LiveFrameApplyResult | None = None
         self.charge_manager: ChargeTargetManager | None = None
         self.charge_target_annotation: Annotation | None = None
 
@@ -4925,21 +4929,20 @@ class tgraphcanvas(QObject):
                     sample_tstemp1.append(st1)
                     sample_tstemp2.append(st2)
 
+                    live_frame_curves: list[LiveCurveData] = []
                     if local_flagstart:
-                        if self.ETcurve and self.l_temp1 is not None:
+                        if self.ETcurve:
                             et_curve_data = full_curve_data(sample_ctimex1, sample_ctemp1)
-                            apply_matplotlib_live_curve_data(
-                                self.l_temp1,
+                            live_frame_curves.append(
                                 LiveCurveData(
                                     name='ET',
                                     x=et_curve_data.times,
                                     y=et_curve_data.values,
                                 ),
                             )
-                        if self.BTcurve and self.l_temp2 is not None:
+                        if self.BTcurve:
                             bt_curve_data = full_curve_data(sample_ctimex2, sample_ctemp2)
-                            apply_matplotlib_live_curve_data(
-                                self.l_temp2,
+                            live_frame_curves.append(
                                 LiveCurveData(
                                     name='BT',
                                     x=bt_curve_data.times,
@@ -5076,14 +5079,13 @@ class tgraphcanvas(QObject):
                     sample_delta2.append(rateofchange2plot)
 
                     if local_flagstart:
-                        if self.DeltaETflag and self.l_delta1 is not None:
+                        if self.DeltaETflag:
                             delta_et_data = windowed_curve_data(
                                 sample_timex,
                                 sample_delta1,
                                 processed_frame.delta_et_window,
                             )
-                            apply_matplotlib_live_curve_data(
-                                self.l_delta1,
+                            live_frame_curves.append(
                                 LiveCurveData(
                                     name='Delta ET',
                                     x=delta_et_data.times,
@@ -5091,14 +5093,13 @@ class tgraphcanvas(QObject):
                                     y_axis='ror',
                                 ),
                             )
-                        if self.DeltaBTflag and self.l_delta2 is not None:
+                        if self.DeltaBTflag:
                             delta_bt_data = windowed_curve_data(
                                 sample_timex,
                                 sample_delta2,
                                 processed_frame.delta_bt_window,
                             )
-                            apply_matplotlib_live_curve_data(
-                                self.l_delta2,
+                            live_frame_curves.append(
                                 LiveCurveData(
                                     name='Delta BT',
                                     x=delta_bt_data.times,
@@ -5106,6 +5107,8 @@ class tgraphcanvas(QObject):
                                     y_axis='ror',
                                 ),
                             )
+                        if live_frame_curves:
+                            self.apply_live_plot_frame(LivePlotFrame(curves=tuple(live_frame_curves)))
 
                         #readjust xlimit of plot if needed
                         extended_end = processed_frame.live_x_axis_extension_end
@@ -5525,6 +5528,22 @@ class tgraphcanvas(QObject):
         new_x = numpy.hstack((x, x[::-1]))
         new_y = numpy.hstack((y1, y2[::-1]))
         return numpy.vstack((new_x, new_y)).T
+
+    def apply_live_plot_frame(self, frame: LivePlotFrame) -> LiveFrameApplyResult:
+        result = apply_selected_live_frame(
+            self.plot_renderer_selection,
+            frame,
+            matplotlib_lines={
+                'ET': self.l_temp1 if self.ETcurve else None,
+                'BT': self.l_temp2 if self.BTcurve else None,
+                'Delta ET': self.l_delta1 if self.DeltaETflag else None,
+                'Delta BT': self.l_delta2 if self.DeltaBTflag else None,
+            },
+        )
+        self.plot_live_frame_apply_result = result
+        if result.used_fallback:
+            gui_perf_count(f'canvas.live_frame_renderer_fallback.{result.fallback_reason}')
+        return result
 
     # runs from GUI thread.
     # this function is called by a signal at the end of the thread sample() from sample_processing()
