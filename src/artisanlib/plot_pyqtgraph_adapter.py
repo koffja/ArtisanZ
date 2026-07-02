@@ -134,6 +134,7 @@ def _qt_pen_style(line_style: str) -> object:
 
 
 def _set_plot_ranges(plot: object, time_axis: AxisSnapshot, value_axis: AxisSnapshot) -> None:
+    _call_if_available(plot, 'disableAutoRange')
     _call_with_optional_padding(plot, 'setXRange', time_axis.minimum, time_axis.maximum)
     _call_with_optional_padding(plot, 'setYRange', value_axis.minimum, value_axis.maximum)
 

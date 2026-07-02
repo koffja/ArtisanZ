@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from artisanlib.plot_pyqtgraph_adapter import PyQtGraphSnapshotRenderer
+from artisanlib.plot_pyqtgraph_widget import create_pyqtgraph_plot_target
 from artisanlib.plot_snapshot import RendererViewState, RoastPlotSnapshot
 
 
@@ -20,32 +20,26 @@ def render_snapshot_with_pyqtgraph(
         *,
         use_opengl: bool = True) -> PyQtGraphSmokeRenderResult:
     from PyQt6.QtWidgets import QApplication
-    import pyqtgraph as pg  # type: ignore[import-not-found,unused-ignore]
 
     application = QApplication.instance() or QApplication([])
-    previous_opengl = bool(pg.getConfigOption('useOpenGL'))
-    pg.setConfigOptions(useOpenGL=use_opengl)
-    temperature_plot = pg.PlotWidget()
-    ror_plot = pg.PlotWidget() if snapshot.ror_axis is not None else None
+    target = create_pyqtgraph_plot_target(
+        use_opengl=use_opengl,
+        include_ror=snapshot.ror_axis is not None,
+    )
     try:
-        renderer = PyQtGraphSnapshotRenderer(
-            temperature_plot=temperature_plot,
-            ror_plot=ror_plot,
-        )
-        renderer.set_snapshot(snapshot)
+        target.renderer.set_snapshot(snapshot)
+        application.processEvents()
+        target.renderer.reset_view(snapshot.export_view_state())
         application.processEvents()
         return PyQtGraphSmokeRenderResult(
-            view_state=renderer.export_view_state(),
-            temperature_item_count=_plot_data_item_count(temperature_plot),
-            ror_item_count=0 if ror_plot is None else _plot_data_item_count(ror_plot),
-            event_item_count=renderer.event_item_count(),
+            view_state=target.renderer.export_view_state(),
+            temperature_item_count=_plot_data_item_count(target.temperature_plot),
+            ror_item_count=0 if target.ror_plot is None else _plot_data_item_count(target.ror_plot),
+            event_item_count=target.renderer.event_item_count(),
             opengl_requested=use_opengl,
         )
     finally:
-        temperature_plot.close()
-        if ror_plot is not None:
-            ror_plot.close()
-        pg.setConfigOptions(useOpenGL=previous_opengl)
+        target.close()
 
 
 def _plot_data_item_count(plot: object) -> int:
