@@ -26,6 +26,7 @@ from PyQt6.QtGui import QKeySequence, QAction, QIntValidator, QTextCharFormat, Q
 
 from artisanlib.widgets import MyQComboBox, ClickableQLineEdit
 from artisanlib.util import comma2dot, float2float, float2floatWeightVolume, convertWeight, weight_units
+from artisanlib.gui_theme import apply_modern_dialog_polish
 
 from collections.abc import Callable
 from typing import override, Final, cast, TYPE_CHECKING
@@ -123,6 +124,11 @@ class ArtisanDialog(QDialog):
                 self.close()
             else:
                 super().keyPressEvent(a0)
+
+    @override
+    def showEvent(self, a0:'QShowEvent|None') -> None:
+        apply_modern_dialog_polish(self)
+        super().showEvent(a0)
 
 class ArtisanResizeablDialog(ArtisanDialog):
     def __init__(self, parent:QWidget|None, aw:'ApplicationWindow') -> None:

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import os
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -20,6 +22,145 @@ class ModernTheme:
     primary_hover: str = '#63857F'
     accent: str = '#B4685C'
     success: str = '#6F875E'
+
+
+def apply_modern_dialog_polish(dialog: object) -> None:
+    if not modern_dialog_polish_enabled():
+        return
+    property_getter = getattr(dialog, 'property', None)
+    property_setter = getattr(dialog, 'setProperty', None)
+    if not callable(property_getter) or not callable(property_setter):
+        return
+    if property_getter('modernDialogPolished') is True:
+        return
+
+    try:
+        from PyQt6.QtWidgets import (
+            QAbstractScrollArea,
+            QDialogButtonBox,
+            QGroupBox,
+            QHeaderView,
+            QLayout,
+            QTableView,
+            QTabWidget,
+        )
+    except ImportError:
+        return
+
+    property_setter('modernDialogPolished', True)
+
+    root_layout = getattr(dialog, 'layout', lambda: None)()
+    if isinstance(root_layout, QLayout):
+        _polish_dialog_layout_tree(root_layout, margin=14, spacing=10)
+
+    for group_box in _find_children(dialog, QGroupBox):
+        group_box.setProperty('modernDialogPanel', True)
+        _refresh_widget_style(group_box)
+        group_layout = group_box.layout()
+        if isinstance(group_layout, QLayout):
+            _polish_dialog_layout_tree(group_layout, margin=10, spacing=8)
+
+    for tab_widget in _find_children(dialog, QTabWidget):
+        tab_widget.setProperty('modernDialogTabs', True)
+        tab_widget.setDocumentMode(True)
+        tab_widget.setUsesScrollButtons(True)
+        tab_bar = tab_widget.tabBar()
+        tab_bar.setExpanding(False)
+        _refresh_widget_style(tab_widget)
+        _refresh_widget_style(tab_bar)
+        for tab_index in range(tab_widget.count()):
+            tab_page = tab_widget.widget(tab_index)
+            tab_layout = tab_page.layout() if tab_page is not None else None
+            if isinstance(tab_layout, QLayout):
+                _polish_dialog_layout_tree(tab_layout, margin=10, spacing=8)
+
+    for scroll_area in _find_children(dialog, QAbstractScrollArea):
+        scroll_area.setProperty('modernDialogScrollArea', True)
+        viewport = scroll_area.viewport()
+        viewport.setProperty('modernDialogViewport', True)
+        _refresh_widget_style(scroll_area)
+        _refresh_widget_style(viewport)
+        if isinstance(scroll_area, QTableView):
+            scroll_area.setAlternatingRowColors(True)
+            horizontal_header = scroll_area.horizontalHeader()
+            vertical_header = scroll_area.verticalHeader()
+            for header in (horizontal_header, vertical_header):
+                if isinstance(header, QHeaderView):
+                    header.setHighlightSections(False)
+
+    for button_box in _find_children(dialog, QDialogButtonBox):
+        for button in button_box.buttons():
+            _polish_dialog_button(button_box, button)
+
+
+def modern_dialog_polish_enabled() -> bool:
+    legacy_flag = os.environ.get('ARTISANZ_LEGACY_UI', '').strip().lower()
+    return legacy_flag not in {'1', 'true', 'yes', 'on'}
+
+
+def _polish_dialog_layout_tree(layout: Any, *, margin: int, spacing: int) -> None:
+    _polish_dialog_layout(layout, margin=margin, spacing=spacing)
+    for index in range(layout.count()):
+        item = layout.itemAt(index)
+        child_layout = item.layout() if item is not None else None
+        if child_layout is not None:
+            _polish_dialog_layout_tree(child_layout, margin=8, spacing=spacing)
+
+
+def _polish_dialog_layout(layout: Any, *, margin: int, spacing: int) -> None:
+    left, top, right, bottom = layout.getContentsMargins()
+    layout.setContentsMargins(
+        max(left, margin),
+        max(top, margin),
+        max(right, margin),
+        max(bottom, margin),
+    )
+    current_spacing = layout.spacing()
+    layout.setSpacing(max(current_spacing, spacing))
+
+
+def _polish_dialog_button(button_box: Any, button: Any) -> None:
+    try:
+        from PyQt6.QtWidgets import QDialogButtonBox
+    except ImportError:
+        return
+    standard_button = button_box.standardButton(button)
+    primary_buttons = {
+        QDialogButtonBox.StandardButton.Ok,
+        QDialogButtonBox.StandardButton.Apply,
+        QDialogButtonBox.StandardButton.Save,
+        QDialogButtonBox.StandardButton.Yes,
+    }
+    secondary_buttons = {
+        QDialogButtonBox.StandardButton.Cancel,
+        QDialogButtonBox.StandardButton.Close,
+        QDialogButtonBox.StandardButton.Reset,
+        QDialogButtonBox.StandardButton.No,
+    }
+    if standard_button in primary_buttons:
+        button.setProperty('modernDialogPrimaryButton', True)
+    elif standard_button in secondary_buttons:
+        button.setProperty('modernDialogSecondaryButton', True)
+    _refresh_widget_style(button)
+
+
+def _find_children(parent: object, widget_type: type[Any]) -> list[Any]:
+    find_children = getattr(parent, 'findChildren', None)
+    if not callable(find_children):
+        return []
+    return list(find_children(widget_type))
+
+
+def _refresh_widget_style(widget: object) -> None:
+    style = getattr(widget, 'style', lambda: None)()
+    if style is None:
+        return
+    unpolish = getattr(style, 'unpolish', None)
+    polish = getattr(style, 'polish', None)
+    if callable(unpolish):
+        unpolish(widget)
+    if callable(polish):
+        polish(widget)
 
 
 def lcd_value_stylesheet(text_color: str, background_color: str) -> str:
@@ -100,6 +241,34 @@ def modern_application_stylesheet(theme: ModernTheme | None = None) -> str:
             color: {t.primary};
             font-weight: 600;
         }}
+        QDialog[modernDialog="true"] QAbstractScrollArea {{
+            background-color: {t.surface};
+            border: 1px solid {t.border};
+            border-radius: 7px;
+        }}
+        QDialog[modernDialog="true"] QWidget[modernDialogViewport="true"] {{
+            background-color: {t.surface};
+        }}
+        QDialog[modernDialog="true"] QDialogButtonBox {{
+            background-color: transparent;
+            padding-top: 4px;
+        }}
+        QDialog[modernDialog="true"] QCheckBox {{
+            spacing: 7px;
+            min-height: 24px;
+            color: {t.text};
+        }}
+        QDialog[modernDialog="true"] QCheckBox::indicator {{
+            width: 15px;
+            height: 15px;
+            border: 1px solid {t.border_strong};
+            border-radius: 4px;
+            background-color: {t.surface};
+        }}
+        QDialog[modernDialog="true"] QCheckBox::indicator:checked {{
+            background-color: {t.primary};
+            border-color: {t.primary};
+        }}
         QDialog[modernDialog="true"] QTableWidget,
         QDialog[modernDialog="true"] QTableView,
         QDialog[modernDialog="true"] QTreeView,
@@ -139,6 +308,20 @@ def modern_application_stylesheet(theme: ModernTheme | None = None) -> str:
             border-radius: 6px;
             padding: 6px 12px;
             min-height: 24px;
+        }}
+        QDialog[modernDialog="true"] QPushButton[modernDialogPrimaryButton="true"] {{
+            background-color: {t.primary};
+            border-color: {t.primary};
+            color: white;
+            font-weight: 600;
+        }}
+        QDialog[modernDialog="true"] QPushButton[modernDialogSecondaryButton="true"] {{
+            background-color: transparent;
+            color: {t.text_muted};
+        }}
+        QDialog[modernDialog="true"] QPushButton[modernDialogPrimaryButton="true"]:hover:!pressed {{
+            background-color: {t.primary_hover};
+            border-color: {t.primary_hover};
         }}
         QDialog[modernDialogRole="axes"] QTabBar::tab:selected,
         QDialog[modernDialogRole="curves"] QTabBar::tab:selected {{

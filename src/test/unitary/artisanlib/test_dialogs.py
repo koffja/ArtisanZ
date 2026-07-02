@@ -32,7 +32,7 @@ from hypothesis import strategies as st
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QKeyEvent
-from PyQt6.QtWidgets import QApplication, QDialogButtonBox
+from PyQt6.QtWidgets import QApplication, QDialogButtonBox, QVBoxLayout
 
 from artisanlib.dialogs import (
     ArtisanComboBoxDialog,
@@ -115,6 +115,28 @@ class TestBaseDialogFunctionality:
         assert ok_button.autoDefault(), 'OK button should respond to Enter'
         assert dialog.property('modernDialog') is True
         assert dialog.property('modernDialogRole') == 'ArtisanDialog'
+
+        dialog.close()
+
+    def test_dialog_show_applies_modern_runtime_polish(
+        self, qapp: QApplication, mock_aw: Mock
+    ) -> None:
+        dialog = ArtisanDialog(None, mock_aw)
+        layout = QVBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        layout.addWidget(dialog.dialogbuttons)
+        dialog.setLayout(layout)
+
+        dialog.show()
+        qapp.processEvents()
+
+        ok_button = dialog.dialogbuttons.button(QDialogButtonBox.StandardButton.Ok)
+        assert dialog.property('modernDialogPolished') is True
+        assert layout.contentsMargins().left() >= 14
+        assert layout.spacing() >= 10
+        assert ok_button is not None
+        assert ok_button.property('modernDialogPrimaryButton') is True
 
         dialog.close()
 

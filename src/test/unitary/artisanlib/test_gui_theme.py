@@ -1,5 +1,34 @@
+import sys
+from collections.abc import Generator
+
+import pytest
+
+from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import (
+    QApplication,
+    QDialog,
+    QDialogButtonBox,
+    QGroupBox,
+    QLineEdit,
+    QTableWidget,
+    QTabWidget,
+    QVBoxLayout,
+    QWidget,
+)
+
 from artisanlib import gui_theme
-from artisanlib.gui_theme import ModernTheme, modern_application_stylesheet
+from artisanlib.gui_theme import ModernTheme, apply_modern_dialog_polish, modern_application_stylesheet
+
+
+@pytest.fixture(scope='session')
+def qapp() -> Generator[QApplication, None, None]: # pyright:ignore[reportUnknownParameterType]
+    if not QApplication.instance():
+        app = QApplication(sys.argv)
+        app.setAttribute(Qt.ApplicationAttribute.AA_DontUseNativeDialogs)
+        yield app
+        app.quit()
+    else:
+        yield QApplication.instance()
 
 
 def test_modern_application_stylesheet_contains_core_surfaces() -> None:
@@ -27,6 +56,9 @@ def test_modern_application_stylesheet_contains_core_surfaces() -> None:
     assert 'QDialog[modernDialog="true"] QGroupBox' in stylesheet
     assert 'QDialog[modernDialog="true"] QTabWidget::pane' in stylesheet
     assert 'QDialog[modernDialog="true"] QTableWidget' in stylesheet
+    assert 'QWidget[modernDialogViewport="true"]' in stylesheet
+    assert 'QPushButton[modernDialogPrimaryButton="true"]' in stylesheet
+    assert 'QCheckBox::indicator:checked' in stylesheet
     assert 'QDialog[modernDialogRole="axes"] QTabBar::tab:selected' in stylesheet
     assert 'QDialog[modernDialogRole="events"] QTabBar::tab:selected' in stylesheet
     assert 'QDialog[modernDialogRole="alarms"] QTabBar::tab:selected' in stylesheet
@@ -51,3 +83,91 @@ def test_lcd_value_stylesheet_uses_self_contained_surface() -> None:
     assert 'padding: 5px 8px 4px 8px' in stylesheet
     assert 'color: #123456' in stylesheet
     assert 'background-color: #abcdef' in stylesheet
+
+
+def test_apply_modern_dialog_polish_sets_runtime_visual_roles(qapp: QApplication) -> None: # noqa: ARG001
+    dialog = QDialog()
+    dialog.setProperty('modernDialog', True)
+    layout = QVBoxLayout()
+    layout.setContentsMargins(0, 0, 0, 0)
+    layout.setSpacing(0)
+
+    group_box = QGroupBox('Group')
+    group_layout = QVBoxLayout()
+    group_layout.setContentsMargins(0, 0, 0, 0)
+    group_layout.setSpacing(0)
+    group_layout.addWidget(QLineEdit())
+    group_box.setLayout(group_layout)
+
+    tab_widget = QTabWidget()
+    tab_widget.addTab(QWidget(), 'Tab')
+
+    table_widget = QTableWidget(1, 1)
+    button_box = QDialogButtonBox(
+        QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+
+    layout.addWidget(group_box)
+    layout.addWidget(tab_widget)
+    layout.addWidget(table_widget)
+    layout.addWidget(button_box)
+    dialog.setLayout(layout)
+
+    apply_modern_dialog_polish(dialog)
+
+    assert dialog.property('modernDialogPolished') is True
+    assert layout.contentsMargins().left() >= 14
+    assert layout.spacing() >= 10
+    assert group_box.property('modernDialogPanel') is True
+    assert group_layout.contentsMargins().left() >= 10
+    assert tab_widget.property('modernDialogTabs') is True
+    assert tab_widget.documentMode()
+    assert not tab_widget.tabBar().expanding()
+    assert table_widget.property('modernDialogScrollArea') is True
+    assert table_widget.viewport().property('modernDialogViewport') is True
+    assert table_widget.alternatingRowColors()
+    assert table_widget.showGrid()
+    ok_button = button_box.button(QDialogButtonBox.StandardButton.Ok)
+    cancel_button = button_box.button(QDialogButtonBox.StandardButton.Cancel)
+    assert ok_button is not None
+    assert cancel_button is not None
+    assert ok_button.property('modernDialogPrimaryButton') is True
+    assert cancel_button.property('modernDialogSecondaryButton') is True
+
+
+def test_apply_modern_dialog_polish_preserves_table_cell_layouts(qapp: QApplication) -> None: # noqa: ARG001
+    dialog = QDialog()
+    dialog.setProperty('modernDialog', True)
+    layout = QVBoxLayout()
+    table_widget = QTableWidget(1, 1)
+    cell_widget = QWidget()
+    cell_layout = QVBoxLayout()
+    cell_layout.setContentsMargins(0, 0, 0, 0)
+    cell_layout.setSpacing(0)
+    cell_widget.setLayout(cell_layout)
+    table_widget.setCellWidget(0, 0, cell_widget)
+    layout.addWidget(table_widget)
+    dialog.setLayout(layout)
+
+    apply_modern_dialog_polish(dialog)
+
+    assert cell_layout.contentsMargins().left() == 0
+    assert cell_layout.contentsMargins().top() == 0
+    assert cell_layout.spacing() == 0
+
+
+def test_apply_modern_dialog_polish_respects_legacy_ui_flag(
+        qapp: QApplication, # noqa: ARG001
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv('ARTISANZ_LEGACY_UI', '1')
+    dialog = QDialog()
+    dialog.setProperty('modernDialog', True)
+    layout = QVBoxLayout()
+    layout.setContentsMargins(0, 0, 0, 0)
+    layout.setSpacing(0)
+    dialog.setLayout(layout)
+
+    apply_modern_dialog_polish(dialog)
+
+    assert dialog.property('modernDialogPolished') is not True
+    assert layout.contentsMargins().left() == 0
+    assert layout.spacing() == 0
