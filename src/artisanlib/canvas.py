@@ -117,10 +117,12 @@ from artisanlib.plot_live_frame import (
     apply_selected_live_frame,
     live_frame_to_snapshot,
 )
-from artisanlib.plot_snapshot import AxisSnapshot
+from artisanlib.plot_snapshot import AxisSnapshot, RendererViewState
+from artisanlib.plot_snapshot_extractor import build_roast_plot_snapshot
 from artisanlib.plot_renderer_registry import create_default_renderer_registry
 from artisanlib.plot_renderer_settings import (
     DEFAULT_RENDERER_ID,
+    MATPLOTLIB_RENDERER_ID,
     RendererSelection,
     select_renderer,
 )
@@ -200,12 +202,12 @@ def select_canvas_renderer() -> RendererSelection:
     try:
         return select_renderer()
     except Exception as exc: # pylint: disable=broad-exception-caught
-        _log.warning('falling back to default plot renderer after selection failure: %s', exc)
+        _log.warning('falling back to Matplotlib plot renderer after selection failure: %s', exc)
         registry = create_default_renderer_registry()
         return RendererSelection(
             requested_renderer_id=DEFAULT_RENDERER_ID,
-            renderer_id=DEFAULT_RENDERER_ID,
-            plugin=registry.get(DEFAULT_RENDERER_ID),
+            renderer_id=MATPLOTLIB_RENDERER_ID,
+            plugin=registry.get(MATPLOTLIB_RENDERER_ID),
             registry=registry,
             fallback_reason='selection_error',
         )
@@ -5572,8 +5574,10 @@ class tgraphcanvas(QObject):
             target = create_pyqtgraph_plot_target(use_opengl=False, include_ror=True)
             widget = cast(QWidget, target.widget)
             widget.setParent(parent)
+            widget.setMinimumWidth(0)
             widget.setMinimumHeight(150)
             widget.setContentsMargins(0, 0, 0, 0)
+            widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
             self.plot_pyqtgraph_target = target
             self.plot_display_widget = widget
             self.canvas.setVisible(False)
@@ -5653,6 +5657,42 @@ class tgraphcanvas(QObject):
         if not callable(item_for):
             return {}
         return {name: item_for(name) for name in frame.curve_names()}
+
+    def sync_pyqtgraph_snapshot_from_canvas(self) -> None:
+        target = self.plot_pyqtgraph_target
+        if target is None:
+            return
+        renderer = getattr(target, 'renderer', None)
+        set_snapshot = getattr(renderer, 'set_snapshot', None)
+        if not callable(set_snapshot):
+            return
+        try:
+            set_snapshot(build_roast_plot_snapshot(self))
+        except Exception as exc: # pylint: disable=broad-exception-caught
+            self.plot_renderer_embed_fallback_reason = 'pyqtgraph_snapshot_error'
+            gui_perf_count('canvas.pyqtgraph_snapshot_error')
+            _log.warning('falling back to Matplotlib plot widget after PyQtGraph snapshot failure: %s', exc)
+            self.disable_selected_plot_widget()
+
+    def sync_pyqtgraph_view_from_canvas(self) -> None:
+        target = self.plot_pyqtgraph_target
+        if target is None:
+            return
+        renderer = getattr(target, 'renderer', None)
+        reset_view = getattr(renderer, 'reset_view', None)
+        if not callable(reset_view):
+            return
+        try:
+            reset_view(RendererViewState(
+                time_axis=self.live_time_axis_snapshot(),
+                temperature_axis=self.live_temperature_axis_snapshot(),
+                ror_axis=self.live_ror_axis_snapshot(),
+            ))
+        except Exception as exc: # pylint: disable=broad-exception-caught
+            self.plot_renderer_embed_fallback_reason = 'pyqtgraph_view_sync_error'
+            gui_perf_count('canvas.pyqtgraph_view_sync_error')
+            _log.warning('falling back to Matplotlib plot widget after PyQtGraph view sync failure: %s', exc)
+            self.disable_selected_plot_widget()
 
     def live_time_axis_snapshot(self) -> AxisSnapshot:
         if self.ax is not None:
@@ -9669,6 +9709,7 @@ class tgraphcanvas(QObject):
         if self.delta_ax is not None and xlimit_min is not None and xlimit is not None and zlimit_min is not None and zlimit is not None:
             self.delta_ax.set_xlim(xlimit_min, xlimit)
             self.delta_ax.set_ylim(zlimit_min, zlimit)
+        self.sync_pyqtgraph_view_from_canvas()
 
     def default_xlabel_text(self) -> str:
         if self.flagstart or self.xgrid == 0:
@@ -11779,6 +11820,8 @@ class tgraphcanvas(QObject):
                 with warnings.catch_warnings():
                     warnings.simplefilter('ignore')
                     self.fig.canvas.draw_idle()
+
+                self.sync_pyqtgraph_snapshot_from_canvas()
 
                 # we update the canvas immediately to get the RoR projections drawn again
                 if self.flagstart and self.timeindex[0] > -1:

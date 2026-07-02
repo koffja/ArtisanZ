@@ -9,7 +9,7 @@ import numpy
 
 from artisanlib.plot_snapshot import AxisSnapshot, CurveSnapshot, RoastPlotSnapshot, YAxisName
 from artisanlib.plot_renderer_registry import RendererSurface
-from artisanlib.plot_renderer_settings import DEFAULT_RENDERER_ID, RendererSelection
+from artisanlib.plot_renderer_settings import MATPLOTLIB_RENDERER_ID, RendererSelection
 
 type LiveFrameFallbackReason = Literal['pyqtgraph_targets_unavailable', 'pyqtgraph_live_update_error']
 
@@ -166,7 +166,7 @@ def apply_selected_live_frame(
             )
         return LiveFrameApplyResult(
             requested_renderer_id=selection.requested_renderer_id,
-            renderer_id=DEFAULT_RENDERER_ID,
+            renderer_id=MATPLOTLIB_RENDERER_ID,
             surface='matplotlib-axis',
             applied_curves=matplotlib_applied_curves,
             fallback_reason=pyqtgraph_fallback_reason,

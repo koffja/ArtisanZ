@@ -8,7 +8,11 @@ from PyQt6.QtQml import QQmlComponent, QQmlEngine
 from PyQt6.QtWidgets import QApplication
 
 from artisanlib.plot_renderer_registry import create_default_renderer_registry
-from artisanlib.plot_renderer_settings import DEFAULT_RENDERER_ID, RendererSelection
+from artisanlib.plot_renderer_settings import (
+    DEFAULT_RENDERER_ID,
+    DEFAULT_RENDERER_LABEL,
+    RendererSelection,
+)
 from artisanlib.ui_workspaces import WorkspaceMode
 from artisanlib.workspace_status_model import (
     WORKSPACE_STATUS_PANEL_QML,
@@ -30,7 +34,7 @@ def test_workspace_status_model_exposes_policy_properties() -> None:
     assert model.showAdvancedControls is False
     assert model.compactChrome is False
     assert model.rendererId == DEFAULT_RENDERER_ID
-    assert model.rendererLabel == 'Matplotlib Snapshot'
+    assert model.rendererLabel == DEFAULT_RENDERER_LABEL
     assert model.rendererFallbackReason == ''
     assert model.rendererStatusLabel == 'Selected'
 
@@ -126,15 +130,15 @@ def test_workspace_status_model_resets_renderer_selection_to_default() -> None:
     model.rendererChanged.connect(lambda: notifications.append(None))
 
     model.set_renderer_selection(RendererSelection(
-        requested_renderer_id='pyqtgraph-snapshot',
-        renderer_id='pyqtgraph-snapshot',
-        plugin=registry.get('pyqtgraph-snapshot'),
+        requested_renderer_id='matplotlib-snapshot',
+        renderer_id='matplotlib-snapshot',
+        plugin=registry.get('matplotlib-snapshot'),
         registry=registry,
     ))
     model.set_renderer_selection(None)
 
     assert model.rendererId == DEFAULT_RENDERER_ID
-    assert model.rendererLabel == 'Matplotlib Snapshot'
+    assert model.rendererLabel == DEFAULT_RENDERER_LABEL
     assert model.rendererFallbackReason == ''
     assert model.rendererStatusLabel == 'Selected'
     assert len(notifications) == 2

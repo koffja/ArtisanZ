@@ -1,0 +1,96 @@
+# GUI Modernization Phase 1.5 Main Screen Redesign Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Make ArtisanZ visibly modern on first launch by defaulting the live plot to PyQtGraph and applying an opinionated main-screen control-console visual language.
+
+**Architecture:** Keep the existing PyQt6 Widgets runtime and current behavior paths. Use renderer selection to default to `pyqtgraph-snapshot` with Matplotlib as fallback, then apply property-targeted styling to the main screen instead of broad widget rewrites. Preserve `ARTISANZ_LEGACY_UI=1` and `ARTISANZ_RENDERER_ID=matplotlib-snapshot` as escape hatches.
+
+**Tech Stack:** PyQt6 Widgets, PyQtGraph, existing ArtisanZ stylesheet/theme tokens, existing GUI autorun screenshot and performance probes.
+
+---
+
+## Design Direction
+
+Subject: a roast control console for an operator who needs fast visual hierarchy under heat, noise, and time pressure.
+
+Palette:
+- `charcoal`: `#20272B`
+- `porcelain`: `#F7F4EA`
+- `control_blue`: `#376B7A`
+- `charge_clay`: `#B4685C`
+- `bean_green`: `#6F875E`
+- `line_mist`: `#D7DDDE`
+
+Type:
+- Use Qt's platform sans fonts, but make data/control hierarchy stronger through weight, spacing, and size rather than introducing a risky bundled font dependency.
+
+Layout signature:
+- The first screen should read as a control console: a distinct top command rail, a pale full-width graph well, bottom major event controls, and compact right-side telemetry cards.
+
+## Task 1: Make PyQtGraph the Default Renderer
+
+**Files:**
+- Modify: `src/artisanlib/plot_renderer_settings.py`
+- Modify: `src/artisanlib/workspace_status_model.py`
+- Modify: `src/test/unitary/artisanlib/test_plot_renderer_settings.py`
+- Modify: `src/test/unitary/artisanlib/test_canvas_renderer_selection.py`
+- Modify: `src/test/unitary/artisanlib/test_workspace_status_model.py`
+
+- [x] Change `DEFAULT_RENDERER_ID` from `matplotlib-snapshot` to `pyqtgraph-snapshot`.
+- [x] Keep fallback behavior to Matplotlib if PyQtGraph is unavailable or fails at runtime.
+- [x] Update tests so default selection and workspace status expect PyQtGraph.
+- [x] Verify Matplotlib override still works with `ARTISANZ_RENDERER_ID=matplotlib-snapshot`.
+
+## Task 2: Add Main-Screen Visual Roles
+
+**Files:**
+- Modify: `src/artisanlib/main.py`
+- Modify: `src/test/unitary/artisanlib/test_main.py`
+
+- [x] Assign `mainControlRole` properties to Reset, ON/OFF, START/STOP, and Control buttons.
+- [x] Assign `roastEventRole` properties to Charge, Drop, dry/crack/cool, and aux event buttons.
+- [x] Mark the graph widget and lower event rail with stable properties for stylesheet targeting.
+- [x] Mark LCD frames with a `telemetryCard` property while preserving the existing `lcdSurface` property.
+
+## Task 3: Apply a More Distinct Main-Screen Theme
+
+**Files:**
+- Modify: `src/artisanlib/gui_theme.py`
+- Modify: `src/test/unitary/artisanlib/test_gui_theme.py`
+
+- [x] Update `ModernTheme` tokens away from neutral desktop grey into a clearer roast-console palette.
+- [x] Add stylesheet rules for `mainGraphPanel`, `mainControlRole`, `roastEventRail`, `roastEventRole`, and `telemetryCard`.
+- [x] Keep LCD value block top corners square and lower corners rounded.
+- [x] Add tests that assert the new targeted selectors exist.
+
+## Task 4: Baseline and Visual Evidence
+
+**Files:**
+- Modify: `docs/GUI_MODERNIZATION_BASELINE.md`
+- Modify: `docs/superpowers/plans/2026-06-29-gui-modernization-roadmap.md`
+- Modify: this plan.
+
+- [x] Run focused unit tests for renderer selection, canvas renderer selection, workspace status, GUI theme, and main UI properties.
+- [x] Run py_compile and ruff on touched files.
+- [x] Capture default-launch screenshot with no renderer env override; it should report PyQtGraph in Workspace Status when the dock is visible.
+- [x] Capture `ARTISANZ_RENDERER_ID=matplotlib-snapshot` override screenshot or at least run focused selector tests to prove fallback remains accessible.
+- [x] Update docs with screenshot paths and metrics.
+
+## Implementation Results
+
+- Default renderer now resolves to `pyqtgraph-snapshot`; `ARTISANZ_RENDERER_ID=matplotlib-snapshot` keeps the compatibility path available.
+- Historical profile redraws now sync a full canvas snapshot into the embedded PyQtGraph renderer, so default profile loading is nonblank instead of only supporting future live frames.
+- Runtime PyQtGraph snapshot failures fall back to the Matplotlib canvas and record `pyqtgraph_snapshot_error`.
+- The PyQtGraph widget now allows horizontal compression, preserving the right-side LCD telemetry column beside the plot.
+- Main-screen visual roles are present for top control buttons, event buttons, graph panel, event rail, and telemetry cards.
+- Focused tests currently pass: `48 passed, 2 warnings`.
+- Visual evidence:
+  - Default PyQtGraph screenshot: `/tmp/artisanz-phase15-default-pyqtgraph.png`
+  - Matplotlib override screenshot: `/tmp/artisanz-phase15-matplotlib-override.png`
+
+## Self-Review
+
+- Spec coverage: The user asked to begin replacing Matplotlib by changing defaults and to start Phase 1.5. This plan does both while retaining fallback safety.
+- Placeholder scan: No `TBD` or unspecified implementation steps remain.
+- Type consistency: Renderer ids remain the existing string ids; stylesheet selectors use Qt dynamic properties already used by LCD styling.

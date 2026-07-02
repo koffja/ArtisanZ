@@ -14,6 +14,13 @@ def test_modern_application_stylesheet_contains_core_surfaces() -> None:
     assert 'QFrame[lcdSurface="true"]' in stylesheet
     assert 'QLabel[lcdLabel="true"]' in stylesheet
     assert 'padding: 2px 8px 1px 8px;' in stylesheet
+    assert 'QWidget[mainRoastScreen="true"]' in stylesheet
+    assert 'QWidget[mainGraphPanel="true"]' in stylesheet
+    assert 'QFrame[telemetryCard="true"]' in stylesheet
+    assert 'QFrame[roastEventRail="true"]' in stylesheet
+    assert 'QPushButton[mainControlRole="record"]' in stylesheet
+    assert '#B4685C' in stylesheet
+    assert '#376B7A' in stylesheet
 
 
 def test_modern_application_stylesheet_uses_supplied_theme() -> None:

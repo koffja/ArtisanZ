@@ -4,81 +4,81 @@ artisan_event_button_style: str = """
                 min-height: {min_height}px;
                 font-size: {default_font_size}pt;
                 font-weight: bold;
-                padding: {padding}px;
-                border: 1px solid #cfd7db;
-                border-radius: 6px;
+                padding: {padding}px {padding}px;
+                border: 1px solid #CDD7D8;
+                border-radius: 8px;
                 color: white;
             }}
 
             EventPushButton[Selected=true] {{
                 font-size: {selected_font_size}pt;
-                background-color: #A76557;
+                background-color: #B4685C;
             }}
             EventPushButton[Selected=true]:flat {{
-                color: #8A6B60;
-                background-color: #F2E0D8;
+                color: #8A4D43;
+                background-color: #F0D7CE;
             }}
             EventPushButton[Selected=true]:flat:!pressed:hover {{
-                color: #5F4038;
-                background-color: #EAD0C5;
+                color: #6F372F;
+                background-color: #E8C8BE;
             }}
             EventPushButton[Selected=true]:flat:pressed {{
                 color: #EEEEEE;
-                background-color: #A76557;
+                background-color: #B4685C;
             }}
             EventPushButton[Selected=true]:!flat:pressed {{
                 color: white;
-                background-color: #865146;
+                background-color: #8E4C43;
             }}
             EventPushButton[Selected=true]:!pressed:hover {{
                 color: white;
-                background-color: #B87362;
+                background-color: #C47A6F;
             }}
 
             MajorEventPushButton[Selected=false]:flat {{
-                color: #7B868C;
-                background-color: #E8ECEE;
+                color: #376B7A;
+                background-color: #E3ECEE;
             }}
             MajorEventPushButton[Selected=false]:flat:!pressed:hover {{
-                color: #4E7180;
-                background-color: #DDE5E8;
+                color: #244E59;
+                background-color: #D5E2E5;
             }}
             MajorEventPushButton[Selected=false]:flat:pressed {{
                 color: #FFFFFF;
-                background-color: #9DAAB0;
+                background-color: #6E848B;
             }}
             MajorEventPushButton[Selected=false]:!flat:pressed {{
                 color: #EEEEEE;
-                background-color: #3E5A66;
+                background-color: #244E59;
             }}
             MajorEventPushButton[Selected=false]:!pressed:hover {{
-                background-color: #5E889A;
+                background-color: #467D8C;
             }}
 
             MinorEventPushButton[Selected=false]:flat {{
-                color: #87939A;
-                background-color: #EEF2F3;
+                color: #6F875E;
+                background-color: #EEF3EA;
             }}
             MinorEventPushButton[Selected=false]:flat:!pressed:hover {{
-                color: #5D6970;
-                background-color: #E1E8EA;
+                color: #546C44;
+                background-color: #E1EAD9;
             }}
             MinorEventPushButton[Selected=false]:flat:pressed {{
                 color: #FFFFFF;
-                background-color: #9DAAB0;
+                background-color: #7B8D6F;
             }}
             MinorEventPushButton[Selected=false]:!flat:pressed {{
                 color: #EEEEEE;
-                background-color: #738185;
+                background-color: #5D704F;
             }}
             MinorEventPushButton[Selected=false]:!pressed:hover {{
-                background-color: #A6B5BB;
+                background-color: #839872;
             }}
 
             AuxEventPushButton[Selected=false]:pressed {{
-                background-color: #9A6E55;
+                background-color: #8E4C43;
             }}
             AuxEventPushButton[Selected=false]:!pressed:hover {{
-                background-color: #D1A082;
+                background-color: #C47A6F;
             }}
 """

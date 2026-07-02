@@ -7,7 +7,11 @@ from PyQt6.QtCore import QObject, QUrl, pyqtProperty, pyqtSignal, pyqtSlot
 from PyQt6.QtQuickWidgets import QQuickWidget
 from PyQt6.QtWidgets import QWidget
 
-from artisanlib.plot_renderer_settings import DEFAULT_RENDERER_ID, RendererSelection
+from artisanlib.plot_renderer_settings import (
+    DEFAULT_RENDERER_ID,
+    DEFAULT_RENDERER_LABEL,
+    RendererSelection,
+)
 from artisanlib.ui_workspaces import (
     WorkspaceMode,
     workspace_from_setting_value,
@@ -190,7 +194,7 @@ class WorkspaceStatusModel(QObject):
         super().__init__(parent)
         self._mode = mode
         self._renderer_id = DEFAULT_RENDERER_ID
-        self._renderer_label = 'Matplotlib Snapshot'
+        self._renderer_label = DEFAULT_RENDERER_LABEL
         self._renderer_fallback_reason = ''
 
     def workspace_mode(self) -> WorkspaceMode:
@@ -204,7 +208,7 @@ class WorkspaceStatusModel(QObject):
 
     def set_renderer_selection(self, selection: RendererSelection | None) -> None:
         renderer_id = selection.renderer_id if selection is not None else DEFAULT_RENDERER_ID
-        renderer_label = selection.plugin.label if selection is not None else 'Matplotlib Snapshot'
+        renderer_label = selection.plugin.label if selection is not None else DEFAULT_RENDERER_LABEL
         fallback_reason = (selection.fallback_reason or '') if selection is not None else ''
         if (
                 renderer_id == self._renderer_id and

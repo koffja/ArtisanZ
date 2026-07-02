@@ -13,7 +13,12 @@ _APPLICATION.artisanviewerMode = False  # type: ignore[attr-defined]
 from artisanlib import canvas
 from artisanlib.plot_live_frame import LiveCurveData, LivePlotFrame
 from artisanlib.plot_renderer_registry import create_default_renderer_registry
-from artisanlib.plot_renderer_settings import ARTISANZ_RENDERER_ID, RendererSelectionError
+from artisanlib.plot_renderer_settings import (
+    ARTISANZ_RENDERER_ID,
+    DEFAULT_RENDERER_ID,
+    MATPLOTLIB_RENDERER_ID,
+    RendererSelectionError,
+)
 from artisanlib.plot_renderer_settings import RendererSelection
 
 
@@ -48,6 +53,15 @@ class FakePyQtGraphRenderer:
         if self.fail_update:
             raise RuntimeError('pyqtgraph update failed')
         self.snapshots.append(snapshot)
+        for curve in snapshot.curves:
+            self.items.setdefault(curve.name, FakePyQtGraphItem())
+
+    def set_snapshot(self, snapshot: object) -> None:
+        if self.fail_update:
+            raise RuntimeError('pyqtgraph snapshot failed')
+        self.snapshots.append(snapshot)
+        if not hasattr(snapshot, 'curves'):
+            return
         for curve in snapshot.curves:
             self.items.setdefault(curve.name, FakePyQtGraphItem())
 
@@ -127,22 +141,22 @@ def _renderer_selection(renderer_id: str) -> RendererSelection:
     )
 
 
-def test_select_canvas_renderer_defaults_to_matplotlib(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_select_canvas_renderer_defaults_to_pyqtgraph(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv(ARTISANZ_RENDERER_ID, raising=False)
 
     selection = canvas.select_canvas_renderer()
 
-    assert selection.renderer_id == 'matplotlib-snapshot'
-    assert selection.registry.get('matplotlib-snapshot').renderer_id == 'matplotlib-snapshot'
+    assert selection.renderer_id == DEFAULT_RENDERER_ID
+    assert selection.registry.get(DEFAULT_RENDERER_ID).surface == 'pyqtgraph-plot'
 
 
-def test_select_canvas_renderer_accepts_env_requested_renderer(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv(ARTISANZ_RENDERER_ID, 'pyqtgraph-snapshot')
+def test_select_canvas_renderer_accepts_matplotlib_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv(ARTISANZ_RENDERER_ID, MATPLOTLIB_RENDERER_ID)
 
     selection = canvas.select_canvas_renderer()
 
-    assert selection.requested_renderer_id == 'pyqtgraph-snapshot'
-    assert selection.renderer_id == 'pyqtgraph-snapshot'
+    assert selection.requested_renderer_id == MATPLOTLIB_RENDERER_ID
+    assert selection.renderer_id == MATPLOTLIB_RENDERER_ID
 
 
 def test_select_canvas_renderer_falls_back_after_selection_error(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -153,7 +167,7 @@ def test_select_canvas_renderer_falls_back_after_selection_error(monkeypatch: py
 
     selection = canvas.select_canvas_renderer()
 
-    assert selection.renderer_id == 'matplotlib-snapshot'
+    assert selection.renderer_id == MATPLOTLIB_RENDERER_ID
     assert selection.fallback_reason == 'selection_error'
 
 
@@ -166,7 +180,7 @@ def test_select_canvas_renderer_falls_back_after_unexpected_selection_error(
 
     selection = canvas.select_canvas_renderer()
 
-    assert selection.renderer_id == 'matplotlib-snapshot'
+    assert selection.renderer_id == MATPLOTLIB_RENDERER_ID
     assert selection.fallback_reason == 'selection_error'
 
 
@@ -275,3 +289,32 @@ def test_apply_live_plot_frame_falls_back_after_pyqtgraph_update_error() -> None
     assert window.plot_pyqtgraph_target is None
     assert failing_target.closed is True
     assert window.l_temp2.x == (0.0, 1.0)
+
+
+def test_sync_pyqtgraph_snapshot_from_canvas_updates_embedded_renderer(
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    window = FakeLiveFrameCanvas(_renderer_selection('pyqtgraph-snapshot'))
+    window.plot_pyqtgraph_target = FakePyQtGraphTarget()
+    snapshot = object()
+    monkeypatch.setattr(canvas, 'build_roast_plot_snapshot', lambda _source: snapshot)
+
+    canvas.tgraphcanvas.sync_pyqtgraph_snapshot_from_canvas(window)
+
+    assert window.plot_pyqtgraph_target.renderer.snapshots == [snapshot]
+    assert window.plot_pyqtgraph_target.closed is False
+    assert window.plot_renderer_embed_fallback_reason is None
+
+
+def test_sync_pyqtgraph_snapshot_from_canvas_falls_back_after_snapshot_error(
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    window = FakeLiveFrameCanvas(_renderer_selection('pyqtgraph-snapshot'))
+    failing_target = FakePyQtGraphTarget(fail_update=True)
+    window.plot_pyqtgraph_target = failing_target
+    window.plot_display_widget = FakeWidget()
+    monkeypatch.setattr(canvas, 'build_roast_plot_snapshot', lambda _source: object())
+
+    canvas.tgraphcanvas.sync_pyqtgraph_snapshot_from_canvas(window)
+
+    assert window.plot_renderer_embed_fallback_reason == 'pyqtgraph_snapshot_error'
+    assert window.plot_pyqtgraph_target is None
+    assert failing_target.closed is True

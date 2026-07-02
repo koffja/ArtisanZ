@@ -1812,6 +1812,8 @@ class ApplicationWindow(QMainWindow):
                 pass
 
         self.qmc:tgraphcanvas = tgraphcanvas(self.main_widget, self.dpi, locale, self)
+        self.main_widget.setProperty('mainRoastScreen', True)
+        self.qmc.graph_widget().setProperty('mainGraphPanel', True)
         
         # Charge Target Manager
         self.charge_manager: ChargeTargetManager = ChargeTargetManager()
@@ -3008,7 +3010,7 @@ class ApplicationWindow(QMainWindow):
 #            self.small_button_min_width_px = 60
 #            self.tiny_button_min_width_px = 50
 
-        border_modern = 'border-style:solid; border-radius:4;border-color:grey; border-width:0;' # modernize
+        border_modern = 'border:1px solid #C9D2D4; border-radius:8px; padding:6px 14px;' # modernize
 
         self.pushbuttonstyles_simulator: dict[str, str] = {
             'OFF':    """
@@ -3319,6 +3321,7 @@ class ApplicationWindow(QMainWindow):
 #        self.buttonONOFF.released.connect(self.mainButtonReleased)
         self.buttonONOFF.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         self.buttonONOFF.setMinimumHeight(self.standard_button_height)
+        self.setMainControlRole(self.buttonONOFF, 'monitor')
         self.buttonONOFF.clicked.connect(self.qmc.ToggleMonitor)
         if self.app.artisanviewerMode:
             self.buttonONOFF.setVisible(False)
@@ -3334,24 +3337,29 @@ class ApplicationWindow(QMainWindow):
         self.buttonSTARTSTOP.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
 
         self.buttonSTARTSTOP.setMinimumHeight(self.standard_button_height)
+        self.setMainControlRole(self.buttonSTARTSTOP, 'record')
         self.buttonSTARTSTOP.clicked.connect(self.qmc.ToggleRecorder)
         if self.app.artisanviewerMode:
             self.buttonSTARTSTOP.setVisible(False)
 
         #create 1C START, 1C END, 2C START and 2C END buttons
         self.buttonFCs: MinorEventPushButton = MinorEventPushButton(QApplication.translate('Button', 'FC\nSTART'))
+        self.setRoastEventRole(self.buttonFCs, 'phase')
         self.buttonFCs.setToolTip(QApplication.translate('Tooltip', 'First Crack Start'))
         self.buttonFCs.clicked.connect(self.qmc.mark1Cstart)
 
         self.buttonFCe: MinorEventPushButton = MinorEventPushButton(QApplication.translate('Button', 'FC\nEND'))
+        self.setRoastEventRole(self.buttonFCe, 'phase')
         self.buttonFCe.setToolTip(QApplication.translate('Tooltip', 'First Crack End'))
         self.buttonFCe.clicked.connect(self.qmc.mark1Cend)
 
         self.buttonSCs: MinorEventPushButton = MinorEventPushButton(QApplication.translate('Button', 'SC\nSTART'))
+        self.setRoastEventRole(self.buttonSCs, 'phase')
         self.buttonSCs.setToolTip(QApplication.translate('Tooltip', 'Second Crack Start'))
         self.buttonSCs.clicked.connect(self.qmc.mark2Cstart)
 
         self.buttonSCe: MinorEventPushButton = MinorEventPushButton(QApplication.translate('Button', 'SC\nEND'))
+        self.setRoastEventRole(self.buttonSCe, 'phase')
         self.buttonSCe.setToolTip(QApplication.translate('Tooltip', 'Second Crack End'))
         self.buttonSCe.clicked.connect(self.qmc.mark2Cend)
 
@@ -3364,16 +3372,19 @@ class ApplicationWindow(QMainWindow):
 #        self.buttonRESET.released.connect(self.mainButtonReleased)
         self.buttonRESET.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         self.buttonRESET.setMinimumHeight(self.standard_button_height)
+        self.setMainControlRole(self.buttonRESET, 'reset')
         self.buttonRESET.setToolTip(QApplication.translate('Tooltip', 'Reset'))
         self.buttonRESET.clicked.connect(self.qmc.resetButtonAction)
 
         #create CHARGE button
         self.buttonCHARGE: AnimatedMajorEventPushButton = AnimatedMajorEventPushButton(QApplication.translate('Button', 'CHARGE'))
+        self.setRoastEventRole(self.buttonCHARGE, 'charge')
         self.buttonCHARGE.setToolTip(QApplication.translate('Tooltip', 'Charge'))
         self.buttonCHARGE.clicked.connect(self.qmc.markCharge)
 
         #create DROP button
         self.buttonDROP: MajorEventPushButton = MajorEventPushButton(QApplication.translate('Button', 'DROP'))
+        self.setRoastEventRole(self.buttonDROP, 'drop')
         self.buttonDROP.setToolTip(QApplication.translate('Tooltip', 'Drop'))
         self.buttonDROP.clicked.connect(self.qmc.markDrop)
 
@@ -3386,12 +3397,14 @@ class ApplicationWindow(QMainWindow):
 #        self.buttonCONTROL.released.connect(self.mainButtonReleased)
         self.buttonCONTROL.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         self.buttonCONTROL.setMinimumHeight(self.standard_button_height)
+        self.setMainControlRole(self.buttonCONTROL, 'control')
         self.buttonCONTROL.clicked.connect(self.PIDcontrol)
         if self.app.artisanviewerMode:
             self.buttonCONTROL.setVisible(False)
 
         #create EVENT record button
         self.buttonEVENT: AuxEventPushButton = AuxEventPushButton(QApplication.translate('Button', 'EVENT'))
+        self.setRoastEventRole(self.buttonEVENT, 'aux')
         self.buttonEVENT.setToolTip(QApplication.translate('Tooltip', 'Event'))
         self.buttonEVENT.clicked.connect(self.qmc.EventRecord_action)
 
@@ -3453,11 +3466,13 @@ class ApplicationWindow(QMainWindow):
 
         #create DRY button
         self.buttonDRY: MinorEventPushButton = MinorEventPushButton(QApplication.translate('Button', 'DRY\nEND'))
+        self.setRoastEventRole(self.buttonDRY, 'phase')
         self.buttonDRY.setToolTip(QApplication.translate('Tooltip', 'Dry End'))
         self.buttonDRY.clicked.connect(self.qmc.markDryEnd)
 
         #create COOLe button
         self.buttonCOOL: MinorEventPushButton = MinorEventPushButton(QApplication.translate('Button', 'COOL\nEND'))
+        self.setRoastEventRole(self.buttonCOOL, 'phase')
         self.buttonCOOL.setToolTip(QApplication.translate('Tooltip', 'Cool End'))
         self.buttonCOOL.clicked.connect(self.qmc.markCoolEnd)
 
@@ -3700,6 +3715,7 @@ class ApplicationWindow(QMainWindow):
         self.lowerbuttondialogLayout.setContentsMargins(0, 0, 0, 10) # (left, top, right, bottom)
 
         self.lowerbuttondialog: QFrame = QFrame()
+        self.lowerbuttondialog.setProperty('roastEventRail', True)
         self.lowerbuttondialog.setLayout(self.lowerbuttondialogLayout)
         self.lowerbuttondialog.setVisible(False)
         # We set the styles of event buttons assigned to self.lowerbuttondialog here
@@ -8571,8 +8587,8 @@ class ApplicationWindow(QMainWindow):
 
     @staticmethod
     def configureLCDColumnLayout(layout:QVBoxLayout) -> None:
-        layout.setSpacing(6)
-        layout.setContentsMargins(0,0,5,0)
+        layout.setSpacing(8)
+        layout.setContentsMargins(0,4,7,4)
         layout.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
 
     @staticmethod
@@ -8582,6 +8598,7 @@ class ApplicationWindow(QMainWindow):
         lcd.setMaximumWidth(QWIDGETSIZE_MAX)
         lcd.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         lcdframe.setProperty('lcdSurface', True)
+        lcdframe.setProperty('telemetryCard', True)
         LCDbox = QVBoxLayout()
         LCDbox.setSizeConstraint(QLayout.SizeConstraint.SetFixedSize)
         LCDbox.setSpacing(0)
@@ -8595,6 +8612,14 @@ class ApplicationWindow(QMainWindow):
         lcdframe.setContentsMargins(0, 0, 0, 0)
         lcdframe.setLayout(LCDbox)
         return lcdframe
+
+    @staticmethod
+    def setMainControlRole(button:QPushButton, role:str) -> None:
+        button.setProperty('mainControlRole', role)
+
+    @staticmethod
+    def setRoastEventRole(button:QPushButton, role:str) -> None:
+        button.setProperty('roastEventRole', role)
 
     @staticmethod
     def setSliderNumber(lcd:QLCDNumber, v:float) -> None:

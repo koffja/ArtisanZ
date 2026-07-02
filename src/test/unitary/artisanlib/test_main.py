@@ -168,6 +168,7 @@ try:
         QLayout,
         QLCDNumber,
         QLineEdit,
+        QPushButton,
         QSizePolicy,
         QSlider,
         QTableWidget,
@@ -1744,6 +1745,7 @@ class TestMakeLCDbox:
         assert label.property('lcdLabel') is True
         assert lcd.property('lcdValue') is True
         assert lcdframe.property('lcdSurface') is True
+        assert lcdframe.property('telemetryCard') is True
 
     def test_makeLCDbox_layout_properties(self) -> None:
         """Test makeLCDbox sets correct layout properties."""
@@ -1788,13 +1790,24 @@ class TestMakeLCDbox:
 
         ApplicationWindow.configureLCDColumnLayout(layout)
 
-        assert layout.spacing() == 6
+        assert layout.spacing() == 8
         margins = layout.contentsMargins()
         assert margins.left() == 0
-        assert margins.top() == 0
-        assert margins.right() == 5
-        assert margins.bottom() == 0
+        assert margins.top() == 4
+        assert margins.right() == 7
+        assert margins.bottom() == 4
         assert layout.sizeConstraint() == QLayout.SizeConstraint.SetMinimumSize
+
+    def test_main_screen_visual_roles_are_set_as_dynamic_properties(self) -> None:
+        """Test Phase 1.5 visual roles can be targeted by the application stylesheet."""
+        control_button = QPushButton('Start')
+        event_button = QPushButton('Charge')
+
+        ApplicationWindow.setMainControlRole(control_button, 'record')
+        ApplicationWindow.setRoastEventRole(event_button, 'charge')
+
+        assert control_button.property('mainControlRole') == 'record'
+        assert event_button.property('roastEventRole') == 'charge'
 
 
 class TestSetSliderNumber:

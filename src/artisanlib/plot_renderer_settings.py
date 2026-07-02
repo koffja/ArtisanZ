@@ -10,7 +10,10 @@ from artisanlib.plot_renderer_registry import RendererPluginRegistry, RendererPl
 
 
 ARTISANZ_RENDERER_ID = 'ARTISANZ_RENDERER_ID'
-DEFAULT_RENDERER_ID = 'matplotlib-snapshot'
+DEFAULT_RENDERER_ID = 'pyqtgraph-snapshot'
+DEFAULT_RENDERER_LABEL = 'PyQtGraph Snapshot'
+MATPLOTLIB_RENDERER_ID = 'matplotlib-snapshot'
+MATPLOTLIB_RENDERER_LABEL = 'Matplotlib Snapshot'
 
 type RendererFallbackReason = Literal[
     'unknown',
@@ -117,6 +120,9 @@ def _first_available_plugin(registry: RendererPluginRegistry) -> RendererPluginS
 __all__ = [
     'ARTISANZ_RENDERER_ID',
     'DEFAULT_RENDERER_ID',
+    'DEFAULT_RENDERER_LABEL',
+    'MATPLOTLIB_RENDERER_ID',
+    'MATPLOTLIB_RENDERER_LABEL',
     'RendererFallbackReason',
     'RendererSelection',
     'RendererSelectionError',

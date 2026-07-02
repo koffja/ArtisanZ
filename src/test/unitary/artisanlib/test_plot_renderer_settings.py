@@ -14,6 +14,8 @@ from artisanlib.plot_renderer_registry import (
 from artisanlib.plot_renderer_settings import (
     ARTISANZ_RENDERER_ID,
     DEFAULT_RENDERER_ID,
+    DEFAULT_RENDERER_LABEL,
+    MATPLOTLIB_RENDERER_ID,
     RendererSelectionError,
     available_renderer_ids,
     configured_renderer_id,
@@ -21,23 +23,36 @@ from artisanlib.plot_renderer_settings import (
 )
 
 
-def test_configured_renderer_id_defaults_to_matplotlib_snapshot() -> None:
+def test_configured_renderer_id_defaults_to_pyqtgraph_snapshot() -> None:
     assert configured_renderer_id(env={}) == DEFAULT_RENDERER_ID
+    assert DEFAULT_RENDERER_ID == 'pyqtgraph-snapshot'
+    assert DEFAULT_RENDERER_LABEL == 'PyQtGraph Snapshot'
 
 
 def test_configured_renderer_id_reads_trimmed_env_override() -> None:
-    assert configured_renderer_id(env={ARTISANZ_RENDERER_ID: ' pyqtgraph-snapshot '}) == (
-        'pyqtgraph-snapshot'
+    assert configured_renderer_id(env={ARTISANZ_RENDERER_ID: ' matplotlib-snapshot '}) == (
+        MATPLOTLIB_RENDERER_ID
     )
 
 
-def test_select_renderer_uses_available_requested_builtin() -> None:
-    selection = select_renderer(env={ARTISANZ_RENDERER_ID: 'pyqtgraph-snapshot'})
+def test_select_renderer_uses_default_pyqtgraph_renderer() -> None:
+    selection = select_renderer(env={})
 
-    assert selection.requested_renderer_id == 'pyqtgraph-snapshot'
-    assert selection.renderer_id == 'pyqtgraph-snapshot'
-    assert selection.plugin.renderer_id == 'pyqtgraph-snapshot'
-    assert selection.registry.get('pyqtgraph-snapshot').renderer_id == 'pyqtgraph-snapshot'
+    assert selection.requested_renderer_id == DEFAULT_RENDERER_ID
+    assert selection.renderer_id == DEFAULT_RENDERER_ID
+    assert selection.plugin.label == DEFAULT_RENDERER_LABEL
+    assert selection.plugin.surface == 'pyqtgraph-plot'
+    assert selection.fallback_reason is None
+    assert not selection.used_fallback
+
+
+def test_select_renderer_uses_available_requested_builtin() -> None:
+    selection = select_renderer(env={ARTISANZ_RENDERER_ID: MATPLOTLIB_RENDERER_ID})
+
+    assert selection.requested_renderer_id == MATPLOTLIB_RENDERER_ID
+    assert selection.renderer_id == MATPLOTLIB_RENDERER_ID
+    assert selection.plugin.renderer_id == MATPLOTLIB_RENDERER_ID
+    assert selection.registry.get(MATPLOTLIB_RENDERER_ID).renderer_id == MATPLOTLIB_RENDERER_ID
     assert selection.fallback_reason is None
     assert not selection.used_fallback
 

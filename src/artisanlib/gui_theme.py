@@ -5,20 +5,20 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class ModernTheme:
-    window: str = '#f6f7f8'
-    surface: str = '#ffffff'
-    surface_muted: str = '#eef2f3'
-    border: str = '#d4dadd'
-    border_strong: str = '#aeb8bd'
-    text: str = '#22292f'
-    text_muted: str = '#66727a'
-    selection: str = '#dbeafe'
-    selection_text: str = '#102a43'
-    focus: str = '#2f80ed'
-    primary: str = '#336b75'
-    primary_hover: str = '#3f7f8a'
-    accent: str = '#b5644f'
-    success: str = '#4f7f58'
+    window: str = '#F3F5F1'
+    surface: str = '#FCFBF6'
+    surface_muted: str = '#E9EEF0'
+    border: str = '#CDD7D8'
+    border_strong: str = '#94A4A8'
+    text: str = '#20272B'
+    text_muted: str = '#637278'
+    selection: str = '#D7E7EC'
+    selection_text: str = '#18343C'
+    focus: str = '#376B7A'
+    primary: str = '#376B7A'
+    primary_hover: str = '#467D8C'
+    accent: str = '#B4685C'
+    success: str = '#6F875E'
 
 
 def lcd_value_stylesheet(text_color: str, background_color: str) -> str:
@@ -59,6 +59,9 @@ def modern_application_stylesheet(theme: ModernTheme | None = None) -> str:
         QMainWindow, QDialog {{
             background-color: {t.window};
         }}
+        QWidget[mainRoastScreen="true"] {{
+            background-color: {t.window};
+        }}
         QMenuBar {{
             background-color: {t.surface};
             border-bottom: 1px solid {t.border};
@@ -97,10 +100,20 @@ def modern_application_stylesheet(theme: ModernTheme | None = None) -> str:
             border-top: 1px solid {t.border};
             color: {t.text_muted};
         }}
+        QWidget[mainGraphPanel="true"] {{
+            background-color: #F8F7F1;
+            border: 1px solid {t.border};
+            border-radius: 8px;
+        }}
         QFrame[lcdSurface="true"] {{
             background-color: {t.surface};
             border: 1px solid {t.border};
             border-radius: 6px;
+        }}
+        QFrame[telemetryCard="true"] {{
+            background-color: {t.surface};
+            border: 1px solid {t.border};
+            border-radius: 8px;
         }}
         QLCDNumber[lcdValue="true"] {{
             border-width: 0px;
@@ -118,6 +131,11 @@ def modern_application_stylesheet(theme: ModernTheme | None = None) -> str:
             color: {t.text_muted};
             font-weight: 600;
             padding: 2px 8px 1px 8px;
+        }}
+        QFrame[roastEventRail="true"] {{
+            background-color: #E6ECEB;
+            border-top: 1px solid {t.border};
+            border-bottom: 1px solid {t.border};
         }}
         QGroupBox {{
             border: 1px solid {t.border};
@@ -190,6 +208,45 @@ def modern_application_stylesheet(theme: ModernTheme | None = None) -> str:
             border-radius: 6px;
             padding: 4px 9px;
             background-color: {t.surface};
+        }}
+        QPushButton[mainControlRole="monitor"],
+        QPushButton[mainControlRole="record"],
+        QPushButton[mainControlRole="reset"],
+        QPushButton[mainControlRole="control"] {{
+            border-radius: 8px;
+            padding: 7px 16px;
+            font-weight: 700;
+            background-color: {t.surface};
+            border: 1px solid {t.border};
+            color: {t.primary};
+        }}
+        QPushButton[mainControlRole="monitor"],
+        QPushButton[mainControlRole="control"] {{
+            background-color: {t.primary};
+            border-color: {t.primary};
+            color: white;
+        }}
+        QPushButton[mainControlRole="record"] {{
+            background-color: {t.accent};
+            border-color: {t.accent};
+            color: white;
+        }}
+        QPushButton[mainControlRole="reset"] {{
+            background-color: {t.surface};
+            border-color: {t.border_strong};
+            color: {t.primary};
+        }}
+        QPushButton[mainControlRole="monitor"]:hover:!pressed,
+        QPushButton[mainControlRole="reset"]:hover:!pressed,
+        QPushButton[mainControlRole="control"]:hover:!pressed {{
+            background-color: {t.primary_hover};
+            border-color: {t.primary_hover};
+            color: white;
+        }}
+        QPushButton[mainControlRole="record"]:hover:!pressed {{
+            background-color: #C47A6F;
+            border-color: #C47A6F;
+            color: white;
         }}
         QPushButton:hover:!pressed {{
             background-color: {t.surface_muted};
