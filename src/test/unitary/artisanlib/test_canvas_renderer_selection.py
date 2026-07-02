@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from types import SimpleNamespace
 
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 
@@ -76,9 +77,13 @@ class FakePyQtGraphTarget:
     def __init__(self, *, fail_update: bool = False) -> None:
         self.renderer = FakePyQtGraphRenderer(fail_update=fail_update)
         self.closed = False
+        self.axis_configs: list[dict[str, object]] = []
 
     def close(self) -> None:
         self.closed = True
+
+    def configure_axes(self, **kwargs: object) -> None:
+        self.axis_configs.append(kwargs)
 
 
 class FakeWidget:
@@ -110,10 +115,22 @@ class FakeLiveFrameCanvas:
         self.plot_live_frame_apply_result = None
         self.ax = None
         self.delta_ax = None
+        self.aw = SimpleNamespace(comparator=None)
         self.startofx = 0.0
         self.endofx = 12.0
         self.ylimit_min = 70.0
         self.ylimit = 270.0
+        self.time_grid = True
+        self.temp_grid = True
+        self.time_axis_label_mode = 'minutes'
+        self.xgrid = 60
+        self.ygrid = 10
+        self.zgrid = 5
+        self.gridalpha = 0.2
+        self.gridthickness = 1
+        self.palette = {'grid': '#e5e5e5', 'xlabel': '#808080'}
+        self.timeindex = [0]
+        self.timex = [0.0]
 
     def apply_pyqtgraph_live_plot_frame(self, frame: LivePlotFrame) -> dict[str, object | None]:
         return canvas.tgraphcanvas.apply_pyqtgraph_live_plot_frame(self, frame)
@@ -129,6 +146,12 @@ class FakeLiveFrameCanvas:
 
     def live_ror_axis_snapshot(self) -> object:
         return canvas.tgraphcanvas.live_ror_axis_snapshot(self)
+
+    def configure_pyqtgraph_axes(self) -> None:
+        return canvas.tgraphcanvas.configure_pyqtgraph_axes(self)
+
+    def pyqtgraph_time_axis_start(self) -> float:
+        return canvas.tgraphcanvas.pyqtgraph_time_axis_start(self)
 
 
 def _renderer_selection(renderer_id: str) -> RendererSelection:
@@ -247,6 +270,9 @@ def test_apply_live_plot_frame_uses_embedded_pyqtgraph_target() -> None:
     assert window.plot_live_frame_apply_result == result
     assert window.plot_pyqtgraph_target.renderer.snapshots
     assert window.plot_pyqtgraph_target.renderer.view_states
+    assert window.plot_pyqtgraph_target.axis_configs
+    assert window.plot_pyqtgraph_target.axis_configs[-1]['temperature_tick_step'] == 10.0
+    assert window.plot_pyqtgraph_target.axis_configs[-1]['time_label_mode'] == 'minutes'
     bt_item = window.plot_pyqtgraph_target.renderer.item_for('BT')
     assert bt_item is not None
     assert bt_item.x == (0.0, 1.0)

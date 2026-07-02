@@ -390,7 +390,7 @@ class tgraphcanvas(QObject):
         'alarmsets', 'loadalarmsfromprofile', 'loadalarmsfrombackground', 'alarmsfile', 'TPalarmtimeindex', 'rsfile',
         'loadaxisfromprofile', 'startofx_default', 'endofx_default', 'xgrid_default', 'ylimit_F_default',
         'ylimit_min_F_default', 'ygrid_F_default', 'zlimit_F_default', 'zlimit_min_F_default', 'zgrid_F_default', 'ylimit_C_default', 'ylimit_min_C_default',
-        'ygrid_C_default', 'zlimit_C_default', 'zlimit_min_C_default', 'zgrid_C_default', 'temp_grid', 'time_grid', 'zlimit_max', 'zlimit_min_max',
+        'ygrid_C_default', 'zlimit_C_default', 'zlimit_min_C_default', 'zgrid_C_default', 'temp_grid', 'time_grid', 'time_axis_label_mode', 'zlimit_max', 'zlimit_min_max',
         'ylimit_max', 'ylimit_min_max', 'ylimit', 'ylimit_min', 'zlimit', 'zlimit_min', 'RoRlimitFlag', 'RoRlimit', 'RoRlimitm', 'maxRoRlimit',
         'endofx', 'startofx', 'resetmaxtime', 'chargemintime', 'fixmaxtime', 'locktimex', 'autotimex', 'autotimexMode', 'autodeltaxET', 'autodeltaxBT', 'locktimex_start',
         'locktimex_end', 'xgrid', 'ygrid', 'zgrid', 'gridstyles', 'gridlinestyle', 'gridthickness', 'gridalpha',
@@ -2060,6 +2060,7 @@ class tgraphcanvas(QObject):
 
         self.temp_grid:bool = False
         self.time_grid:bool = False
+        self.time_axis_label_mode:str = 'minutes'
 
         # maximum accepted min/max settings for y and z axis
         self.zlimit_max:int = 500
@@ -5641,6 +5642,7 @@ class tgraphcanvas(QObject):
         renderer = getattr(target, 'renderer', None)
         if renderer is None:
             return {}
+        self.configure_pyqtgraph_axes()
         snapshot = live_frame_to_snapshot(
             frame,
             time_axis=self.live_time_axis_snapshot(),
@@ -5667,6 +5669,7 @@ class tgraphcanvas(QObject):
         if not callable(set_snapshot):
             return
         try:
+            self.configure_pyqtgraph_axes()
             set_snapshot(build_roast_plot_snapshot(self))
         except Exception as exc: # pylint: disable=broad-exception-caught
             self.plot_renderer_embed_fallback_reason = 'pyqtgraph_snapshot_error'
@@ -5683,6 +5686,7 @@ class tgraphcanvas(QObject):
         if not callable(reset_view):
             return
         try:
+            self.configure_pyqtgraph_axes()
             reset_view(RendererViewState(
                 time_axis=self.live_time_axis_snapshot(),
                 temperature_axis=self.live_temperature_axis_snapshot(),
@@ -5693,6 +5697,38 @@ class tgraphcanvas(QObject):
             gui_perf_count('canvas.pyqtgraph_view_sync_error')
             _log.warning('falling back to Matplotlib plot widget after PyQtGraph view sync failure: %s', exc)
             self.disable_selected_plot_widget()
+
+    def configure_pyqtgraph_axes(self) -> None:
+        target = self.plot_pyqtgraph_target
+        if target is None:
+            return
+        configure_axes = getattr(target, 'configure_axes', None)
+        if not callable(configure_axes):
+            return
+        palette = getattr(self, 'palette', {})
+        configure_axes(
+            time_grid=bool(getattr(self, 'time_grid', False)),
+            temperature_grid=bool(getattr(self, 'temp_grid', False)),
+            time_tick_step=float(getattr(self, 'xgrid', 0)),
+            temperature_tick_step=float(getattr(self, 'ygrid', 0)),
+            ror_tick_step=float(getattr(self, 'zgrid', 0)),
+            time_label_mode=str(getattr(self, 'time_axis_label_mode', 'minutes')),
+            time_axis_start=self.pyqtgraph_time_axis_start(),
+            grid_alpha=float(getattr(self, 'gridalpha', 0.2)),
+            grid_width=int(getattr(self, 'gridthickness', 1)),
+            grid_color=str(palette.get('grid', '#C9D2D4')),
+            axis_color=str(palette.get('xlabel', '#5E6B6E')),
+        )
+
+    def pyqtgraph_time_axis_start(self) -> float:
+        aw = getattr(self, 'aw', None)
+        if bool(getattr(aw, 'comparator', None)):
+            return 0.0
+        timeindex = getattr(self, 'timeindex', [-1])
+        timex = getattr(self, 'timex', [])
+        if timeindex and -1 < int(timeindex[0]) < len(timex):
+            return float(timex[int(timeindex[0])])
+        return 0.0
 
     def live_time_axis_snapshot(self) -> AxisSnapshot:
         if self.ax is not None:
@@ -8032,6 +8068,8 @@ class tgraphcanvas(QObject):
             starttime = self.timex[self.timeindex[0]]
         else:
             starttime = 0
+        if self.aw.qmc.time_axis_label_mode == 'seconds':
+            return str(int(round(x - starttime)))
         sign = '' if x >= starttime else '-'
         if self.aw.qmc.xgrid >= 3600: # hours/days timeaxis step selected, output in hh:mm
             m,s = divmod(abs((x - starttime)/60), 60.)
@@ -8060,6 +8098,8 @@ class tgraphcanvas(QObject):
             starttime = self.timex[self.timeindex[0]]
         else:
             starttime = 0
+        if self.aw.qmc.time_axis_label_mode == 'seconds':
+            return str(int(round(x - starttime)))
         return self.formtime_formatter(starttime, x, self.aw.qmc.xgrid >= 3600)
 
     @staticmethod
@@ -9715,6 +9755,12 @@ class tgraphcanvas(QObject):
         if self.flagstart or self.xgrid == 0:
             return ''
         if self.roastersize_setup == 0 and self.roastertype_setup == '':
+            if self.aw.qmc.time_axis_label_mode == 'seconds':
+                try:
+                    return get_unit_name('duration-second', length='short', locale=self.aw.locale_str) or 's'
+                except Exception as e:  # pylint: disable=broad-except # UnknownLocaleError
+                    _log.exception(e)
+                    return get_unit_name('duration-second', length='short', locale='en') or 's'
             if self.aw.qmc.xgrid < 3600:
                 try:
                     return get_unit_name('duration-minute', length='short', locale=self.aw.locale_str) or 'min'

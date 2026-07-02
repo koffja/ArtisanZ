@@ -77,17 +77,37 @@ Layout signature:
 - [x] Capture `ARTISANZ_RENDERER_ID=matplotlib-snapshot` override screenshot or at least run focused selector tests to prove fallback remains accessible.
 - [x] Update docs with screenshot paths and metrics.
 
+## Task 5: PyQtGraph Visual Parity Follow-up
+
+**Files:**
+- Modify: `src/artisanlib/plot_pyqtgraph_widget.py`
+- Modify: `src/artisanlib/canvas.py`
+- Modify: `src/artisanlib/axis.py`
+- Modify: `src/artisanlib/main.py`
+- Modify: `src/artisanlib/gui_theme.py`
+
+- [x] Render RoR on the same PyQtGraph plot as temperature using a linked right-side axis.
+- [x] Add a Config > Axes time-label mode control for minute labels vs second labels.
+- [x] Apply PyQtGraph x/y/RoR tick spacing from the existing axis settings, including temperature grid step.
+- [x] Make PyQtGraph grid rendering use the existing grid visibility and opacity controls with a visible minimum alpha.
+- [x] Constrain and wrap LCD telemetry labels so long titles cannot widen the right-side card column.
+- [x] Add spacing above the bottom event rail.
+
 ## Implementation Results
 
 - Default renderer now resolves to `pyqtgraph-snapshot`; `ARTISANZ_RENDERER_ID=matplotlib-snapshot` keeps the compatibility path available.
 - Historical profile redraws now sync a full canvas snapshot into the embedded PyQtGraph renderer, so default profile loading is nonblank instead of only supporting future live frames.
 - Runtime PyQtGraph snapshot failures fall back to the Matplotlib canvas and record `pyqtgraph_snapshot_error`.
-- The PyQtGraph widget now allows horizontal compression, preserving the right-side LCD telemetry column beside the plot.
+- The PyQtGraph widget now allows horizontal compression, preserves the right-side LCD telemetry column beside the plot, uses a single plot with a right-side RoR axis, and formats the default time axis in minutes.
+- Config > Axes now persists `time_axis_label_mode` with Minutes/Seconds choices, while the existing x/y/RoR step controls drive PyQtGraph ticks.
+- LCD telemetry cards have fixed width, wrapped labels, larger text padding, and a left column gap so long labels cannot push into the graph area.
+- The bottom event rail has more top/bottom breathing room.
 - Main-screen visual roles are present for top control buttons, event buttons, graph panel, event rail, and telemetry cards.
-- Focused tests currently pass: `48 passed, 2 warnings`.
+- Focused tests currently pass: `29 passed, 2 warnings` for the PyQtGraph/axis/LCD follow-up subset; earlier Phase 1.5 focused suite remains covered by the default-renderer tests.
 - Visual evidence:
   - Default PyQtGraph screenshot: `/tmp/artisanz-phase15-default-pyqtgraph.png`
   - Matplotlib override screenshot: `/tmp/artisanz-phase15-matplotlib-override.png`
+  - PyQtGraph axis/LCD follow-up screenshot: `/tmp/artisanz-pyqtgraph-axis-fixes.png`
 
 ## Self-Review
 

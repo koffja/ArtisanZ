@@ -43,7 +43,7 @@ def lcd_label_stylesheet(text_color: str) -> str:
     return (
         'QLabel { '
         f'color: {text_color}; '
-        'padding: 2px 8px 1px 8px;'
+        'padding: 4px 8px 3px 8px;'
         '}'
     )
 
@@ -130,7 +130,7 @@ def modern_application_stylesheet(theme: ModernTheme | None = None) -> str:
         QLabel[lcdLabel="true"] {{
             color: {t.text_muted};
             font-weight: 600;
-            padding: 2px 8px 1px 8px;
+            padding: 4px 8px 3px 8px;
         }}
         QFrame[roastEventRail="true"] {{
             background-color: #E6ECEB;

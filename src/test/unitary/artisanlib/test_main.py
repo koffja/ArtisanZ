@@ -1746,6 +1746,9 @@ class TestMakeLCDbox:
         assert lcd.property('lcdValue') is True
         assert lcdframe.property('lcdSurface') is True
         assert lcdframe.property('telemetryCard') is True
+        assert label.wordWrap() is True
+        assert lcdframe.minimumWidth() == 112
+        assert lcdframe.maximumWidth() == 112
 
     def test_makeLCDbox_layout_properties(self) -> None:
         """Test makeLCDbox sets correct layout properties."""
@@ -1762,9 +1765,9 @@ class TestMakeLCDbox:
         # Layout should be configured with proper spacing and margins
         layout = lcdframe.layout()
         margins = layout.contentsMargins()
-        assert margins.left() == 0
-        assert margins.top() == 6
-        assert margins.right() == 0
+        assert margins.left() == 6
+        assert margins.top() == 7
+        assert margins.right() == 6
         assert margins.bottom() == 0
         assert layout.spacing() == 0
 
@@ -1783,6 +1786,8 @@ class TestMakeLCDbox:
         assert value_row.count() == 1
         assert value_row.itemAt(0).widget() is lcd
         assert lcd.sizePolicy().horizontalPolicy() == QSizePolicy.Policy.Expanding
+        assert lcd.minimumWidth() == 100
+        assert lcd.maximumWidth() == 100
 
     def test_configure_lcd_column_layout_adds_vertical_item_spacing(self) -> None:
         """Test LCD column layout keeps visible space between stacked cards."""
@@ -1792,7 +1797,7 @@ class TestMakeLCDbox:
 
         assert layout.spacing() == 8
         margins = layout.contentsMargins()
-        assert margins.left() == 0
+        assert margins.left() == 8
         assert margins.top() == 4
         assert margins.right() == 7
         assert margins.bottom() == 4

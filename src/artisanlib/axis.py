@@ -41,6 +41,7 @@ class WindowsDlg(ArtisanDialog):
 
         self.time_grid_org = self.aw.qmc.time_grid
         self.temp_grid_org = self.aw.qmc.temp_grid
+        self.time_axis_label_mode_org = self.aw.qmc.time_axis_label_mode
         self.gridlinestyle_org = self.aw.qmc.gridlinestyle
         self.gridthickness_org = self.aw.qmc.gridthickness
         self.gridalpha_org = self.aw.qmc.gridalpha
@@ -231,6 +232,20 @@ class WindowsDlg(ArtisanDialog):
         except Exception: # pylint: disable=broad-except
             self.xaxislencombobox.setCurrentIndex(0)
         self.xaxislencombobox.currentIndexChanged.connect(self.xaxislenloc)
+        timeAxisLabelModeLabel = QLabel(QApplication.translate('Label', 'Labels'))
+        timeAxisLabelModeLabel.setToolTip(QApplication.translate('Tooltip', 'Time axis label format'))
+        self.timeAxisLabelModes = ['minutes', 'seconds']
+        self.timeAxisLabelModeCombobox = QComboBox()
+        self.timeAxisLabelModeCombobox.setToolTip(QApplication.translate('Tooltip', 'Time axis label format'))
+        self.timeAxisLabelModeCombobox.addItems([
+            QApplication.translate('ComboBox', 'Minutes'),
+            QApplication.translate('ComboBox', 'Seconds'),
+        ])
+        try:
+            self.timeAxisLabelModeCombobox.setCurrentIndex(self.timeAxisLabelModes.index(self.aw.qmc.time_axis_label_mode))
+        except Exception: # pylint: disable=broad-except
+            self.timeAxisLabelModeCombobox.setCurrentIndex(0)
+        self.timeAxisLabelModeCombobox.currentIndexChanged.connect(self.changeTimeAxisLabelMode)
         self.timeGridCheckBox = QCheckBox(QApplication.translate('CheckBox','Time'))
         self.timeGridCheckBox.setChecked(self.aw.qmc.time_grid)
         self.timeGridCheckBox.setToolTip(QApplication.translate('Tooltip', 'Show time grid'))
@@ -344,6 +359,9 @@ class WindowsDlg(ArtisanDialog):
         xlayout2.addSpacing(10)
         xlayout2.addWidget(timegridlabel)
         xlayout2.addWidget(self.xaxislencombobox)
+        xlayout2.addSpacing(10)
+        xlayout2.addWidget(timeAxisLabelModeLabel)
+        xlayout2.addWidget(self.timeAxisLabelModeCombobox)
         xlayout3 = QHBoxLayout()
         xlayout3.addWidget(chargeminlabel)
         xlayout3.addWidget(self.chargeminEdit)
@@ -774,6 +792,12 @@ class WindowsDlg(ArtisanDialog):
         self.aw.qmc.xaxistosm(redraw=False)
         self.aw.qmc.redraw(recomputeAllDeltas=False)
 
+    @pyqtSlot(int)
+    def changeTimeAxisLabelMode(self, _:int) -> None:
+        self.aw.qmc.time_axis_label_mode = self.timeAxisLabelModes[self.timeAxisLabelModeCombobox.currentIndex()]
+        self.aw.qmc.xaxistosm(redraw=False)
+        self.aw.qmc.redraw(recomputeAllDeltas=False)
+
     @pyqtSlot()
     def changeygrid(self) -> None:
         self.aw.qmc.ygrid = self.ygridSpinBox.value()
@@ -798,6 +822,7 @@ class WindowsDlg(ArtisanDialog):
             self.autoDeltaAxis()
         #
         self.aw.qmc.loadaxisfromprofile = self.loadAxisFromProfile.isChecked()
+        self.aw.qmc.time_axis_label_mode = self.timeAxisLabelModes[self.timeAxisLabelModeCombobox.currentIndex()]
         try:
             yl = int(str(self.ylimitEdit.text()))
             yl_min = int(str(self.ylimitEdit_min.text()))
@@ -901,6 +926,7 @@ class WindowsDlg(ArtisanDialog):
     def restoreState(self) -> None:
         self.aw.qmc.time_grid = self.time_grid_org
         self.aw.qmc.temp_grid = self.temp_grid_org
+        self.aw.qmc.time_axis_label_mode = self.time_axis_label_mode_org
         self.aw.qmc.gridlinestyle = self.gridlinestyle_org
         self.aw.qmc.gridthickness = self.gridthickness_org
         self.aw.qmc.gridalpha = self.gridalpha_org
@@ -955,6 +981,8 @@ class WindowsDlg(ArtisanDialog):
         self.gridalphaSpinBox.setValue(2)
         self.timeGridCheckBox.setChecked(False)
         self.tempGridCheckBox.setChecked(False)
+        self.timeAxisLabelModeCombobox.setCurrentIndex(0)
+        self.aw.qmc.time_axis_label_mode = 'minutes'
         if len(self.aw.qmc.timex) > 1:
             self.xlimitEdit.setText(stringfromseconds(self.aw.qmc.timex[-1], leadingzero=False))
         else:

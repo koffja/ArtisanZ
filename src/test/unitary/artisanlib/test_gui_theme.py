@@ -13,7 +13,7 @@ def test_modern_application_stylesheet_contains_core_surfaces() -> None:
     assert 'padding: 4px 8px 3px 8px;' in stylesheet
     assert 'QFrame[lcdSurface="true"]' in stylesheet
     assert 'QLabel[lcdLabel="true"]' in stylesheet
-    assert 'padding: 2px 8px 1px 8px;' in stylesheet
+    assert 'padding: 4px 8px 3px 8px;' in stylesheet
     assert 'QWidget[mainRoastScreen="true"]' in stylesheet
     assert 'QWidget[mainGraphPanel="true"]' in stylesheet
     assert 'QFrame[telemetryCard="true"]' in stylesheet

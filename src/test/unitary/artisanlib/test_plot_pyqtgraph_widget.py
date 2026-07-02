@@ -49,6 +49,7 @@ def test_create_pyqtgraph_plot_target_renders_temperature_and_ror_curves() -> No
 
         assert target.opengl_requested is False
         assert target.ror_plot is not None
+        assert target.ror_axis is not None
         assert _plot_data_item_count(target.temperature_plot) == 1
         assert _plot_data_item_count(target.ror_plot) == 1
     finally:
@@ -63,6 +64,42 @@ def test_create_pyqtgraph_plot_target_can_skip_ror_plot() -> None:
 
         assert target.ror_plot is None
         assert _plot_data_item_count(target.temperature_plot) == 1
+    finally:
+        target.close()
+
+
+def test_pyqtgraph_time_axis_can_display_minutes_or_seconds() -> None:
+    target = create_pyqtgraph_plot_target(use_opengl=False, include_ror=True)
+    try:
+        target.configure_axes(
+            time_grid=True,
+            temperature_grid=True,
+            time_tick_step=60.0,
+            temperature_tick_step=10.0,
+            ror_tick_step=5.0,
+            time_label_mode='minutes',
+            time_axis_start=60.0,
+            grid_alpha=0.2,
+            grid_width=1,
+            grid_color='#d0d7d8',
+            axis_color='#5e6b6e',
+        )
+        assert target.time_axis.tickStrings([60.0, 120.0, 180.0], 1.0, 60.0) == ['0:00', '1:00', '2:00']
+
+        target.configure_axes(
+            time_grid=True,
+            temperature_grid=True,
+            time_tick_step=60.0,
+            temperature_tick_step=10.0,
+            ror_tick_step=5.0,
+            time_label_mode='seconds',
+            time_axis_start=60.0,
+            grid_alpha=0.2,
+            grid_width=1,
+            grid_color='#d0d7d8',
+            axis_color='#5e6b6e',
+        )
+        assert target.time_axis.tickStrings([60.0, 120.0, 180.0], 1.0, 60.0) == ['0', '60', '120']
     finally:
         target.close()
 

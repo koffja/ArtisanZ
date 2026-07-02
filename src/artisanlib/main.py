@@ -123,7 +123,7 @@ from PyQt6.QtWidgets import (QApplication, QWidget, QMessageBox, QLabel, QMainWi
                          QLCDNumber, QSpinBox, QComboBox,
                          QSlider,
                          QColorDialog, QFrame, QScrollArea, QProgressDialog,
-                         QStyleFactory, QMenuBar, QMenu, QLayout, QDockWidget, QWIDGETSIZE_MAX)
+                         QStyleFactory, QMenuBar, QMenu, QLayout, QDockWidget)
 from PyQt6.QtGui import (QScreen, QPageLayout, QAction, QImageReader, QWindow,
                             QKeySequence, QShortcut,
                             QPixmap,QColor,QDesktopServices,QIcon,
@@ -3712,7 +3712,7 @@ class ApplicationWindow(QMainWindow):
         #Create LOWER BUTTONS Widget layout QDialogButtonBox to stack all lower buttons
         self.lowerbuttondialogLayout = QHBoxLayout()
         self.lowerbuttondialogLayout.setSpacing(5)
-        self.lowerbuttondialogLayout.setContentsMargins(0, 0, 0, 10) # (left, top, right, bottom)
+        self.lowerbuttondialogLayout.setContentsMargins(0, 12, 0, 14) # (left, top, right, bottom)
 
         self.lowerbuttondialog: QFrame = QFrame()
         self.lowerbuttondialog.setProperty('roastEventRail', True)
@@ -8588,27 +8588,38 @@ class ApplicationWindow(QMainWindow):
     @staticmethod
     def configureLCDColumnLayout(layout:QVBoxLayout) -> None:
         layout.setSpacing(8)
-        layout.setContentsMargins(0,4,7,4)
+        layout.setContentsMargins(8,4,7,4)
         layout.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
 
     @staticmethod
     def makeLCDbox(label:QLabel, lcd:MyQLCDNumber, lcdframe:QFrame) -> QFrame:
+        card_width = 112
+        inner_width = 100
         label.setProperty('lcdLabel', True)
+        label.setWordWrap(True)
+        label.setMaximumWidth(inner_width)
+        label.setMinimumWidth(inner_width)
+        label.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
+        label.setAlignment(Qt.AlignmentFlag.AlignRight|Qt.AlignmentFlag.AlignVCenter)
         lcd.setProperty('lcdValue', True)
-        lcd.setMaximumWidth(QWIDGETSIZE_MAX)
+        lcd.setMinimumWidth(inner_width)
+        lcd.setMaximumWidth(inner_width)
         lcd.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         lcdframe.setProperty('lcdSurface', True)
         lcdframe.setProperty('telemetryCard', True)
+        lcdframe.setMinimumWidth(card_width)
+        lcdframe.setMaximumWidth(card_width)
+        lcdframe.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         LCDbox = QVBoxLayout()
         LCDbox.setSizeConstraint(QLayout.SizeConstraint.SetFixedSize)
         LCDbox.setSpacing(0)
-        LCDbox.addWidget(label)
+        LCDbox.addWidget(label, 0, Qt.AlignmentFlag.AlignRight)
         LCDhBox = QHBoxLayout()
         LCDhBox.addWidget(lcd, 1)
         LCDbox.addLayout(LCDhBox)
         LCDhBox.setContentsMargins(0, 0, 0, 0)
         LCDhBox.setSpacing(0)
-        LCDbox.setContentsMargins(0, 6, 0, 0)
+        LCDbox.setContentsMargins(6, 7, 6, 0)
         lcdframe.setContentsMargins(0, 0, 0, 0)
         lcdframe.setLayout(LCDbox)
         return lcdframe
@@ -19246,6 +19257,9 @@ class ApplicationWindow(QMainWindow):
             self.qmc.legendloc = toInt(settings.value('legendloc',self.qmc.legendloc))
             self.qmc.temp_grid = toBool(settings.value('temp_grid',self.qmc.temp_grid))
             self.qmc.time_grid = toBool(settings.value('time_grid',self.qmc.time_grid))
+            self.qmc.time_axis_label_mode = toString(settings.value('time_axis_label_mode', self.qmc.time_axis_label_mode))
+            if self.qmc.time_axis_label_mode not in {'minutes', 'seconds'}:
+                self.qmc.time_axis_label_mode = 'minutes'
             settings.endGroup()
 #--- END GROUP Axis
 
@@ -21112,6 +21126,7 @@ class ApplicationWindow(QMainWindow):
             self.settingsSetValue(settings, default_settings, 'chargemintime',self.qmc.chargemintime, read_defaults)
             self.settingsSetValue(settings, default_settings, 'temp_grid',self.qmc.temp_grid, read_defaults)
             self.settingsSetValue(settings, default_settings, 'time_grid',self.qmc.time_grid, read_defaults)
+            self.settingsSetValue(settings, default_settings, 'time_axis_label_mode',self.qmc.time_axis_label_mode, read_defaults)
             settings.endGroup()
 #--- END GROUP Axis
 
