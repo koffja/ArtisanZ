@@ -20,13 +20,23 @@ _log = logging.getLogger(__name__)
 class ServerState:
     """Simulated time state advanced only by incoming requests."""
 
-    def __init__(self) -> None:
+    def __init__(self, fixed_step_ms: float | None = None) -> None:
+        if fixed_step_ms is not None and fixed_step_ms <= 0.0:
+            raise ValueError(f"fixed_step_ms must be positive, got {fixed_step_ms}")
         self.sim_t_ms = 0.0
         self.last_request_monotonic = 0.0
         self.frozen = True
+        self.fixed_step_ms = fixed_step_ms
 
     def advance(self) -> float:
         """Advance simulated time and return the current time in milliseconds."""
+        if self.fixed_step_ms is not None:
+            if self.frozen:
+                self.frozen = False
+                return self.sim_t_ms
+            self.sim_t_ms += self.fixed_step_ms
+            return self.sim_t_ms
+
         now = time.monotonic()
         if self.frozen:
             self.frozen = False
@@ -55,6 +65,7 @@ class AsyncServer:
         path: str = "WebSocket",
         noise_model: str = "ar1",
         noise_std: float = 0.3,
+        fixed_step_ms: float | None = None,
     ) -> None:
         self.profile = profile
         self.scheduler = scheduler
@@ -63,7 +74,7 @@ class AsyncServer:
         self.path = path.strip("/")
         self.noise_model = noise_model
         self.noise_std = noise_std
-        self.state = ServerState()
+        self.state = ServerState(fixed_step_ms=fixed_step_ms)
         self._noise_state_et = 0.0
         self._noise_state_bt = 0.0
 

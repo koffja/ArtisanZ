@@ -118,6 +118,18 @@ QTWEBENGINE_CHROMIUM_FLAGS="--disable-gpu --disable-software-rasterizer" \
 .venv/bin/python -m artisanlib.performance_report /tmp/artisanz-gui-perf-live.jsonl --sort-by max_ms --limit 20
 ```
 
+## WebSocket Virtual Roast Renderer Scenario
+
+For deterministic WebSocket-driven renderer validation without a physical machine:
+
+```bash
+cd src
+QT_QPA_PLATFORM=offscreen \
+.venv/bin/python -m artisanlib.websocket_renderer_smoke --samples 24 --fixed-step-ms 15000
+```
+
+This starts the in-process `dev_simulator` WebSocket server, requests Artisan-compatible `getData` samples, converts the stream into `RoastPlotSnapshot` frames, and feeds the PyQtGraph renderer. It validates live BT/ET/RoR curves plus event labels, event value rails, phase bands, and AUC/BBP/charge-target guide overlays.
+
 ## Results Template
 
 | Date | Branch | Scenario | Sampling Interval | Visible Curves | Key Metrics | Notes |
@@ -142,6 +154,7 @@ QTWEBENGINE_CHROMIUM_FLAGS="--disable-gpu --disable-software-rasterizer" \
 | 2026-07-02 | ArtisanZ | Phase 1.5 Matplotlib override profile redraw | N/A | Historical profile `profile1.alog`, `ARTISANZ_RENDERER_ID=matplotlib-snapshot` | `redraw max=197.679ms avg=147.718ms`; `redraw_keep_view max=175.239ms avg=138.826ms`; `updateBackground max=115.753ms avg=80.708ms`; `updategraphics max=0.005ms avg=0.002ms` | Screenshot: `/tmp/artisanz-phase15-matplotlib-override.png`; Workspace Status reports `Renderer: Matplotlib Snapshot - Selected`; compatibility path remains available |
 | 2026-07-02 | ArtisanZ | Phase 1.5 PyQtGraph axis/LCD follow-up profile redraw | N/A | Historical profile `profile1.alog`, default PyQtGraph renderer | `redraw max=215.606ms avg=178.485ms`; `redraw_keep_view max=200.670ms avg=169.374ms`; `updateBackground max=137.921ms avg=81.471ms`; `updategraphics max=0.008ms avg=0.003ms` | Screenshot: `/tmp/artisanz-pyqtgraph-axis-fixes.png`; PyQtGraph renders RoR on the same plot with a right axis, default time labels are minute-style, LCD cards stay fixed-width with wrapped labels, and no PyQtGraph AxisItem errors were logged after the tick-spacing fix |
 | 2026-07-02 | ArtisanZ | Phase 1.6 PyQtGraph grid/phase visual follow-up | N/A | Historical profile redraw plus explicit PyQtGraph grid/phase target screenshot | `redraw max=87.658ms avg=53.171ms`; `redraw_keep_view max=50.516ms avg=48.676ms`; `updateBackground max=30.605ms avg=24.606ms`; `updategraphics max=0.006ms avg=0.003ms` | Main-window screenshot: `/tmp/artisanz-phase16-grid-phase-v2.png`; explicit grid/phase screenshot: `/tmp/artisanz-phase16-grid-unit.png`; PyQtGraph grid now uses a dedicated overlay and default phase bands use visible Morandi colors. The profile redraw run used settings with x/y grid disabled, so the explicit target screenshot verifies grid rendering with grid enabled. |
+| 2026-07-02 | ArtisanZ | Phase 1.7 WebSocket virtual roast PyQtGraph validation | 24 WebSocket `getData` samples, fixed 15s virtual step | In-process `dev_simulator` WebSocket stream with BT/ET/RoR, 6 push events, 2 event values, 3 guide overlays | `avg_update_ms=1.1859`; `max_update_ms=4.7771`; `data_message_count=24`; `push_message_count=6`; `event_count=6`; `event_value_count=2`; `guide_count=3`; `full_snapshot_count=6`; `live_update_count=18` | Command: `QT_QPA_PLATFORM=offscreen .venv/bin/python -m artisanlib.websocket_renderer_smoke --samples 24 --fixed-step-ms 15000`; validates the default PyQtGraph renderer with real WebSocket protocol traffic instead of only static profile snapshots. |
 
 ## Decision Log
 
@@ -161,6 +174,8 @@ Phase 1.5 decision: PyQtGraph is now the default selected renderer. Matplotlib r
 Phase 1.6 decision: the PyQtGraph grid should be drawn by a dedicated overlay rather than relying on built-in `PlotItem.showGrid()` styling, because the default light theme makes the built-in grid too faint. Default phase bands should use visible Morandi colors while preserving user/custom colors. LCD telemetry should avoid nested outer-card/value compositions; transparent containers plus self-contained value surfaces are less fragile.
 
 Phase 1.6/4/5/6 closure decision: the 2026-07-02 closure work adds renderer-neutral event value rails and guide-line snapshots, renders those overlays in PyQtGraph, applies scoped modern dialog chrome to Axes/Curves/Events/Alarms, exposes workspace action hints in the QML status island, and adds typed plugin categories for renderer/report/analyzer/filter/profile-comparison boundaries. This is a visual/runtime and architecture-boundary closure, not a new performance baseline; Matplotlib remains the compatibility/export renderer, and real-device/OpenGL validation remains a future gate.
+
+Phase 1.7 decision: deterministic WebSocket virtual-roast validation is now available as a repeatable bridge between static renderer smokes and real-device sessions. The first 24-sample run shows the PyQtGraph renderer can consume WebSocket-derived BT/ET/RoR frames, overlay push events/event values/guides, and keep renderer update work below 5ms max in this offscreen harness. This supports continuing PyQtGraph parity and event-heavy visual QA before physical-device testing, but it is still not a substitute for hardware timing.
 
 ## Capture Troubleshooting
 

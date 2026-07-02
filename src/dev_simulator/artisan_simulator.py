@@ -37,6 +37,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--start-mode", choices=("auto", "manual"), default="auto")
     parser.add_argument("--noise-std", type=float, default=0.3)
     parser.add_argument("--noise-model", choices=("gaussian", "ar1", "none"), default="ar1")
+    parser.add_argument(
+        "--fixed-step-ms",
+        type=float,
+        default=None,
+        help="Advance simulated time by this many milliseconds per getData request.",
+    )
     parser.add_argument("--log-level", choices=("debug", "info", "warning", "error"), default="info")
 
     parser.add_argument("--charge-bt", type=float)
@@ -149,6 +155,8 @@ def build_server(args: argparse.Namespace) -> AsyncServer:
     _log.info("ArtisanZ endpoint: ws://%s:%d/%s", args.host, args.port, path)
     _log.info("Noise: model=%s, std=%.2f°C", args.noise_model, args.noise_std)
     _log.info("Start mode: %s", args.start_mode)
+    if args.fixed_step_ms is not None:
+        _log.info("Fixed step: %.0fms per request", args.fixed_step_ms)
     return AsyncServer(
         profile=profile,
         scheduler=scheduler,
@@ -157,6 +165,7 @@ def build_server(args: argparse.Namespace) -> AsyncServer:
         path=path,
         noise_model=args.noise_model,
         noise_std=args.noise_std,
+        fixed_step_ms=args.fixed_step_ms,
     )
 
 
