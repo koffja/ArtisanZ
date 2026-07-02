@@ -17,7 +17,9 @@ from artisanlib.plot_live_frame import (
     apply_pyqtgraph_live_curve_data,
     apply_pyqtgraph_live_frame,
     apply_selected_live_frame,
+    live_frame_to_snapshot,
 )
+from artisanlib.plot_snapshot import AxisSnapshot
 from artisanlib.plot_renderer_registry import create_default_renderer_registry
 from artisanlib.plot_renderer_settings import RendererSelection
 
@@ -80,12 +82,18 @@ def test_live_curve_data_from_sequences_normalizes_values() -> None:
         x=[0, 1.5, 2],
         y=[None, 4, 5.5],
         y_axis='ror',
+        color='#78905D',
+        line_style='--',
+        line_width=2.0,
     )
 
     assert curve.name == 'Delta BT'
     assert curve.x == (0.0, 1.5, 2.0)
     assert curve.y == (None, 4.0, 5.5)
     assert curve.y_axis == 'ror'
+    assert curve.color == '#78905D'
+    assert curve.line_style == '--'
+    assert curve.line_width == 2.0
 
 
 def test_live_curve_data_rejects_mismatched_lengths() -> None:
@@ -279,6 +287,7 @@ def test_apply_selected_live_frame_uses_matplotlib_surface() -> None:
 
 def test_apply_selected_live_frame_uses_pyqtgraph_surface_when_targets_exist() -> None:
     bt_item = FakePyQtGraphItem()
+    bt_line = FakeLine()
     frame = LivePlotFrame(curves=(
         LiveCurveData.from_sequences(name='BT', x=[0, 1], y=[120, None]),
     ))
@@ -286,7 +295,7 @@ def test_apply_selected_live_frame_uses_pyqtgraph_surface_when_targets_exist() -
     result = apply_selected_live_frame(
         _renderer_selection('pyqtgraph-snapshot'),
         frame,
-        matplotlib_lines={},
+        matplotlib_lines={'BT': bt_line},
         pyqtgraph_items={'BT': bt_item},
     )
 
@@ -297,6 +306,28 @@ def test_apply_selected_live_frame_uses_pyqtgraph_surface_when_targets_exist() -
     assert result.used_fallback is False
     assert bt_item.x == (0.0, 1.0)
     assert math.isnan(bt_item.y[1])
+    assert bt_line.y is not None
+    assert bt_line.y.tolist()[0] == 120.0
+    assert bt_line.y.tolist()[1] is None
+
+
+def test_apply_selected_live_frame_reports_pyqtgraph_update_fallback_reason() -> None:
+    bt_line = FakeLine()
+    frame = LivePlotFrame(curves=(
+        LiveCurveData.from_sequences(name='BT', x=[0, 1], y=[120, 121]),
+    ))
+
+    result = apply_selected_live_frame(
+        _renderer_selection('pyqtgraph-snapshot'),
+        frame,
+        matplotlib_lines={'BT': bt_line},
+        pyqtgraph_fallback_reason='pyqtgraph_live_update_error',
+    )
+
+    assert result.renderer_id == 'matplotlib-snapshot'
+    assert result.surface == 'matplotlib-axis'
+    assert result.fallback_reason == 'pyqtgraph_live_update_error'
+    assert result.applied_curves == ('BT',)
 
 
 def test_apply_selected_live_frame_falls_back_without_pyqtgraph_targets() -> None:
@@ -319,3 +350,31 @@ def test_apply_selected_live_frame_falls_back_without_pyqtgraph_targets() -> Non
     assert result.used_fallback is True
     assert bt_line.y is not None
     assert bt_line.y.tolist() == [120.0, 121.0]
+
+
+def test_live_frame_to_snapshot_preserves_curve_style_payload() -> None:
+    frame = LivePlotFrame(curves=(
+        LiveCurveData.from_sequences(
+            name='Delta BT',
+            x=[0, 1],
+            y=[None, 4.0],
+            y_axis='ror',
+            color='#78905D',
+            line_style='--',
+            line_width=2.5,
+        ),
+    ))
+
+    snapshot = live_frame_to_snapshot(
+        frame,
+        time_axis=AxisSnapshot(minimum=0.0, maximum=12.0, label='Time'),
+        temperature_axis=AxisSnapshot(minimum=70.0, maximum=270.0, label='Temperature'),
+        ror_axis=AxisSnapshot(minimum=-15.0, maximum=25.0, label='RoR'),
+    )
+
+    assert snapshot.curves[0].name == 'Delta BT'
+    assert snapshot.curves[0].y_axis == 'ror'
+    assert snapshot.curves[0].color == '#78905D'
+    assert snapshot.curves[0].line_style == '--'
+    assert snapshot.curves[0].line_width == 2.5
+    assert snapshot.ror_axis == AxisSnapshot(minimum=-15.0, maximum=25.0, label='RoR')

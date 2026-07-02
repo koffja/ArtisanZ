@@ -27,9 +27,64 @@ class FakeLine:
         self.y = y
 
 
+class FakePyQtGraphItem:
+    def __init__(self) -> None:
+        self.x: tuple[float, ...] = ()
+        self.y: tuple[float, ...] = ()
+
+    def setData(self, x: tuple[float, ...], y: tuple[float, ...]) -> None:  # noqa: N802
+        self.x = x
+        self.y = y
+
+
+class FakePyQtGraphRenderer:
+    def __init__(self, *, fail_update: bool = False) -> None:
+        self.items: dict[str, FakePyQtGraphItem] = {}
+        self.snapshots: list[object] = []
+        self.view_states: list[object] = []
+        self.fail_update = fail_update
+
+    def update_live_frame(self, snapshot: object) -> None:
+        if self.fail_update:
+            raise RuntimeError('pyqtgraph update failed')
+        self.snapshots.append(snapshot)
+        for curve in snapshot.curves:
+            self.items.setdefault(curve.name, FakePyQtGraphItem())
+
+    def reset_view(self, view_state: object) -> None:
+        self.view_states.append(view_state)
+
+    def item_for(self, name: str) -> FakePyQtGraphItem | None:
+        return self.items.get(name)
+
+
+class FakePyQtGraphTarget:
+    def __init__(self, *, fail_update: bool = False) -> None:
+        self.renderer = FakePyQtGraphRenderer(fail_update=fail_update)
+        self.closed = False
+
+    def close(self) -> None:
+        self.closed = True
+
+
+class FakeWidget:
+    def __init__(self) -> None:
+        self.visible = True
+
+    def parentWidget(self) -> None:  # noqa: N802
+        return None
+
+    def setVisible(self, visible: bool) -> None:  # noqa: N802
+        self.visible = visible
+
+
 class FakeLiveFrameCanvas:
     def __init__(self, selection: RendererSelection) -> None:
         self.plot_renderer_selection = selection
+        self.plot_pyqtgraph_target = None
+        self.plot_renderer_embed_fallback_reason = None
+        self.canvas = FakeWidget()
+        self.plot_display_widget = self.canvas
         self.ETcurve = True
         self.BTcurve = True
         self.DeltaETflag = True
@@ -39,6 +94,27 @@ class FakeLiveFrameCanvas:
         self.l_delta1 = FakeLine()
         self.l_delta2 = FakeLine()
         self.plot_live_frame_apply_result = None
+        self.ax = None
+        self.delta_ax = None
+        self.startofx = 0.0
+        self.endofx = 12.0
+        self.ylimit_min = 70.0
+        self.ylimit = 270.0
+
+    def apply_pyqtgraph_live_plot_frame(self, frame: LivePlotFrame) -> dict[str, object | None]:
+        return canvas.tgraphcanvas.apply_pyqtgraph_live_plot_frame(self, frame)
+
+    def disable_selected_plot_widget(self) -> None:
+        return canvas.tgraphcanvas.disable_selected_plot_widget(self)
+
+    def live_time_axis_snapshot(self) -> object:
+        return canvas.tgraphcanvas.live_time_axis_snapshot(self)
+
+    def live_temperature_axis_snapshot(self) -> object:
+        return canvas.tgraphcanvas.live_temperature_axis_snapshot(self)
+
+    def live_ror_axis_snapshot(self) -> object:
+        return canvas.tgraphcanvas.live_ror_axis_snapshot(self)
 
 
 def _renderer_selection(renderer_id: str) -> RendererSelection:
@@ -131,4 +207,71 @@ def test_apply_live_plot_frame_falls_back_when_pyqtgraph_targets_are_not_embedde
     assert result.fallback_reason == 'pyqtgraph_targets_unavailable'
     assert result.applied_curves == ('BT',)
     assert window.plot_live_frame_apply_result == result
+    assert window.l_temp2.x == (0.0, 1.0)
+
+
+def test_apply_live_plot_frame_uses_embedded_pyqtgraph_target() -> None:
+    window = FakeLiveFrameCanvas(_renderer_selection('pyqtgraph-snapshot'))
+    window.plot_pyqtgraph_target = FakePyQtGraphTarget()
+    window.plot_display_widget = FakeWidget()
+    frame = LivePlotFrame(curves=(
+        LiveCurveData.from_sequences(
+            name='BT',
+            x=[0, 1],
+            y=[120, None],
+            color='#4E7180',
+        ),
+    ))
+
+    result = canvas.tgraphcanvas.apply_live_plot_frame(window, frame)
+
+    assert result.requested_renderer_id == 'pyqtgraph-snapshot'
+    assert result.renderer_id == 'pyqtgraph-snapshot'
+    assert result.surface == 'pyqtgraph-plot'
+    assert result.applied_curves == ('BT',)
+    assert result.used_fallback is False
+    assert window.plot_live_frame_apply_result == result
+    assert window.plot_pyqtgraph_target.renderer.snapshots
+    assert window.plot_pyqtgraph_target.renderer.view_states
+    bt_item = window.plot_pyqtgraph_target.renderer.item_for('BT')
+    assert bt_item is not None
+    assert bt_item.x == (0.0, 1.0)
+    assert window.l_temp2.x == (0.0, 1.0)
+
+
+def test_apply_live_plot_frame_keeps_extra_curve_items_distinct() -> None:
+    window = FakeLiveFrameCanvas(_renderer_selection('pyqtgraph-snapshot'))
+    window.plot_pyqtgraph_target = FakePyQtGraphTarget()
+    window.plot_display_widget = FakeWidget()
+    frame = LivePlotFrame(curves=(
+        LiveCurveData.from_sequences(name='Extra 1 1', x=[0, 1], y=[101, 102]),
+        LiveCurveData.from_sequences(name='Extra 2 1', x=[0, 1], y=[111, 112]),
+    ))
+
+    result = canvas.tgraphcanvas.apply_live_plot_frame(window, frame)
+
+    assert result.surface == 'pyqtgraph-plot'
+    assert result.applied_curves == ('Extra 1 1', 'Extra 2 1')
+    assert set(window.plot_pyqtgraph_target.renderer.items) == {'Extra 1 1', 'Extra 2 1'}
+
+
+def test_apply_live_plot_frame_falls_back_after_pyqtgraph_update_error() -> None:
+    window = FakeLiveFrameCanvas(_renderer_selection('pyqtgraph-snapshot'))
+    failing_target = FakePyQtGraphTarget(fail_update=True)
+    window.plot_pyqtgraph_target = failing_target
+    window.plot_display_widget = FakeWidget()
+    frame = LivePlotFrame(curves=(
+        LiveCurveData.from_sequences(name='BT', x=[0, 1], y=[120, 121]),
+    ))
+
+    result = canvas.tgraphcanvas.apply_live_plot_frame(window, frame)
+
+    assert result.requested_renderer_id == 'pyqtgraph-snapshot'
+    assert result.renderer_id == 'matplotlib-snapshot'
+    assert result.surface == 'matplotlib-axis'
+    assert result.fallback_reason == 'pyqtgraph_live_update_error'
+    assert result.applied_curves == ('BT',)
+    assert window.plot_renderer_embed_fallback_reason == 'pyqtgraph_live_update_error'
+    assert window.plot_pyqtgraph_target is None
+    assert failing_target.closed is True
     assert window.l_temp2.x == (0.0, 1.0)

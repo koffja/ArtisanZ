@@ -7,11 +7,11 @@ from typing import Literal
 
 import numpy
 
-from artisanlib.plot_snapshot import YAxisName
+from artisanlib.plot_snapshot import AxisSnapshot, CurveSnapshot, RoastPlotSnapshot, YAxisName
 from artisanlib.plot_renderer_registry import RendererSurface
 from artisanlib.plot_renderer_settings import DEFAULT_RENDERER_ID, RendererSelection
 
-type LiveFrameFallbackReason = Literal['pyqtgraph_targets_unavailable']
+type LiveFrameFallbackReason = Literal['pyqtgraph_targets_unavailable', 'pyqtgraph_live_update_error']
 
 
 @dataclass(frozen=True, slots=True)
@@ -34,6 +34,9 @@ class LiveCurveData:
     x: tuple[float, ...]
     y: tuple[float | None, ...]
     y_axis: YAxisName = 'temperature'
+    color: str = '#4E7180'
+    line_style: str = '-'
+    line_width: float = 1.0
 
     @classmethod
     def from_sequences(
@@ -42,7 +45,10 @@ class LiveCurveData:
             name: str,
             x: Sequence[float],
             y: Sequence[float | None],
-            y_axis: YAxisName = 'temperature') -> LiveCurveData:
+            y_axis: YAxisName = 'temperature',
+            color: str = '#4E7180',
+            line_style: str = '-',
+            line_width: float = 1.0) -> LiveCurveData:
         if len(x) != len(y):
             raise ValueError('x and y must have the same length')
         return cls(
@@ -50,6 +56,9 @@ class LiveCurveData:
             x=tuple(float(value) for value in x),
             y=tuple(None if value is None else float(value) for value in y),
             y_axis=y_axis,
+            color=color,
+            line_style=line_style,
+            line_width=float(line_width),
         )
 
 
@@ -144,8 +153,10 @@ def apply_selected_live_frame(
         frame: LivePlotFrame,
         *,
         matplotlib_lines: Mapping[str, object | None],
-        pyqtgraph_items: Mapping[str, object | None] | None = None) -> LiveFrameApplyResult:
+        pyqtgraph_items: Mapping[str, object | None] | None = None,
+        pyqtgraph_fallback_reason: LiveFrameFallbackReason = 'pyqtgraph_targets_unavailable') -> LiveFrameApplyResult:
     if selection.plugin.surface == 'pyqtgraph-plot':
+        matplotlib_applied_curves = apply_matplotlib_live_frame(matplotlib_lines, frame)
         if pyqtgraph_items:
             return LiveFrameApplyResult(
                 requested_renderer_id=selection.requested_renderer_id,
@@ -157,14 +168,39 @@ def apply_selected_live_frame(
             requested_renderer_id=selection.requested_renderer_id,
             renderer_id=DEFAULT_RENDERER_ID,
             surface='matplotlib-axis',
-            applied_curves=apply_matplotlib_live_frame(matplotlib_lines, frame),
-            fallback_reason='pyqtgraph_targets_unavailable',
+            applied_curves=matplotlib_applied_curves,
+            fallback_reason=pyqtgraph_fallback_reason,
         )
     return LiveFrameApplyResult(
         requested_renderer_id=selection.requested_renderer_id,
         renderer_id=selection.renderer_id,
         surface='matplotlib-axis',
         applied_curves=apply_matplotlib_live_frame(matplotlib_lines, frame),
+    )
+
+
+def live_frame_to_snapshot(
+        frame: LivePlotFrame,
+        *,
+        time_axis: AxisSnapshot,
+        temperature_axis: AxisSnapshot,
+        ror_axis: AxisSnapshot | None = None) -> RoastPlotSnapshot:
+    return RoastPlotSnapshot(
+        curves=tuple(
+            CurveSnapshot(
+                name=curve.name,
+                x=curve.x,
+                y=curve.y,
+                color=curve.color,
+                y_axis=curve.y_axis,
+                line_style=curve.line_style,
+                line_width=curve.line_width,
+            )
+            for curve in frame.curves
+        ),
+        time_axis=time_axis,
+        temperature_axis=temperature_axis,
+        ror_axis=ror_axis,
     )
 
 
@@ -185,4 +221,5 @@ __all__ = [
     'apply_pyqtgraph_live_curve_data',
     'apply_pyqtgraph_live_frame',
     'apply_selected_live_frame',
+    'live_frame_to_snapshot',
 ]

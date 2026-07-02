@@ -33,14 +33,16 @@ def create_pyqtgraph_plot_target(
     QApplication.instance() or QApplication([])
     previous_opengl = bool(pg.getConfigOption('useOpenGL'))
     pg.setConfigOptions(useOpenGL=use_opengl)
+    pg.setConfigOptions(antialias=True)
 
     widget = pg.GraphicsLayoutWidget()
+    _call_if_available(widget, 'setBackground', '#F8F7F1')
     temperature_plot = widget.addPlot(row=0, col=0)
-    _configure_temperature_plot(temperature_plot)
+    _configure_temperature_plot(temperature_plot, pg)
     ror_plot = None
     if include_ror:
         ror_plot = widget.addPlot(row=1, col=0)
-        _configure_ror_plot(ror_plot, temperature_plot)
+        _configure_ror_plot(ror_plot, temperature_plot, pg)
 
     renderer = PyQtGraphSnapshotRenderer(
         temperature_plot=temperature_plot,
@@ -57,17 +59,30 @@ def create_pyqtgraph_plot_target(
     )
 
 
-def _configure_temperature_plot(plot: object) -> None:
+def _configure_temperature_plot(plot: object, pg: Any) -> None:
+    _configure_plot_surface(plot, pg)
     _call_if_available(plot, 'setLabel', 'left', 'Temperature')
     _call_if_available(plot, 'setLabel', 'bottom', 'Time')
-    _call_if_available(plot, 'showGrid', x=True, y=True, alpha=0.25)
 
 
-def _configure_ror_plot(plot: object, temperature_plot: object) -> None:
+def _configure_ror_plot(plot: object, temperature_plot: object, pg: Any) -> None:
+    _configure_plot_surface(plot, pg)
     _call_if_available(plot, 'setLabel', 'left', 'RoR')
     _call_if_available(plot, 'setLabel', 'bottom', 'Time')
-    _call_if_available(plot, 'showGrid', x=True, y=True, alpha=0.25)
     _call_if_available(plot, 'setXLink', temperature_plot)
+
+
+def _configure_plot_surface(plot: object, pg: Any) -> None:
+    _call_if_available(plot, 'showGrid', x=True, y=True, alpha=0.16)
+    _call_if_available(plot, 'setMenuEnabled', False)
+    view_box = getattr(plot, 'getViewBox', lambda: None)()
+    _call_if_available(view_box, 'setBackgroundColor', '#F8F7F1')
+    axis_pen = pg.mkPen('#C9D2D4', width=1)
+    text_pen = pg.mkPen('#5E6B6E', width=1)
+    for axis_name in ('left', 'bottom'):
+        axis = getattr(plot, 'getAxis', lambda _: None)(axis_name)
+        _call_if_available(axis, 'setPen', axis_pen)
+        _call_if_available(axis, 'setTextPen', text_pen)
 
 
 def _call_if_available(target: object, method_name: str, *args: object, **kwargs: object) -> None:

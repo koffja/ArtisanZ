@@ -1817,7 +1817,7 @@ class ApplicationWindow(QMainWindow):
         self.charge_manager: ChargeTargetManager = ChargeTargetManager()
         self.qmc.charge_manager = self.charge_manager
 
-        self.qmc.canvas.setMinimumHeight(150)
+        self.qmc.graph_widget().setMinimumHeight(150)
         #self.qmc.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground)
 
         # PID control for Arduino, Hottop and generic MODBUS devices
@@ -1836,7 +1836,7 @@ class ApplicationWindow(QMainWindow):
 
         self.comparator:roastCompareDlg|None = None # holds the profile comparator dialog
 
-        self.qmc.canvas.setContentsMargins(0,0,0,0)
+        self.qmc.graph_widget().setContentsMargins(0,0,0,0)
         #events config
         self.eventsbuttonflag:int = 0
         self.minieventsflags:list[int] = [0,0,0] # minieditor visibility per state OFF, ON, START
@@ -4060,7 +4060,7 @@ class ApplicationWindow(QMainWindow):
         self.scroller.setVisible(False)
 
         self.splitter: Splitter = Splitter(Qt.Orientation.Vertical)
-        self.splitter.addWidget(self.qmc.canvas)
+        self.splitter.addWidget(self.qmc.graph_widget())
         self.splitter.addWidget(self.scroller)
         self.splitter.setSizes([100,0])
         self.splitter.setFrameShape(QFrame.Shape.NoFrame)

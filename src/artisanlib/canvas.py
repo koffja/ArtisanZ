@@ -109,12 +109,15 @@ from artisanlib.plot_live_frame import (
     LiveAxisRange,
     LiveCurveData,
     LiveFrameApplyResult,
+    LiveFrameFallbackReason,
     LivePlotFrame,
     apply_matplotlib_live_axis_range,
     apply_matplotlib_live_curve_data,
     apply_matplotlib_live_curve_sequences,
     apply_selected_live_frame,
+    live_frame_to_snapshot,
 )
+from artisanlib.plot_snapshot import AxisSnapshot
 from artisanlib.plot_renderer_registry import create_default_renderer_registry
 from artisanlib.plot_renderer_settings import (
     DEFAULT_RENDERER_ID,
@@ -443,7 +446,8 @@ class tgraphcanvas(QObject):
         'meterunitnames', 'meterreads_default', 'meterreads', 'meterlabels_setup', 'meterlabels', 'meterunits_setup', 'meterunits',
         'meterfuels_setup', 'meterfuels', 'metersources_setup', 'metersources', 'playbackdrop_min_roasttime', 'TP_max_roasttime',
         'single_click_mpl_upperleft_corner_timer', 'single_click_mpl_upperleft_corner_TIMEOUT',
-        'plot_renderer_selection', 'plot_live_frame_apply_result'
+        'plot_renderer_selection', 'plot_live_frame_apply_result', 'plot_pyqtgraph_target',
+        'plot_display_widget', 'plot_renderer_embed_fallback_reason'
         ]
 
 
@@ -458,6 +462,10 @@ class tgraphcanvas(QObject):
         self.canvas = MplCanvas(parent, dpi, self.tight_layout_params, aw)
         self.plot_renderer_selection = select_canvas_renderer()
         self.plot_live_frame_apply_result: LiveFrameApplyResult | None = None
+        self.plot_pyqtgraph_target: object | None = None
+        self.plot_display_widget: QWidget = self.canvas
+        self.plot_renderer_embed_fallback_reason: str | None = None
+        self.enable_selected_plot_widget(parent)
         self.charge_manager: ChargeTargetManager | None = None
         self.charge_target_annotation: Annotation | None = None
 
@@ -4726,6 +4734,7 @@ class tgraphcanvas(QObject):
                     t1 = temp1_readings[0]
                     t2 = temp2_readings[0]
                     tx = timex_readings[0]
+                    live_frame_curves: list[LiveCurveData] = []
 
                     self.RTtemp1 = t1 # store readings for real-time symbolic evaluation
                     self.RTtemp2 = t2
@@ -4808,25 +4817,35 @@ class tgraphcanvas(QObject):
                                 if local_flagstart:
                                     if self.aw.extraCurveVisibility1[i] and len(self.extratemp1lines) > xtra_dev_lines1 and self.extratemp1lines[xtra_dev_lines1] is not None:
                                         extra_curve1_data = full_curve_data(sample_extractimex1[i], sample_extractemp1[i])
+                                        extra_curve1 = LiveCurveData(
+                                            name=f'Extra {i + 1} 1',
+                                            x=extra_curve1_data.times,
+                                            y=extra_curve1_data.values,
+                                            color=self.extradevicecolor1[i] if len(self.extradevicecolor1) > i else '#4E7180',
+                                            line_style=self.extralinestyles1[i] if len(self.extralinestyles1) > i else '-',
+                                            line_width=self.extralinewidths1[i] if len(self.extralinewidths1) > i else self.extra_linewidth_default,
+                                        )
                                         apply_matplotlib_live_curve_data(
                                             self.extratemp1lines[xtra_dev_lines1],
-                                            LiveCurveData(
-                                                name=f'Extra {i + 1} 1',
-                                                x=extra_curve1_data.times,
-                                                y=extra_curve1_data.values,
-                                            ),
+                                            extra_curve1,
                                         )
+                                        live_frame_curves.append(extra_curve1)
                                         xtra_dev_lines1 = xtra_dev_lines1 + 1
                                     if self.aw.extraCurveVisibility2[i] and len(self.extratemp2lines) > xtra_dev_lines2 and self.extratemp2lines[xtra_dev_lines2] is not None:
                                         extra_curve2_data = full_curve_data(sample_extractimex2[i], sample_extractemp2[i])
+                                        extra_curve2 = LiveCurveData(
+                                            name=f'Extra {i + 1} 2',
+                                            x=extra_curve2_data.times,
+                                            y=extra_curve2_data.values,
+                                            color=self.extradevicecolor2[i] if len(self.extradevicecolor2) > i else '#4E7180',
+                                            line_style=self.extralinestyles2[i] if len(self.extralinestyles2) > i else '-',
+                                            line_width=self.extralinewidths2[i] if len(self.extralinewidths2) > i else self.extra_linewidth_default,
+                                        )
                                         apply_matplotlib_live_curve_data(
                                             self.extratemp2lines[xtra_dev_lines2],
-                                            LiveCurveData(
-                                                name=f'Extra {i + 1} 2',
-                                                x=extra_curve2_data.times,
-                                                y=extra_curve2_data.values,
-                                            ),
+                                            extra_curve2,
                                         )
+                                        live_frame_curves.append(extra_curve2)
                                         xtra_dev_lines2 = xtra_dev_lines2 + 1
                         #ERROR FOUND
                         else:
@@ -4929,7 +4948,6 @@ class tgraphcanvas(QObject):
                     sample_tstemp1.append(st1)
                     sample_tstemp2.append(st2)
 
-                    live_frame_curves: list[LiveCurveData] = []
                     if local_flagstart:
                         if self.ETcurve:
                             et_curve_data = full_curve_data(sample_ctimex1, sample_ctemp1)
@@ -4938,6 +4956,9 @@ class tgraphcanvas(QObject):
                                     name='ET',
                                     x=et_curve_data.times,
                                     y=et_curve_data.values,
+                                    color=self.palette['et'],
+                                    line_style=self.ETlinestyle,
+                                    line_width=self.ETlinewidth,
                                 ),
                             )
                         if self.BTcurve:
@@ -4947,6 +4968,9 @@ class tgraphcanvas(QObject):
                                     name='BT',
                                     x=bt_curve_data.times,
                                     y=bt_curve_data.values,
+                                    color=self.palette['bt'],
+                                    line_style=self.BTlinestyle,
+                                    line_width=self.BTlinewidth,
                                 ),
                             )
 
@@ -5091,6 +5115,9 @@ class tgraphcanvas(QObject):
                                     x=delta_et_data.times,
                                     y=delta_et_data.values,
                                     y_axis='ror',
+                                    color=self.palette['deltaet'],
+                                    line_style=self.ETdeltalinestyle,
+                                    line_width=self.ETdeltalinewidth,
                                 ),
                             )
                         if self.DeltaBTflag:
@@ -5105,6 +5132,9 @@ class tgraphcanvas(QObject):
                                     x=delta_bt_data.times,
                                     y=delta_bt_data.values,
                                     y_axis='ror',
+                                    color=self.palette['deltabt'],
+                                    line_style=self.BTdeltalinestyle,
+                                    line_width=self.BTdeltalinewidth,
                                 ),
                             )
                         if live_frame_curves:
@@ -5529,7 +5559,60 @@ class tgraphcanvas(QObject):
         new_y = numpy.hstack((y1, y2[::-1]))
         return numpy.vstack((new_x, new_y)).T
 
+    def graph_widget(self) -> QWidget:
+        return self.plot_display_widget
+
+    def enable_selected_plot_widget(self, parent: QWidget) -> None:
+        if self.plot_renderer_selection.plugin.surface != 'pyqtgraph-plot':
+            return
+        try:
+            from artisanlib.plot_pyqtgraph_widget import ( # pylint: disable=import-outside-toplevel
+                create_pyqtgraph_plot_target,
+            )
+            target = create_pyqtgraph_plot_target(use_opengl=False, include_ror=True)
+            widget = cast(QWidget, target.widget)
+            widget.setParent(parent)
+            widget.setMinimumHeight(150)
+            widget.setContentsMargins(0, 0, 0, 0)
+            self.plot_pyqtgraph_target = target
+            self.plot_display_widget = widget
+            self.canvas.setVisible(False)
+        except Exception as exc: # pylint: disable=broad-exception-caught
+            self.plot_renderer_embed_fallback_reason = 'pyqtgraph_target_error'
+            _log.warning('falling back to Matplotlib plot widget after PyQtGraph target failure: %s', exc)
+
+    def disable_selected_plot_widget(self) -> None:
+        target = self.plot_pyqtgraph_target
+        if target is None:
+            return
+        old_widget = self.plot_display_widget
+        parent = old_widget.parentWidget()
+        if parent is not None:
+            index_of = getattr(parent, 'indexOf', None)
+            insert_widget = getattr(parent, 'insertWidget', None)
+            if callable(index_of) and callable(insert_widget):
+                index = index_of(old_widget)
+                old_widget.setParent(None)
+                insert_widget(max(index, 0), self.canvas)
+        self.canvas.setVisible(True)
+        old_widget.setVisible(False)
+        close_target = getattr(target, 'close', None)
+        if callable(close_target):
+            close_target()
+        self.plot_pyqtgraph_target = None
+        self.plot_display_widget = self.canvas
+
     def apply_live_plot_frame(self, frame: LivePlotFrame) -> LiveFrameApplyResult:
+        pyqtgraph_items = None
+        pyqtgraph_fallback_reason: LiveFrameFallbackReason = 'pyqtgraph_targets_unavailable'
+        if self.plot_pyqtgraph_target is not None:
+            try:
+                pyqtgraph_items = self.apply_pyqtgraph_live_plot_frame(frame)
+            except Exception as exc: # pylint: disable=broad-exception-caught
+                pyqtgraph_fallback_reason = 'pyqtgraph_live_update_error'
+                self.plot_renderer_embed_fallback_reason = pyqtgraph_fallback_reason
+                _log.warning('falling back to Matplotlib plot widget after PyQtGraph live update failure: %s', exc)
+                self.disable_selected_plot_widget()
         result = apply_selected_live_frame(
             self.plot_renderer_selection,
             frame,
@@ -5539,11 +5622,55 @@ class tgraphcanvas(QObject):
                 'Delta ET': self.l_delta1 if self.DeltaETflag else None,
                 'Delta BT': self.l_delta2 if self.DeltaBTflag else None,
             },
+            pyqtgraph_items=pyqtgraph_items,
+            pyqtgraph_fallback_reason=pyqtgraph_fallback_reason,
         )
         self.plot_live_frame_apply_result = result
         if result.used_fallback:
             gui_perf_count(f'canvas.live_frame_renderer_fallback.{result.fallback_reason}')
         return result
+
+    def apply_pyqtgraph_live_plot_frame(self, frame: LivePlotFrame) -> dict[str, object | None]:
+        target = self.plot_pyqtgraph_target
+        if target is None:
+            return {}
+        renderer = getattr(target, 'renderer', None)
+        if renderer is None:
+            return {}
+        snapshot = live_frame_to_snapshot(
+            frame,
+            time_axis=self.live_time_axis_snapshot(),
+            temperature_axis=self.live_temperature_axis_snapshot(),
+            ror_axis=self.live_ror_axis_snapshot(),
+        )
+        update_live_frame = getattr(renderer, 'update_live_frame', None)
+        if callable(update_live_frame):
+            update_live_frame(snapshot)
+        reset_view = getattr(renderer, 'reset_view', None)
+        if callable(reset_view):
+            reset_view(snapshot.export_view_state())
+        item_for = getattr(renderer, 'item_for', None)
+        if not callable(item_for):
+            return {}
+        return {name: item_for(name) for name in frame.curve_names()}
+
+    def live_time_axis_snapshot(self) -> AxisSnapshot:
+        if self.ax is not None:
+            minimum, maximum = self.ax.get_xlim()
+            return AxisSnapshot(minimum=float(minimum), maximum=float(maximum), label='Time')
+        return AxisSnapshot(minimum=float(self.startofx), maximum=float(self.endofx), label='Time')
+
+    def live_temperature_axis_snapshot(self) -> AxisSnapshot:
+        if self.ax is not None:
+            minimum, maximum = self.ax.get_ylim()
+            return AxisSnapshot(minimum=float(minimum), maximum=float(maximum), label='Temperature')
+        return AxisSnapshot(minimum=float(self.ylimit_min), maximum=float(self.ylimit), label='Temperature')
+
+    def live_ror_axis_snapshot(self) -> AxisSnapshot | None:
+        if self.delta_ax is not None:
+            minimum, maximum = self.delta_ax.get_ylim()
+            return AxisSnapshot(minimum=float(minimum), maximum=float(maximum), label='RoR')
+        return None
 
     # runs from GUI thread.
     # this function is called by a signal at the end of the thread sample() from sample_processing()
