@@ -14,6 +14,10 @@ class MatplotlibSmokeRenderResult:
     temperature_line_count: int
     ror_line_count: int
     event_artist_count: int
+    phase_artist_count: int
+    area_artist_count: int
+    event_value_artist_count: int
+    guide_artist_count: int
 
 
 def render_snapshot_to_png_bytes(
@@ -45,6 +49,10 @@ def render_snapshot_to_png_bytes(
         temperature_line_count=len(temperature_axis.lines),
         ror_line_count=0 if ror_axis is None else len(ror_axis.lines),
         event_artist_count=renderer.event_artist_count(),
+        phase_artist_count=renderer.phase_artist_count(),
+        area_artist_count=renderer.area_artist_count(),
+        event_value_artist_count=renderer.event_value_artist_count(),
+        guide_artist_count=renderer.guide_artist_count(),
     )
 
 

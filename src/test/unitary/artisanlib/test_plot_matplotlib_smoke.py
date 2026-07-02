@@ -31,6 +31,10 @@ def test_render_snapshot_to_png_bytes_uses_real_matplotlib_axes() -> None:
     assert result.temperature_line_count == 2
     assert result.ror_line_count == 1
     assert result.event_artist_count == 2
+    assert result.phase_artist_count == 0
+    assert result.area_artist_count == 0
+    assert result.event_value_artist_count == 0
+    assert result.guide_artist_count == 0
     assert result.view_state == RendererViewState(
         time_axis=AxisSnapshot(minimum=-1.0, maximum=12.0, label='Time'),
         temperature_axis=AxisSnapshot(minimum=70.0, maximum=270.0, label='Temperature'),
