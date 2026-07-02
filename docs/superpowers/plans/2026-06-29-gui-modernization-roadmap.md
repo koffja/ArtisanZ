@@ -43,6 +43,7 @@ Important observations from the code review:
 | 1.12 | Dense Dialog Polish | Closed: Devices/Roast Properties opt into dense-dialog visual roles | Dense table/header styling roles for table-heavy dialogs | Dense settings dialogs look more intentional while preserving grids, cell widgets, and configuration behavior |
 | 1.13 | PyQtGraph Export Evidence | Closed: snapshot PNG helper and WebSocket pixel evidence | PyQtGraph PNG export helper, nonblank pixel evidence, WebSocket smoke metrics | Default renderer validation has reusable image/export evidence before any report/export replacement |
 | 1.14 | Export Parity Smoke | Closed: Matplotlib/PyQtGraph snapshot export parity evidence | Export parity CLI, Matplotlib overlay support, WebSocket event-heavy parity JSON | Report/export replacement has comparable snapshot evidence before UI wiring |
+| 1.15 | Saved Profile Export Parity | Closed: real `.alog` profile export parity evidence | Saved profile snapshot adapter and `--profile-file` parity CLI | Export parity is proven on real saved profile data before user-facing report/export wiring |
 | 2 | Plot Renderer Boundary and PyQtGraph POC | Guarded PyQtGraph main-splitter embed implemented and benchmarked in offscreen/native-window simulator smokes | Read-only plot snapshot model, Matplotlib adapter, PyQtGraph live adapter prototype | POC is benchmarkable before any live renderer swap |
 | 3 | Sampling Post-Processing Decoupling | Pure helper extraction surface audited; remaining work is orchestration/renderer payload | Pure data pipeline for filtering, RoR, PID inputs, alarm/event decisions | GUI thread consumes snapshots instead of doing heavy processing inline |
 | 4 | Main UI Information Architecture | Closed at IA/policy/status-hint layer | Scenario-oriented Roast Control, QC Analysis, Device Setup, Production, and Expert workspaces | Users can switch task modes without losing existing expert controls |
@@ -229,6 +230,18 @@ Important observations from the code review:
 **Evidence:** Focused Matplotlib adapter/smoke/export parity tests produced `7 passed`. CLI validation with `QT_QPA_PLATFORM=offscreen .venv/bin/python -m artisanlib.plot_export_parity_smoke --samples 24 --fixed-step-ms 15000 --scenario event-heavy --output-dir /tmp/artisanz-phase114-export-parity --prefix phase114-event-heavy --width 1280 --height 720 --dpi 100` produced `view_state_matches=true`, `view_state_max_delta=0.0`, `event_count=11`, `event_value_count=7`, `phase_band_count=3`, `guide_count=3`, `area_count=1`, Matplotlib `event_artist_count=22`, `event_value_artist_count=7`, `phase_artist_count=3`, `guide_artist_count=3`, `area_artist_count=1`, and PyQtGraph `renderer_event_item_count=22`, `renderer_event_value_item_count=7`, `renderer_guide_item_count=3`, `renderer_area_item_count=1`, `sampled_non_background_pixel_count=21795`.
 
 **Remaining Gate:** This still does not switch the production report/export menus. The next report/export step should compare real saved profiles and then decide whether a user-facing PyQtGraph export option is safe.
+
+## Phase 1.15: Saved Profile Export Parity
+
+**Goal:** Validate PyQtGraph export parity against real saved Artisan `.alog` profile data, not only synthetic WebSocket samples.
+
+**Closed:** 2026-07-03 with `artisanlib.plot_profile_snapshot`, which loads Artisan `.alog` files through `artisanlib.util.deserialize()`, adapts profile dictionaries into the renderer-neutral snapshot contract, supplies historical-profile defaults for axis ranges, visibility, RoR curves, phase bands, AUC area, event colors, and event labels, and lets `artisanlib.plot_export_parity_smoke --profile-file` export the same saved profile through Matplotlib and PyQtGraph.
+
+**Tracking Plan:** `docs/superpowers/plans/2026-07-03-gui-modernization-phase-1-15-saved-profile-export-parity.md`
+
+**Evidence:** Focused profile/export tests produced `7 passed`, and the renderer/export smoke suite produced `28 passed`. CLI validation with `QT_QPA_PLATFORM=offscreen .venv/bin/python -m artisanlib.plot_export_parity_smoke --profile-file test/data/profile1.alog --output-dir /tmp/artisanz-phase115-profile-export-parity-final --prefix phase115-profile1 --width 1280 --height 720 --dpi 100` produced `source_kind=profile`, `sample_count=1735`, corrected saved-profile `time_axis=795.4684590097568..1474.1684661597471`, `view_state_matches=true`, `view_state_max_delta=0.0`, `event_count=14`, `event_value_count=10`, `phase_band_count=3`, `area_count=1`, Matplotlib `event_artist_count=28`, `event_value_artist_count=10`, `phase_artist_count=3`, `area_artist_count=1`, and PyQtGraph `renderer_event_item_count=28`, `renderer_event_value_item_count=10`, `renderer_area_item_count=1`, `sampled_non_background_pixel_count=14492`. A WebSocket virtual-data regression run with `--scenario event-heavy` also produced `source_kind=websocket`, `sample_count=24`, `view_state_matches=true`, `guide_count=3`, and PyQtGraph `sampled_non_background_pixel_count=21795`.
+
+**Remaining Gate:** This validates one automated saved-profile fixture. The next export/report step should compare a small matrix of saved profiles and then decide whether a user-facing PyQtGraph export option is safe.
 
 ## Phase 2: Plot Renderer Boundary and PyQtGraph POC
 

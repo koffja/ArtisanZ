@@ -7,6 +7,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from artisanlib.plot_matplotlib_smoke import render_snapshot_to_png_bytes
+from artisanlib.plot_profile_snapshot import load_profile_snapshot
 from artisanlib.plot_pyqtgraph_export import PyQtGraphSnapshotPngResult, export_pyqtgraph_snapshot_png
 from artisanlib.plot_snapshot import RendererViewState, RoastPlotSnapshot
 from artisanlib.websocket_renderer_smoke import collect_websocket_stream, build_snapshot_from_websocket_stream
@@ -28,6 +29,9 @@ class MatplotlibExportEvidence:
 
 @dataclass(frozen=True, slots=True)
 class PlotExportParityResult:
+    source_kind: str
+    source_path: str | None
+    sample_count: int
     output_dir: str
     prefix: str
     view_state_matches: bool
@@ -62,8 +66,35 @@ def run_websocket_export_parity_smoke(
     export_prefix = prefix or f'websocket-{scenario}'
     return render_snapshot_export_parity(
         snapshot,
+        source_kind='websocket',
+        source_path=None,
+        sample_count=len(capture.samples),
         output_dir=output_dir,
         prefix=export_prefix,
+        width=width,
+        height=height,
+        dpi=dpi,
+        use_opengl=use_opengl,
+    )
+
+
+def run_profile_export_parity_smoke(
+        profile_path: str | Path,
+        *,
+        output_dir: str | Path = '/tmp/artisanz-export-parity',
+        prefix: str | None = None,
+        width: int = 1280,
+        height: int = 720,
+        dpi: int = 100,
+        use_opengl: bool = False) -> PlotExportParityResult:
+    profile_result = load_profile_snapshot(profile_path)
+    return render_snapshot_export_parity(
+        profile_result.snapshot,
+        source_kind='profile',
+        source_path=profile_result.path,
+        sample_count=profile_result.sample_count,
+        output_dir=output_dir,
+        prefix=prefix or Path(profile_path).stem,
         width=width,
         height=height,
         dpi=dpi,
@@ -74,6 +105,9 @@ def run_websocket_export_parity_smoke(
 def render_snapshot_export_parity(
         snapshot: RoastPlotSnapshot,
         *,
+        source_kind: str = 'snapshot',
+        source_path: str | None = None,
+        sample_count: int | None = None,
         output_dir: str | Path,
         prefix: str = 'snapshot',
         width: int = 1280,
@@ -119,6 +153,9 @@ def render_snapshot_export_parity(
         view_state=matplotlib_result.view_state,
     )
     return PlotExportParityResult(
+        source_kind=source_kind,
+        source_path=source_path,
+        sample_count=_snapshot_sample_count(snapshot) if sample_count is None else sample_count,
         output_dir=str(directory),
         prefix=safe_prefix,
         view_state_matches=matplotlib_result.view_state == pyqtgraph_result.view_state,
@@ -157,19 +194,31 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument('--height', type=int, default=720, help='Export height in pixels.')
     parser.add_argument('--dpi', type=int, default=100, help='Matplotlib export DPI used to match pixel size.')
     parser.add_argument('--opengl', action='store_true', help='Request PyQtGraph OpenGL rendering.')
+    parser.add_argument('--profile-file', default=None, help='Optional saved Artisan .alog profile to export.')
     args = parser.parse_args(argv)
 
-    result = run_websocket_export_parity_smoke(
-        sample_count=args.samples,
-        fixed_step_ms=args.fixed_step_ms,
-        scenario=args.scenario,
-        output_dir=args.output_dir,
-        prefix=args.prefix,
-        width=args.width,
-        height=args.height,
-        dpi=args.dpi,
-        use_opengl=args.opengl,
-    )
+    if args.profile_file:
+        result = run_profile_export_parity_smoke(
+            args.profile_file,
+            output_dir=args.output_dir,
+            prefix=args.prefix,
+            width=args.width,
+            height=args.height,
+            dpi=args.dpi,
+            use_opengl=args.opengl,
+        )
+    else:
+        result = run_websocket_export_parity_smoke(
+            sample_count=args.samples,
+            fixed_step_ms=args.fixed_step_ms,
+            scenario=args.scenario,
+            output_dir=args.output_dir,
+            prefix=args.prefix,
+            width=args.width,
+            height=args.height,
+            dpi=args.dpi,
+            use_opengl=args.opengl,
+        )
     print(json.dumps(result_to_dict(result), ensure_ascii=False, indent=2, sort_keys=True))
     return 0
 
@@ -177,6 +226,12 @@ def main(argv: list[str] | None = None) -> int:
 def _safe_file_prefix(prefix: str) -> str:
     safe = ''.join(character if character.isalnum() or character in {'-', '_'} else '-' for character in prefix)
     return safe.strip('-_') or 'snapshot'
+
+
+def _snapshot_sample_count(snapshot: RoastPlotSnapshot) -> int:
+    if not snapshot.curves:
+        return 0
+    return max(len(curve.x) for curve in snapshot.curves)
 
 
 def _view_state_within_tolerance(
@@ -211,6 +266,7 @@ __all__ = [
     'main',
     'render_snapshot_export_parity',
     'result_to_dict',
+    'run_profile_export_parity_smoke',
     'run_websocket_export_parity_smoke',
 ]
 

@@ -6,6 +6,7 @@ import pytest
 
 from artisanlib.plot_export_parity_smoke import (
     render_snapshot_export_parity,
+    run_profile_export_parity_smoke,
     run_websocket_export_parity_smoke,
 )
 from artisanlib.websocket_renderer_smoke import (
@@ -98,6 +99,39 @@ def test_run_websocket_export_parity_smoke_uses_event_heavy_virtual_data(
     assert result.pyqtgraph.renderer_area_item_count == result.area_count
     assert result.pyqtgraph.renderer_event_value_item_count == result.event_value_count
     assert result.pyqtgraph.renderer_guide_item_count == result.guide_count
+    assert result.matplotlib.byte_count > 1000
+    assert result.pyqtgraph.byte_count > 1000
+    assert result.pyqtgraph.sampled_non_background_pixel_count > 0
+
+
+def test_run_profile_export_parity_smoke_uses_saved_alog(
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path) -> None:
+    monkeypatch.setenv('QT_QPA_PLATFORM', 'offscreen')
+    profile_path = Path('test/data/profile1.alog')
+
+    result = run_profile_export_parity_smoke(
+        profile_path,
+        output_dir=tmp_path,
+        width=800,
+        height=450,
+        dpi=100,
+        use_opengl=False,
+    )
+
+    assert result.source_kind == 'profile'
+    assert result.source_path == str(profile_path)
+    assert result.sample_count > 1000
+    assert Path(result.matplotlib.path).exists()
+    assert Path(result.pyqtgraph.path).exists()
+    assert result.event_count >= 10
+    assert result.event_value_count >= 5
+    assert result.phase_band_count == 3
+    assert result.area_count == 1
+    assert result.view_state_within_tolerance is True
+    assert result.matplotlib.phase_artist_count == result.phase_band_count
+    assert result.matplotlib.area_artist_count == result.area_count
+    assert result.pyqtgraph.renderer_area_item_count == result.area_count
     assert result.matplotlib.byte_count > 1000
     assert result.pyqtgraph.byte_count > 1000
     assert result.pyqtgraph.sampled_non_background_pixel_count > 0
