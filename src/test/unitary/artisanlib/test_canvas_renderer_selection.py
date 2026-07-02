@@ -90,12 +90,32 @@ class FakePyQtGraphTarget:
 class FakeWidget:
     def __init__(self) -> None:
         self.visible = True
+        self.parent = None
+        self.minimum_width: int | None = None
+        self.minimum_height: int | None = None
+        self.contents_margins: tuple[int, int, int, int] | None = None
+        self.size_policy: tuple[object, object] | None = None
 
     def parentWidget(self) -> None:  # noqa: N802
         return None
 
     def setVisible(self, visible: bool) -> None:  # noqa: N802
         self.visible = visible
+
+    def setParent(self, parent: object | None) -> None:  # noqa: N802
+        self.parent = parent
+
+    def setMinimumWidth(self, width: int) -> None:  # noqa: N802
+        self.minimum_width = width
+
+    def setMinimumHeight(self, height: int) -> None:  # noqa: N802
+        self.minimum_height = height
+
+    def setContentsMargins(self, left: int, top: int, right: int, bottom: int) -> None:  # noqa: N802
+        self.contents_margins = (left, top, right, bottom)
+
+    def setSizePolicy(self, horizontal: object, vertical: object) -> None:  # noqa: N802
+        self.size_policy = (horizontal, vertical)
 
 
 class FakeLiveFrameCanvas:
@@ -150,6 +170,9 @@ class FakeLiveFrameCanvas:
 
     def configure_pyqtgraph_axes(self) -> None:
         return canvas.tgraphcanvas.configure_pyqtgraph_axes(self)
+
+    def sync_pyqtgraph_static_overlays_from_canvas(self) -> None:
+        return canvas.tgraphcanvas.sync_pyqtgraph_static_overlays_from_canvas(self)
 
     def pyqtgraph_time_axis_start(self) -> float:
         return canvas.tgraphcanvas.pyqtgraph_time_axis_start(self)
@@ -256,6 +279,65 @@ def test_apply_live_plot_frame_falls_back_when_pyqtgraph_targets_are_not_embedde
     assert result.applied_curves == ('BT',)
     assert window.plot_live_frame_apply_result == result
     assert window.l_temp2.x == (0.0, 1.0)
+
+
+def test_enable_selected_plot_widget_syncs_initial_pyqtgraph_snapshot(
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    from artisanlib import plot_pyqtgraph_widget
+
+    window = FakeLiveFrameCanvas(_renderer_selection('pyqtgraph-snapshot'))
+    target = FakePyQtGraphTarget()
+    target.widget = FakeWidget()  # type: ignore[attr-defined]
+    snapshot = _static_overlay_snapshot()
+
+    def build_snapshot(
+            _source: object,
+            *,
+            time_axis: AxisSnapshot,
+            temperature_axis: AxisSnapshot,
+            ror_axis: AxisSnapshot | None) -> RoastPlotSnapshot:
+        assert time_axis.minimum == 0.0
+        assert temperature_axis.maximum == 270.0
+        assert ror_axis is None
+        return snapshot
+
+    monkeypatch.setattr(plot_pyqtgraph_widget, 'create_pyqtgraph_plot_target', lambda **_kwargs: target)
+    monkeypatch.setattr(canvas, 'build_roast_plot_static_overlay_snapshot', build_snapshot)
+
+    canvas.tgraphcanvas.enable_selected_plot_widget(window, FakeWidget())
+
+    assert window.plot_pyqtgraph_target is target
+    assert window.plot_display_widget is target.widget
+    assert window.canvas.visible is False
+    assert target.renderer.snapshots == [snapshot]
+    assert target.axis_configs
+
+
+def test_enable_selected_plot_widget_keeps_pyqtgraph_when_initial_static_overlay_fails(
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    from artisanlib import plot_pyqtgraph_widget
+
+    window = FakeLiveFrameCanvas(_renderer_selection('pyqtgraph-snapshot'))
+    target = FakePyQtGraphTarget()
+    target.widget = FakeWidget()  # type: ignore[attr-defined]
+
+    def fail_snapshot(
+            _source: object,
+            *,
+            time_axis: AxisSnapshot,
+            temperature_axis: AxisSnapshot,
+            ror_axis: AxisSnapshot | None) -> RoastPlotSnapshot:
+        raise RuntimeError(f'overlay failure {time_axis.minimum} {temperature_axis.maximum} {ror_axis}')
+
+    monkeypatch.setattr(plot_pyqtgraph_widget, 'create_pyqtgraph_plot_target', lambda **_kwargs: target)
+    monkeypatch.setattr(canvas, 'build_roast_plot_static_overlay_snapshot', fail_snapshot)
+
+    canvas.tgraphcanvas.enable_selected_plot_widget(window, FakeWidget())
+
+    assert window.plot_pyqtgraph_target is target
+    assert window.plot_display_widget is target.widget
+    assert window.canvas.visible is False
+    assert target.renderer.snapshots == []
 
 
 def test_apply_live_plot_frame_uses_embedded_pyqtgraph_target() -> None:

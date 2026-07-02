@@ -183,6 +183,19 @@ def render_websocket_stream_with_pyqtgraph(
 
     application = QApplication.instance() or QApplication([])
     target = create_pyqtgraph_plot_target(use_opengl=use_opengl, include_ror=True)
+    target.configure_axes(
+        time_grid=True,
+        temperature_grid=True,
+        time_tick_step=60.0,
+        temperature_tick_step=20.0,
+        ror_tick_step=5.0,
+        time_label_mode='minutes',
+        time_axis_start=0.0,
+        grid_alpha=0.26,
+        grid_width=1,
+        grid_color='#A8B5AE',
+        axis_color='#5E6B6E',
+    )
     update_durations_ms: list[float] = []
     full_snapshot_count = 0
     live_update_count = 0

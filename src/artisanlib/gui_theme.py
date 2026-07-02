@@ -39,6 +39,8 @@ def apply_modern_dialog_polish(dialog: object) -> None:
     try:
         from PyQt6.QtWidgets import (
             QAbstractScrollArea,
+            QAbstractSpinBox,
+            QComboBox,
             QDialogButtonBox,
             QGroupBox,
             QHeaderView,
@@ -58,6 +60,12 @@ def apply_modern_dialog_polish(dialog: object) -> None:
     root_layout = getattr(dialog, 'layout', lambda: None)()
     if isinstance(root_layout, QLayout):
         _polish_dialog_layout_tree(root_layout, margin=14, spacing=10)
+
+    for combo_box in _find_children(dialog, QComboBox):
+        _polish_dialog_combo_box(combo_box)
+
+    for spin_box in _find_children(dialog, QAbstractSpinBox):
+        _polish_dialog_spin_box(spin_box)
 
     for group_box in _find_children(dialog, QGroupBox):
         group_box.setProperty('modernDialogPanel', True)
@@ -163,6 +171,28 @@ def _polish_dense_dialog_table(table_view: Any) -> None:
     _refresh_widget_style(table_view)
 
 
+def _polish_dialog_combo_box(combo_box: Any) -> None:
+    try:
+        from PyQt6.QtWidgets import QComboBox, QSizePolicy
+    except ImportError:
+        return
+    combo_box.setMinimumContentsLength(max(combo_box.minimumContentsLength(), 7))
+    combo_box.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+    combo_box.setMinimumWidth(max(combo_box.minimumWidth(), 104))
+    combo_box.setSizePolicy(QSizePolicy.Policy.MinimumExpanding, combo_box.sizePolicy().verticalPolicy())
+    _refresh_widget_style(combo_box)
+
+
+def _polish_dialog_spin_box(spin_box: Any) -> None:
+    size_hint = getattr(spin_box, 'minimumSizeHint', lambda: None)()
+    hint_width = 0 if size_hint is None else int(size_hint.width())
+    minimum_width = max(82, hint_width)
+    spin_box.setMinimumWidth(max(spin_box.minimumWidth(), minimum_width))
+    if spin_box.maximumWidth() < spin_box.minimumWidth():
+        spin_box.setMaximumWidth(spin_box.minimumWidth() + 8)
+    _refresh_widget_style(spin_box)
+
+
 def _find_children(parent: object, widget_type: type[Any]) -> list[Any]:
     find_children = getattr(parent, 'findChildren', None)
     if not callable(find_children):
@@ -205,8 +235,20 @@ def lcd_label_stylesheet(text_color: str) -> str:
     )
 
 
+def _modern_icon_url(file_name: str) -> str:
+    try:
+        from artisanlib.util import getResourcePath
+        resource_path = getResourcePath()
+    except Exception: # pylint: disable=broad-exception-caught
+        resource_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), '..', 'includes')
+    return os.path.join(resource_path, 'Icons', file_name).replace('\\', '/')
+
+
 def modern_application_stylesheet(theme: ModernTheme | None = None) -> str:
     t = ModernTheme() if theme is None else theme
+    combo_arrow = _modern_icon_url('modern-combo-down.svg')
+    spin_up_arrow = _modern_icon_url('modern-spin-up.svg')
+    spin_down_arrow = _modern_icon_url('modern-spin-down.svg')
     return f"""
         QWidget {{
             color: {t.text};
@@ -320,6 +362,85 @@ def modern_application_stylesheet(theme: ModernTheme | None = None) -> str:
             border-radius: 6px;
             padding: 5px 8px;
             min-height: 23px;
+        }}
+        QDialog[modernDialog="true"] QComboBox {{
+            padding: 5px 32px 5px 10px;
+            min-width: 72px;
+        }}
+        QDialog[modernDialog="true"] QComboBox::drop-down {{
+            subcontrol-origin: border;
+            subcontrol-position: top right;
+            width: 28px;
+            border-left: 1px solid {t.border};
+            border-top-right-radius: 6px;
+            border-bottom-right-radius: 6px;
+            background-color: transparent;
+        }}
+        QDialog[modernDialog="true"] QComboBox::down-arrow {{
+            image: url("{combo_arrow}");
+            width: 12px;
+            height: 12px;
+            margin-right: 8px;
+        }}
+        QDialog[modernDialog="true"] QComboBox QAbstractItemView {{
+            background-color: {t.surface};
+            border: 1px solid {t.border};
+            border-radius: 6px;
+            padding: 4px;
+            selection-background-color: {t.selection};
+            selection-color: {t.selection_text};
+            outline: 0;
+        }}
+        QDialog[modernDialog="true"] QComboBox QAbstractItemView::item {{
+            min-height: 24px;
+            padding: 4px 12px;
+        }}
+        QDialog[modernDialog="true"] QSpinBox,
+        QDialog[modernDialog="true"] QDoubleSpinBox,
+        QDialog[modernDialog="true"] QTimeEdit,
+        QDialog[modernDialog="true"] QDateEdit {{
+            padding-right: 32px;
+            min-width: 48px;
+        }}
+        QDialog[modernDialog="true"] QSpinBox::up-button,
+        QDialog[modernDialog="true"] QDoubleSpinBox::up-button,
+        QDialog[modernDialog="true"] QTimeEdit::up-button,
+        QDialog[modernDialog="true"] QDateEdit::up-button {{
+            subcontrol-origin: border;
+            subcontrol-position: top right;
+            width: 20px;
+            border-left: 1px solid {t.border};
+            border-bottom: 0;
+            border-top-right-radius: 6px;
+            background-color: {t.surface_alt};
+        }}
+        QDialog[modernDialog="true"] QSpinBox::down-button,
+        QDialog[modernDialog="true"] QDoubleSpinBox::down-button,
+        QDialog[modernDialog="true"] QTimeEdit::down-button,
+        QDialog[modernDialog="true"] QDateEdit::down-button {{
+            subcontrol-origin: border;
+            subcontrol-position: bottom right;
+            width: 20px;
+            border-left: 1px solid {t.border};
+            border-top: 1px solid {t.border};
+            border-bottom-right-radius: 6px;
+            background-color: {t.surface_alt};
+        }}
+        QDialog[modernDialog="true"] QSpinBox::up-arrow,
+        QDialog[modernDialog="true"] QDoubleSpinBox::up-arrow,
+        QDialog[modernDialog="true"] QTimeEdit::up-arrow,
+        QDialog[modernDialog="true"] QDateEdit::up-arrow {{
+            image: url("{spin_up_arrow}");
+            width: 10px;
+            height: 10px;
+        }}
+        QDialog[modernDialog="true"] QSpinBox::down-arrow,
+        QDialog[modernDialog="true"] QDoubleSpinBox::down-arrow,
+        QDialog[modernDialog="true"] QTimeEdit::down-arrow,
+        QDialog[modernDialog="true"] QDateEdit::down-arrow {{
+            image: url("{spin_down_arrow}");
+            width: 10px;
+            height: 10px;
         }}
         QDialog[modernDialog="true"] QPushButton {{
             background-color: {t.surface_alt};
@@ -488,6 +609,30 @@ def modern_application_stylesheet(theme: ModernTheme | None = None) -> str:
             border-radius: 5px;
             padding: 4px 7px;
             min-height: 22px;
+        }}
+        QComboBox {{
+            padding-right: 30px;
+        }}
+        QComboBox::drop-down {{
+            subcontrol-origin: border;
+            subcontrol-position: top right;
+            width: 26px;
+            border-left: 1px solid {t.border};
+            background-color: transparent;
+        }}
+        QComboBox::down-arrow {{
+            image: url("{combo_arrow}");
+            width: 12px;
+            height: 12px;
+            margin-right: 8px;
+        }}
+        QComboBox QAbstractItemView {{
+            background-color: {t.surface};
+            border: 1px solid {t.border};
+            padding: 4px;
+            selection-background-color: {t.selection};
+            selection-color: {t.selection_text};
+            outline: 0;
         }}
         QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus, QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus {{
             border-color: {t.focus};

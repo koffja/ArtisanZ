@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 from typing import Any
 
 from artisanlib.plot_pyqtgraph_adapter import PyQtGraphSnapshotRenderer
@@ -128,7 +129,7 @@ def _configure_plot_surface(plot: object, pg: Any) -> None:
 
 def _create_grid_overlay(plot: object, pg: Any) -> object | None:
     try:
-        grid_item = pg.GridItem(pen=pg.mkPen(_color_with_alpha(pg, '#96A6A0', 0.82), width=1))
+        grid_item = PyQtGraphMajorGridItem(pg=pg, pen=pg.mkPen(_color_with_alpha(pg, '#96A6A0', 0.82), width=1))
     except Exception: # pylint: disable=broad-exception-caught
         return None
     _call_if_available(grid_item, 'setZValue', -5)
@@ -243,6 +244,94 @@ class PyQtGraphLinkedAxisPlot:
     def listDataItems(self) -> list[object]:  # noqa: N802
         items = getattr(self.view_box, 'addedItems', [])
         return [item for item in items if isinstance(item, self._pyqtgraph.PlotDataItem)]
+
+
+class PyQtGraphMajorGridItem:
+    def __new__(cls, *, pg: Any, pen: object) -> object:
+        class MajorGridItem(pg.GraphicsObject):  # type: ignore[misc]
+            def __init__(self) -> None:
+                super().__init__()
+                self.opts: dict[str, object] = {'tickSpacing': ([None], [None])}
+                self._pen = pen
+
+            def setPen(self, new_pen: object) -> None:  # noqa: N802
+                self._pen = new_pen
+                self.update()
+
+            def setTickSpacing(self, *, x: list[float | None], y: list[float | None]) -> None:  # noqa: N802
+                self.opts['tickSpacing'] = (x, y)
+                self.update()
+
+            def boundingRect(self) -> object:  # noqa: N802
+                from PyQt6.QtCore import QRectF
+
+                x_range, y_range = _grid_view_range(self)
+                if x_range is None or y_range is None:
+                    return QRectF()
+                return QRectF(
+                    x_range[0],
+                    y_range[0],
+                    x_range[1] - x_range[0],
+                    y_range[1] - y_range[0],
+                )
+
+            def paint(self, painter: object, _option: object, _widget: object | None = None) -> None:
+                from PyQt6.QtCore import QPointF
+
+                x_range, y_range = _grid_view_range(self)
+                if x_range is None or y_range is None:
+                    return
+                set_pen = getattr(painter, 'setPen', None)
+                draw_line = getattr(painter, 'drawLine', None)
+                if not callable(set_pen) or not callable(draw_line):
+                    return
+                set_pen(self._pen)
+                x_spacing, y_spacing = self.opts['tickSpacing']
+                for x_value in _major_grid_values(x_range[0], x_range[1], _grid_spacing_value(x_spacing)):
+                    draw_line(QPointF(x_value, y_range[0]), QPointF(x_value, y_range[1]))
+                for y_value in _major_grid_values(y_range[0], y_range[1], _grid_spacing_value(y_spacing)):
+                    draw_line(QPointF(x_range[0], y_value), QPointF(x_range[1], y_value))
+
+        MajorGridItem.__name__ = 'PyQtGraphMajorGridItem'
+        return MajorGridItem()
+
+
+def _grid_view_range(grid_item: object) -> tuple[tuple[float, float] | None, tuple[float, float] | None]:
+    view_box = getattr(grid_item, 'getViewBox', lambda: None)()
+    view_range = getattr(view_box, 'viewRange', None)
+    if not callable(view_range):
+        return None, None
+    ranges = view_range()
+    if len(ranges) != 2 or len(ranges[0]) != 2 or len(ranges[1]) != 2:
+        return None, None
+    return (float(ranges[0][0]), float(ranges[0][1])), (float(ranges[1][0]), float(ranges[1][1]))
+
+
+def _grid_spacing_value(spacing: object) -> float | None:
+    if not isinstance(spacing, list) or not spacing:
+        return None
+    value = spacing[0]
+    if value is None:
+        return None
+    try:
+        numeric_value = float(value)
+    except (TypeError, ValueError):
+        return None
+    if numeric_value <= 0:
+        return None
+    return numeric_value
+
+
+def _major_grid_values(minimum: float, maximum: float, spacing: float | None) -> tuple[float, ...]:
+    if spacing is None or maximum < minimum:
+        return ()
+    first = math.ceil(minimum / spacing) * spacing
+    values: list[float] = []
+    value = first
+    while value <= maximum:
+        values.append(value)
+        value += spacing
+    return tuple(values)
 
 
 def _create_time_axis(pg: Any) -> object:

@@ -5628,6 +5628,7 @@ class tgraphcanvas(QObject):
             self.plot_pyqtgraph_target = target
             self.plot_display_widget = widget
             self.canvas.setVisible(False)
+            self.sync_pyqtgraph_static_overlays_from_canvas()
         except Exception as exc: # pylint: disable=broad-exception-caught
             self.plot_renderer_embed_fallback_reason = 'pyqtgraph_target_error'
             _log.warning('falling back to Matplotlib plot widget after PyQtGraph target failure: %s', exc)
@@ -5734,6 +5735,35 @@ class tgraphcanvas(QObject):
             gui_perf_count('canvas.pyqtgraph_snapshot_error')
             _log.warning('falling back to Matplotlib plot widget after PyQtGraph snapshot failure: %s', exc)
             self.disable_selected_plot_widget()
+
+    def sync_pyqtgraph_static_overlays_from_canvas(self) -> None:
+        target = self.plot_pyqtgraph_target
+        if target is None:
+            return
+        renderer = getattr(target, 'renderer', None)
+        update_live_frame = getattr(renderer, 'update_live_frame', None)
+        reset_view = getattr(renderer, 'reset_view', None)
+        if not callable(update_live_frame):
+            return
+        try:
+            self.configure_pyqtgraph_axes()
+            view_state = RendererViewState(
+                time_axis=self.live_time_axis_snapshot(),
+                temperature_axis=self.live_temperature_axis_snapshot(),
+                ror_axis=self.live_ror_axis_snapshot(),
+            )
+            snapshot = build_roast_plot_static_overlay_snapshot(
+                self,
+                time_axis=view_state.time_axis,
+                temperature_axis=view_state.temperature_axis,
+                ror_axis=view_state.ror_axis,
+            )
+            update_live_frame(snapshot)
+            if callable(reset_view):
+                reset_view(view_state)
+        except Exception as exc: # pylint: disable=broad-exception-caught
+            gui_perf_count('canvas.pyqtgraph_static_overlay_snapshot_error')
+            _log.debug('skipping initial PyQtGraph static overlays after snapshot failure: %s', exc)
 
     def sync_pyqtgraph_view_from_canvas(self) -> None:
         target = self.plot_pyqtgraph_target

@@ -129,6 +129,7 @@ def test_pyqtgraph_time_axis_can_display_minutes_or_seconds() -> None:
         )
         assert target.time_axis.tickStrings([60.0, 120.0, 180.0], 1.0, 60.0) == ['0:00', '1:00', '2:00']
         assert target.grid_item is not None
+        assert type(target.grid_item).__name__ == 'PyQtGraphMajorGridItem'
         assert target.grid_item.isVisible()
         assert target.grid_item.opts['tickSpacing'] == ([60.0], [10.0])
 

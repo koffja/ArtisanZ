@@ -9,7 +9,9 @@ from PyQt6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QGroupBox,
+    QComboBox,
     QLineEdit,
+    QSpinBox,
     QTableWidget,
     QTabWidget,
     QVBoxLayout,
@@ -65,6 +67,14 @@ def test_modern_application_stylesheet_contains_core_surfaces() -> None:
     assert 'QDialog[modernDialogRole="devices"] QTabBar::tab:selected' in stylesheet
     assert 'QDialog[modernDialogRole="roast_properties"] QTabBar::tab:selected' in stylesheet
     assert 'QDialog[modernDenseDialog="true"] QTableView::item' in stylesheet
+    assert 'QDialog[modernDialog="true"] QComboBox::drop-down' in stylesheet
+    assert 'QDialog[modernDialog="true"] QComboBox QAbstractItemView' in stylesheet
+    assert 'QDialog[modernDialog="true"] QSpinBox::up-button' in stylesheet
+    assert 'QDialog[modernDialog="true"] QSpinBox::down-button' in stylesheet
+    assert 'padding-right: 32px;' in stylesheet
+    assert 'modern-combo-down.svg' in stylesheet
+    assert 'modern-spin-up.svg' in stylesheet
+    assert 'modern-spin-down.svg' in stylesheet
 
 
 def test_modern_application_stylesheet_uses_supplied_theme() -> None:
@@ -135,6 +145,26 @@ def test_apply_modern_dialog_polish_sets_runtime_visual_roles(qapp: QApplication
     assert cancel_button is not None
     assert ok_button.property('modernDialogPrimaryButton') is True
     assert cancel_button.property('modernDialogSecondaryButton') is True
+
+
+def test_apply_modern_dialog_polish_expands_compact_value_controls(qapp: QApplication) -> None: # noqa: ARG001
+    dialog = QDialog()
+    dialog.setProperty('modernDialog', True)
+    layout = QVBoxLayout()
+    combo_box = QComboBox()
+    combo_box.addItems(['Minutes', 'Seconds'])
+    spin_box = QSpinBox()
+    spin_box.setMaximumWidth(40)
+    layout.addWidget(combo_box)
+    layout.addWidget(spin_box)
+    dialog.setLayout(layout)
+
+    apply_modern_dialog_polish(dialog)
+
+    assert combo_box.minimumContentsLength() >= 7
+    assert combo_box.minimumWidth() >= 104
+    assert spin_box.minimumWidth() >= 66
+    assert spin_box.maximumWidth() >= spin_box.minimumWidth()
 
 
 def test_apply_modern_dialog_polish_preserves_table_cell_layouts(qapp: QApplication) -> None: # noqa: ARG001
