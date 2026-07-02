@@ -7,6 +7,7 @@ import math
 import socket
 import time
 from dataclasses import asdict, dataclass
+from pathlib import Path
 from typing import Any
 
 from dev_simulator.event_scheduler import EventScheduler
@@ -15,6 +16,7 @@ from dev_simulator.ws_server import AsyncServer
 
 from artisanlib.plot_pyqtgraph_widget import create_pyqtgraph_plot_target
 from artisanlib.plot_snapshot import (
+    AreaFillSnapshot,
     AxisSnapshot,
     CurveSnapshot,
     EventMarkerKind,
@@ -60,34 +62,45 @@ class WebSocketRendererSmokeResult:
     event_count: int
     event_value_count: int
     guide_count: int
+    area_count: int
     temperature_item_count: int
     ror_item_count: int
     renderer_event_item_count: int
     renderer_event_value_item_count: int
     renderer_guide_item_count: int
+    renderer_area_item_count: int
     full_snapshot_count: int
     live_update_count: int
     max_update_ms: float
     avg_update_ms: float
     view_state: RendererViewState
+    screenshot_file: str | None = None
 
 
 def run_websocket_pyqtgraph_validation(
         *,
         sample_count: int = 36,
         fixed_step_ms: float = 15_000.0,
-        use_opengl: bool = False) -> WebSocketRendererSmokeResult:
+        use_opengl: bool = False,
+        scenario: str = 'standard',
+        screenshot_file: str | None = None) -> WebSocketRendererSmokeResult:
     capture = asyncio.run(collect_websocket_stream(
         sample_count=sample_count,
         fixed_step_ms=fixed_step_ms,
+        scenario=scenario,
     ))
-    return render_websocket_stream_with_pyqtgraph(capture, use_opengl=use_opengl)
+    return render_websocket_stream_with_pyqtgraph(
+        capture,
+        use_opengl=use_opengl,
+        screenshot_file=screenshot_file,
+    )
 
 
 async def collect_websocket_stream(
         *,
         sample_count: int,
-        fixed_step_ms: float) -> WebSocketStreamCapture:
+        fixed_step_ms: float,
+        scenario: str = 'standard') -> WebSocketStreamCapture:
     if sample_count <= 0:
         raise ValueError(f'sample_count must be positive, got {sample_count}')
     if fixed_step_ms <= 0.0:
@@ -105,7 +118,7 @@ async def collect_websocket_stream(
     )
     server = AsyncServer(
         profile=generate_profile(spec),
-        scheduler=EventScheduler(_validation_events(), start_mode='auto'),
+        scheduler=EventScheduler(_validation_events(scenario), start_mode='auto'),
         host='127.0.0.1',
         port=port,
         path='WebSocket',
@@ -156,7 +169,8 @@ async def collect_websocket_stream(
 def render_websocket_stream_with_pyqtgraph(
         capture: WebSocketStreamCapture,
         *,
-        use_opengl: bool = False) -> WebSocketRendererSmokeResult:
+        use_opengl: bool = False,
+        screenshot_file: str | None = None) -> WebSocketRendererSmokeResult:
     from PyQt6.QtWidgets import QApplication
 
     if not capture.samples:
@@ -192,6 +206,8 @@ def render_websocket_stream_with_pyqtgraph(
 
         target.renderer.set_snapshot(final_snapshot)
         application.processEvents()
+        if screenshot_file is not None:
+            _save_widget_screenshot(target.widget, screenshot_file, application)
         return WebSocketRendererSmokeResult(
             sample_count=len(capture.samples),
             data_message_count=capture.data_message_count,
@@ -199,16 +215,19 @@ def render_websocket_stream_with_pyqtgraph(
             event_count=len(final_snapshot.events),
             event_value_count=len(final_snapshot.event_values),
             guide_count=len(final_snapshot.guides),
+            area_count=len(final_snapshot.areas),
             temperature_item_count=_plot_data_item_count(target.temperature_plot),
             ror_item_count=0 if target.ror_plot is None else _plot_data_item_count(target.ror_plot),
             renderer_event_item_count=target.renderer.event_item_count(),
             renderer_event_value_item_count=target.renderer.event_value_item_count(),
             renderer_guide_item_count=target.renderer.guide_item_count(),
+            renderer_area_item_count=target.renderer.area_item_count(),
             full_snapshot_count=full_snapshot_count,
             live_update_count=live_update_count,
             max_update_ms=max(update_durations_ms),
             avg_update_ms=sum(update_durations_ms) / len(update_durations_ms),
             view_state=target.renderer.export_view_state(),
+            screenshot_file=screenshot_file,
         )
     finally:
         target.close()
@@ -266,6 +285,7 @@ def build_snapshot_from_websocket_stream(
         event_values=event_values,
         phase_bands=_phase_bands(),
         guides=_guide_lines(),
+        areas=_auc_area_fills(samples, events),
     )
 
 
@@ -278,24 +298,44 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument('--samples', type=int, default=36, help='Number of WebSocket getData samples to request.')
     parser.add_argument('--fixed-step-ms', type=float, default=15_000.0, help='Virtual milliseconds per request.')
     parser.add_argument('--opengl', action='store_true', help='Request PyQtGraph OpenGL rendering.')
+    parser.add_argument(
+        '--scenario',
+        choices=('standard', 'event-heavy'),
+        default='standard',
+        help='Virtual roast event scenario to replay.')
+    parser.add_argument('--screenshot-file', default=None, help='Optional PNG path for the rendered PyQtGraph widget.')
     args = parser.parse_args(argv)
 
     result = run_websocket_pyqtgraph_validation(
         sample_count=args.samples,
         fixed_step_ms=args.fixed_step_ms,
         use_opengl=args.opengl,
+        scenario=args.scenario,
+        screenshot_file=args.screenshot_file,
     )
     print(json.dumps(result_to_dict(result), ensure_ascii=False, indent=2, sort_keys=True))
     return 0
 
 
-def _validation_events() -> list[tuple[float, dict[str, Any]]]:
-    return [
+def _validation_events(scenario: str = 'standard') -> list[tuple[float, dict[str, Any]]]:
+    events = [
         (0.0, {'pushMessage': 'startRoasting'}),
         (30.0, {'pushMessage': 'addEvent', 'data': {'event': 'powerEvent', 'label': 'Power', 'value': 72.0}}),
         (60.0, {'pushMessage': 'addEvent', 'data': {'event': 'fanEvent', 'label': 'Fan', 'value': 38.0}}),
         (120.0, {'pushMessage': 'addEvent', 'data': {'event': 'colorChangeEvent'}}),
         (210.0, {'pushMessage': 'addEvent', 'data': {'event': 'firstCrackBeginningEvent'}}),
+        (330.0, {'pushMessage': 'endRoasting'}),
+    ]
+    if scenario == 'standard':
+        return events
+    if scenario != 'event-heavy':
+        raise ValueError(f'Unknown WebSocket renderer smoke scenario: {scenario!r}')
+    return events[:5] + [
+        (211.0, {'pushMessage': 'addEvent', 'data': {'event': 'powerEvent', 'label': 'Power 2', 'value': 76.0}}),
+        (212.0, {'pushMessage': 'addEvent', 'data': {'event': 'fanEvent', 'label': 'Fan 2', 'value': 41.0}}),
+        (213.0, {'pushMessage': 'addEvent', 'data': {'event': 'damperEvent', 'label': 'Air', 'value': 63.0}}),
+        (214.0, {'pushMessage': 'addEvent', 'data': {'event': 'drumEvent', 'label': 'Drum', 'value': 58.0}}),
+        (215.0, {'pushMessage': 'addEvent', 'data': {'event': 'powerEvent', 'label': 'Power 3', 'value': 70.0}}),
         (330.0, {'pushMessage': 'endRoasting'}),
     ]
 
@@ -331,6 +371,8 @@ def _event_descriptor(event_name: str) -> tuple[str, int, str, EventMarkerKind]:
     return {
         'powerEvent': ('Power', 1, '#B4685C', 'special'),
         'fanEvent': ('Fan', 2, '#3C7A88', 'special'),
+        'damperEvent': ('Air', 3, '#78905D', 'special'),
+        'drumEvent': ('Drum', 4, '#B98A4B', 'special'),
         'colorChangeEvent': ('DRY', 101, '#5E6B6E', 'main'),
         'firstCrackBeginningEvent': ('FCs', 102, '#5E6B6E', 'main'),
         'firstCrackEndEvent': ('FCe', 103, '#5E6B6E', 'main'),
@@ -394,6 +436,45 @@ def _guide_lines() -> tuple[GuideLineSnapshot, ...]:
     )
 
 
+def _auc_area_fills(
+        samples: tuple[WebSocketTemperatureSample, ...],
+        events: tuple[WebSocketPushEvent, ...]) -> tuple[AreaFillSnapshot, ...]:
+    drop_time = next((event.time_s for event in reversed(events) if event.event_type == 106), None)
+    if drop_time is None:
+        return ()
+    drop_index = _last_sample_index_at_or_before(samples, drop_time)
+    if drop_index is None or drop_index < 2:
+        return ()
+    tp_index = min(range(drop_index + 1), key=lambda index: samples[index].bt)
+    if drop_index - tp_index < 1:
+        return ()
+    x_values = tuple(sample.time_s for sample in samples[tp_index:drop_index + 1])
+    y_values = tuple(sample.bt for sample in samples[tp_index:drop_index + 1])
+    baseline = y_values[0]
+    if baseline <= 0.0:
+        return ()
+    return (
+        AreaFillSnapshot.from_sequences(
+            x=x_values,
+            y=y_values,
+            baseline=baseline,
+            color='#767676',
+            label='AUC area',
+            opacity=0.28,
+            kind='auc',
+        ),
+    )
+
+
+def _last_sample_index_at_or_before(
+        samples: tuple[WebSocketTemperatureSample, ...],
+        time_s: float) -> int | None:
+    indexes = [index for index, sample in enumerate(samples) if sample.time_s <= time_s]
+    if not indexes:
+        return None
+    return indexes[-1]
+
+
 def _plot_data_item_count(plot: object) -> int:
     list_data_items = getattr(plot, 'listDataItems', None)
     if callable(list_data_items):
@@ -415,6 +496,29 @@ def _unused_tcp_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.bind(('127.0.0.1', 0))
         return int(sock.getsockname()[1])
+
+
+def _save_widget_screenshot(widget: object, screenshot_file: str, application: object) -> None:
+    path = Path(screenshot_file)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    _call_if_available(widget, 'resize', 1280, 720)
+    _call_if_available(widget, 'show')
+    process_events = getattr(application, 'processEvents', None)
+    if callable(process_events):
+        process_events()
+    grab = getattr(widget, 'grab', None)
+    if not callable(grab):
+        raise RuntimeError('PyQtGraph widget does not support grab() for screenshot capture')
+    pixmap = grab()
+    save = getattr(pixmap, 'save', None)
+    if not callable(save) or not save(str(path)):
+        raise RuntimeError(f'Failed to save PyQtGraph screenshot to {path}')
+
+
+def _call_if_available(target: object, method_name: str, *args: object, **kwargs: object) -> None:
+    method = getattr(target, method_name, None)
+    if callable(method):
+        method(*args, **kwargs)
 
 
 __all__ = [

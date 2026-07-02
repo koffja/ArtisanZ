@@ -5,7 +5,7 @@ import sys
 
 import pytest
 
-from artisanlib.plot_pyqtgraph_adapter import PyQtGraphSnapshotRenderer, _event_label_y_position
+from artisanlib.plot_pyqtgraph_adapter import PyQtGraphSnapshotRenderer, _event_label_anchor, _event_label_y_position
 from artisanlib.plot_snapshot import (
     AreaFillSnapshot,
     AxisSnapshot,
@@ -360,6 +360,23 @@ def test_event_label_y_position_does_not_wrap_dense_clusters() -> None:
     clustered_positions = [_event_label_y_position(event, snapshot) for event in events]
 
     assert len(set(clustered_positions)) == len(events)
+
+
+def test_event_label_anchor_protects_axis_edges() -> None:
+    snapshot = _snapshot(events=())
+
+    assert _event_label_anchor(
+        EventMarkerSnapshot(time=-1.0, label='CHARGE', event_type=100, color='#333333'),
+        snapshot,
+    ) == (0.0, 1.0)
+    assert _event_label_anchor(
+        EventMarkerSnapshot(time=12.0, label='DROP', event_type=106, color='#333333'),
+        snapshot,
+    ) == (1.0, 1.0)
+    assert _event_label_anchor(
+        EventMarkerSnapshot(time=6.0, label='FCs', event_type=102, color='#333333'),
+        snapshot,
+    ) == (0.5, 1.0)
 
 
 def test_event_markers_are_optional_when_pyqtgraph_is_not_installed(monkeypatch: pytest.MonkeyPatch) -> None:

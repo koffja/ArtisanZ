@@ -338,7 +338,7 @@ def _default_event_label_factory(event: EventMarkerSnapshot, snapshot: RoastPlot
     item = pg.TextItem(
         text=event.label,
         color=text_color,
-        anchor=(0.5, 1),
+        anchor=_event_label_anchor(event, snapshot),
         fill=pg.mkBrush(_color_with_alpha(pg, event.color, fill_opacity)),
         border=pg.mkPen(color=_color_with_alpha(pg, event.color, 0.65), width=1),
     )
@@ -411,6 +411,16 @@ def _event_label_y_position(event: EventMarkerSnapshot, snapshot: RoastPlotSnaps
     if event.kind == 'main':
         return snapshot.temperature_axis.maximum - span * (0.035 + row * 0.045)
     return snapshot.temperature_axis.maximum - span * (0.06 + row * 0.05)
+
+
+def _event_label_anchor(event: EventMarkerSnapshot, snapshot: RoastPlotSnapshot) -> tuple[float, float]:
+    span = max(1.0, snapshot.time_axis.maximum - snapshot.time_axis.minimum)
+    edge_margin = span * 0.035
+    if event.time <= snapshot.time_axis.minimum + edge_margin:
+        return (0.0, 1.0)
+    if event.time >= snapshot.time_axis.maximum - edge_margin:
+        return (1.0, 1.0)
+    return (0.5, 1.0)
 
 
 def _event_label_row(event: EventMarkerSnapshot, snapshot: RoastPlotSnapshot) -> int:
