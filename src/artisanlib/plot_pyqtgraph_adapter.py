@@ -264,7 +264,7 @@ def _default_phase_item_factory(band: PhaseBandSnapshot, _: RoastPlotSnapshot) -
         )
     except TypeError:
         return None
-    _call_if_available(item, 'setZValue', -50)
+    _call_if_available(item, 'setZValue', -20)
     for line in getattr(item, 'lines', []):
         _call_if_available(line, 'setPen', pg.mkPen(color=_color_with_alpha(pg, band.color, 0.0), width=0))
     return item

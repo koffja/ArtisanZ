@@ -1766,10 +1766,10 @@ class TestMakeLCDbox:
         layout = lcdframe.layout()
         margins = layout.contentsMargins()
         assert margins.left() == 6
-        assert margins.top() == 7
+        assert margins.top() == 4
         assert margins.right() == 6
-        assert margins.bottom() == 0
-        assert layout.spacing() == 0
+        assert margins.bottom() == 3
+        assert layout.spacing() == 3
 
     def test_makeLCDbox_value_surface_fills_bottom_row(self) -> None:
         """Test LCD value surface is not right-floated away from the card edge."""
@@ -1954,7 +1954,7 @@ class TestSetLabelColor:
 
         style = label.styleSheet()
         assert 'color: #336699' in style.lower()
-        assert 'padding: 2px 8px 1px 8px' in style
+        assert 'padding: 3px 6px 2px 6px' in style
 
 
 class TestCalcEnv:

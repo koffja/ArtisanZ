@@ -61,7 +61,7 @@ Layout signature:
 
 - [x] Update `ModernTheme` tokens away from neutral desktop grey into a clearer roast-console palette.
 - [x] Add stylesheet rules for `mainGraphPanel`, `mainControlRole`, `roastEventRail`, `roastEventRole`, and `telemetryCard`.
-- [x] Keep LCD value block top corners square and lower corners rounded.
+- [x] Replace the fragile nested LCD card/value treatment with transparent LCD containers and self-contained rounded value surfaces.
 - [x] Add tests that assert the new targeted selectors exist.
 
 ## Task 4: Baseline and Visual Evidence
@@ -93,6 +93,23 @@ Layout signature:
 - [x] Constrain and wrap LCD telemetry labels so long titles cannot widen the right-side card column.
 - [x] Add spacing above the bottom event rail.
 
+## Task 6: Phase 1.6 Visual Parity Handoff
+
+**Files:**
+- Modify: `src/artisanlib/plot_pyqtgraph_widget.py`
+- Modify: `src/artisanlib/plot_pyqtgraph_adapter.py`
+- Modify: `src/artisanlib/plot_snapshot_extractor.py`
+- Modify: `src/artisanlib/gui_theme.py`
+- Modify: `src/artisanlib/main.py`
+- Modify: `docs/superpowers/plans/2026-06-29-gui-modernization-roadmap.md`
+- Add: `docs/superpowers/plans/2026-07-02-gui-modernization-phase-1-6-pyqtgraph-parity-dialog-refresh.md`
+
+- [x] Replace faint PyQtGraph built-in grid rendering with a dedicated grid overlay tied to the existing grid visibility, opacity, width, color, and tick-step settings.
+- [x] Make default phase background bands visibly distinct with soft Morandi colors while preserving user/custom palette overrides.
+- [x] Remove the right LCD outer visual frame so the value surface cannot visually detach from a nested rounded rectangle.
+- [x] Apply a flatter light Morandi base to standard dialogs and dialog controls.
+- [x] Track remaining Matplotlib overlay parity gaps as executable Phase 1.6 tasks.
+
 ## Implementation Results
 
 - Default renderer now resolves to `pyqtgraph-snapshot`; `ARTISANZ_RENDERER_ID=matplotlib-snapshot` keeps the compatibility path available.
@@ -100,10 +117,12 @@ Layout signature:
 - Runtime PyQtGraph snapshot failures fall back to the Matplotlib canvas and record `pyqtgraph_snapshot_error`.
 - The PyQtGraph widget now allows horizontal compression, preserves the right-side LCD telemetry column beside the plot, uses a single plot with a right-side RoR axis, and formats the default time axis in minutes.
 - Config > Axes now persists `time_axis_label_mode` with Minutes/Seconds choices, while the existing x/y/RoR step controls drive PyQtGraph ticks.
-- LCD telemetry cards have fixed width, wrapped labels, larger text padding, and a left column gap so long labels cannot push into the graph area.
+- PyQtGraph gridlines now use a dedicated overlay instead of relying on faint built-in grid rendering, and default phase backgrounds use higher-contrast Morandi colors.
+- LCD telemetry containers are transparent; only the data surface is visually framed, which removes the recurring nested-card alignment defect.
+- Standard dialogs now inherit a flatter light Morandi base before individual high-traffic dialogs are redesigned.
 - The bottom event rail has more top/bottom breathing room.
 - Main-screen visual roles are present for top control buttons, event buttons, graph panel, event rail, and telemetry cards.
-- Focused tests currently pass: `29 passed, 2 warnings` for the PyQtGraph/axis/LCD follow-up subset; earlier Phase 1.5 focused suite remains covered by the default-renderer tests.
+- Focused tests currently pass: `252 passed, 1 skipped, 2 warnings` for the GUI/PyQtGraph visual-parity subset; earlier Phase 1.5 focused suite remains covered by the default-renderer tests.
 - Visual evidence:
   - Default PyQtGraph screenshot: `/tmp/artisanz-phase15-default-pyqtgraph.png`
   - Matplotlib override screenshot: `/tmp/artisanz-phase15-matplotlib-override.png`

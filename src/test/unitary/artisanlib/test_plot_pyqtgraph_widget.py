@@ -7,7 +7,7 @@ os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 import pytest
 from PyQt6.QtWidgets import QApplication
 
-from artisanlib.plot_pyqtgraph_widget import create_pyqtgraph_plot_target
+from artisanlib.plot_pyqtgraph_widget import _grid_display_color, create_pyqtgraph_plot_target
 from artisanlib.plot_snapshot import AxisSnapshot, CurveSnapshot, PhaseBandSnapshot, RoastPlotSnapshot
 
 pg = pytest.importorskip('pyqtgraph')
@@ -103,6 +103,9 @@ def test_pyqtgraph_time_axis_can_display_minutes_or_seconds() -> None:
             axis_color='#5e6b6e',
         )
         assert target.time_axis.tickStrings([60.0, 120.0, 180.0], 1.0, 60.0) == ['0:00', '1:00', '2:00']
+        assert target.grid_item is not None
+        assert target.grid_item.isVisible()
+        assert target.grid_item.opts['tickSpacing'] == ([60.0], [10.0])
 
         target.configure_axes(
             time_grid=True,
@@ -120,6 +123,58 @@ def test_pyqtgraph_time_axis_can_display_minutes_or_seconds() -> None:
         assert target.time_axis.tickStrings([60.0, 120.0, 180.0], 1.0, 60.0) == ['0', '60', '120']
     finally:
         target.close()
+
+
+def test_pyqtgraph_grid_overlay_hides_when_grid_settings_are_disabled() -> None:
+    target = create_pyqtgraph_plot_target(use_opengl=False, include_ror=True)
+    try:
+        target.configure_axes(
+            time_grid=False,
+            temperature_grid=False,
+            time_tick_step=60.0,
+            temperature_tick_step=10.0,
+            ror_tick_step=5.0,
+            time_label_mode='minutes',
+            time_axis_start=60.0,
+            grid_alpha=0.2,
+            grid_width=1,
+            grid_color='#d0d7d8',
+            axis_color='#5e6b6e',
+        )
+
+        assert target.grid_item is not None
+        assert not target.grid_item.isVisible()
+    finally:
+        target.close()
+
+
+def test_pyqtgraph_grid_overlay_can_show_one_axis() -> None:
+    target = create_pyqtgraph_plot_target(use_opengl=False, include_ror=True)
+    try:
+        target.configure_axes(
+            time_grid=False,
+            temperature_grid=True,
+            time_tick_step=60.0,
+            temperature_tick_step=10.0,
+            ror_tick_step=5.0,
+            time_label_mode='minutes',
+            time_axis_start=60.0,
+            grid_alpha=0.2,
+            grid_width=1,
+            grid_color='#d0d7d8',
+            axis_color='#5e6b6e',
+        )
+
+        assert target.grid_item is not None
+        assert target.grid_item.isVisible()
+        assert target.grid_item.opts['tickSpacing'] == ([None], [10.0])
+    finally:
+        target.close()
+
+
+def test_pyqtgraph_grid_display_color_keeps_default_grid_visible() -> None:
+    assert _grid_display_color('#d0d7d8') == '#A9B7B1'
+    assert _grid_display_color('#65736f') == '#65736f'
 
 
 def test_create_pyqtgraph_plot_target_restores_opengl_config_on_close() -> None:

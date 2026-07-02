@@ -153,9 +153,9 @@ def test_build_roast_plot_snapshot_extracts_overlay_curves_and_phase_bands() -> 
     assert curves['BT projection'].y == (144.0, 190.0)
     assert curves['Delta BT projection'].y_axis == 'ror'
     assert snapshot.phase_bands == (
-        PhaseBandSnapshot(minimum=100.0, maximum=150.0, color='#A0A0A0', opacity=0.15),
-        PhaseBandSnapshot(minimum=150.0, maximum=190.0, color='#B0B0B0', opacity=0.15),
-        PhaseBandSnapshot(minimum=190.0, maximum=230.0, color='#C0C0C0', opacity=0.15),
+        PhaseBandSnapshot(minimum=100.0, maximum=150.0, color='#A0A0A0', opacity=0.22),
+        PhaseBandSnapshot(minimum=150.0, maximum=190.0, color='#B0B0B0', opacity=0.22),
+        PhaseBandSnapshot(minimum=190.0, maximum=230.0, color='#C0C0C0', opacity=0.22),
     )
 
 

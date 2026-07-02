@@ -5,18 +5,19 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class ModernTheme:
-    window: str = '#F3F5F1'
-    surface: str = '#FCFBF6'
-    surface_muted: str = '#E9EEF0'
-    border: str = '#CDD7D8'
-    border_strong: str = '#94A4A8'
+    window: str = '#F1F3EE'
+    surface: str = '#FCFBF7'
+    surface_muted: str = '#E6ECE8'
+    surface_alt: str = '#F7F6F0'
+    border: str = '#CAD5D0'
+    border_strong: str = '#8FA39C'
     text: str = '#20272B'
     text_muted: str = '#637278'
-    selection: str = '#D7E7EC'
+    selection: str = '#D7E5DF'
     selection_text: str = '#18343C'
-    focus: str = '#376B7A'
-    primary: str = '#376B7A'
-    primary_hover: str = '#467D8C'
+    focus: str = '#53756F'
+    primary: str = '#53756F'
+    primary_hover: str = '#63857F'
     accent: str = '#B4685C'
     success: str = '#6F875E'
 
@@ -27,12 +28,8 @@ def lcd_value_stylesheet(text_color: str, background_color: str) -> str:
         'border-width: 0px; '
         'border-style: solid; '
         'border-color: transparent; '
-        'border-radius: 0px; '
-        'border-top-left-radius: 0px; '
-        'border-top-right-radius: 0px; '
-        'border-bottom-left-radius: 5px; '
-        'border-bottom-right-radius: 5px; '
-        'padding: 4px 8px 3px 8px; '
+        'border-radius: 6px; '
+        'padding: 5px 8px 4px 8px; '
         f'color: {text_color}; '
         f'background-color: {background_color};'
         '}'
@@ -43,7 +40,7 @@ def lcd_label_stylesheet(text_color: str) -> str:
     return (
         'QLabel { '
         f'color: {text_color}; '
-        'padding: 4px 8px 3px 8px;'
+        'padding: 3px 6px 2px 6px;'
         '}'
     )
 
@@ -57,6 +54,16 @@ def modern_application_stylesheet(theme: ModernTheme | None = None) -> str:
             selection-color: {t.selection_text};
         }}
         QMainWindow, QDialog {{
+            background-color: {t.window};
+        }}
+        QDialog QWidget {{
+            selection-background-color: {t.selection};
+            selection-color: {t.selection_text};
+        }}
+        QDialog QLabel {{
+            color: {t.text};
+        }}
+        QMessageBox, QFileDialog {{
             background-color: {t.window};
         }}
         QWidget[mainRoastScreen="true"] {{
@@ -106,31 +113,28 @@ def modern_application_stylesheet(theme: ModernTheme | None = None) -> str:
             border-radius: 8px;
         }}
         QFrame[lcdSurface="true"] {{
-            background-color: {t.surface};
-            border: 1px solid {t.border};
-            border-radius: 6px;
+            background-color: transparent;
+            border: 0;
+            border-radius: 0;
         }}
         QFrame[telemetryCard="true"] {{
-            background-color: {t.surface};
-            border: 1px solid {t.border};
-            border-radius: 8px;
+            background-color: transparent;
+            border: 0;
+            border-radius: 0;
         }}
         QLCDNumber[lcdValue="true"] {{
             border-width: 0px;
             border-style: solid;
             border-color: transparent;
-            border-radius: 0px;
-            border-top-left-radius: 0px;
-            border-top-right-radius: 0px;
-            border-bottom-left-radius: 5px;
-            border-bottom-right-radius: 5px;
-            padding: 4px 8px 3px 8px;
+            border-radius: 6px;
+            padding: 5px 8px 4px 8px;
+            margin-top: 2px;
             margin-bottom: 0px;
         }}
         QLabel[lcdLabel="true"] {{
             color: {t.text_muted};
             font-weight: 600;
-            padding: 4px 8px 3px 8px;
+            padding: 3px 6px 2px 6px;
         }}
         QFrame[roastEventRail="true"] {{
             background-color: #E6ECEB;
@@ -172,7 +176,8 @@ def modern_application_stylesheet(theme: ModernTheme | None = None) -> str:
             background-color: {t.surface};
             border: 1px solid {t.border};
             border-radius: 5px;
-            padding: 3px 6px;
+            padding: 4px 7px;
+            min-height: 22px;
         }}
         QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus, QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus {{
             border-color: {t.focus};
@@ -208,6 +213,11 @@ def modern_application_stylesheet(theme: ModernTheme | None = None) -> str:
             border-radius: 6px;
             padding: 4px 9px;
             background-color: {t.surface};
+        }}
+        QDialog QPushButton {{
+            min-height: 24px;
+            padding: 5px 12px;
+            background-color: {t.surface_alt};
         }}
         QPushButton[mainControlRole="monitor"],
         QPushButton[mainControlRole="record"],

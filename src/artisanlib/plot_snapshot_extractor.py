@@ -405,8 +405,8 @@ def _phase_bands(source: object) -> tuple[PhaseBandSnapshot, ...]:
         bands.append(PhaseBandSnapshot(
             minimum=minimum,
             maximum=maximum,
-            color=_palette_color(source, color_key),
-            opacity=0.15,
+            color=_phase_band_color(source, color_key, index),
+            opacity=0.22,
         ))
     return tuple(bands)
 
@@ -443,6 +443,14 @@ def _event_color(source: object, event_type: int) -> str:
         if isinstance(color, str):
             return color
     return '#ffffff'
+
+
+def _phase_band_color(source: object, color_key: str, index: int) -> str:
+    color = _palette_color(source, color_key)
+    default_gray_colors = {'#e5e5e5', '#b2b2b2', '#d3d3d3'}
+    if color.lower() not in default_gray_colors:
+        return color
+    return ('#DDE8E0', '#E7DEC9', '#D9E4EA')[index]
 
 
 def _background_available(source: object) -> bool:

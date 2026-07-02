@@ -13,6 +13,7 @@ class PyQtGraphPlotTarget:
     ror_plot: object | None
     time_axis: object
     ror_axis: object | None
+    grid_item: object | None
     renderer: PyQtGraphSnapshotRenderer
     opengl_requested: bool
     _previous_opengl: bool
@@ -38,12 +39,20 @@ class PyQtGraphPlotTarget:
             grid_width: int,
             grid_color: str,
             axis_color: str) -> None:
-        _call_if_available(
-            self.temperature_plot,
-            'showGrid',
-            x=time_grid,
-            y=temperature_grid,
-            alpha=_visible_grid_alpha(grid_alpha))
+        # A dedicated GridItem gives consistent visible gridlines across Qt
+        # styles; PlotItem.showGrid can be too faint on the light roast canvas.
+        _call_if_available(self.temperature_plot, 'showGrid', x=False, y=False, alpha=0.0)
+        _configure_grid_overlay(
+            self.grid_item,
+            self._pyqtgraph,
+            x_visible=time_grid,
+            y_visible=temperature_grid,
+            x_tick_step=time_tick_step,
+            y_tick_step=temperature_tick_step,
+            grid_alpha=grid_alpha,
+            grid_width=grid_width,
+            grid_color=grid_color,
+        )
         _configure_axis_pen(self.temperature_plot, self._pyqtgraph, grid_color, axis_color, grid_width)
         _set_axis_tick_spacing(self.temperature_plot, 'bottom', time_tick_step)
         _set_axis_tick_spacing(self.temperature_plot, 'left', temperature_tick_step)
@@ -73,6 +82,7 @@ def create_pyqtgraph_plot_target(
     time_axis = _create_time_axis(pg)
     temperature_plot = widget.addPlot(row=0, col=0, axisItems={'bottom': time_axis})
     _configure_temperature_plot(temperature_plot, pg)
+    grid_item = _create_grid_overlay(temperature_plot, pg)
     ror_plot = None
     ror_axis = None
     if include_ror:
@@ -88,6 +98,7 @@ def create_pyqtgraph_plot_target(
         ror_plot=ror_plot,
         time_axis=time_axis,
         ror_axis=ror_axis,
+        grid_item=grid_item,
         renderer=renderer,
         opengl_requested=use_opengl,
         _previous_opengl=previous_opengl,
@@ -102,7 +113,7 @@ def _configure_temperature_plot(plot: object, pg: Any) -> None:
 
 
 def _configure_plot_surface(plot: object, pg: Any) -> None:
-    _call_if_available(plot, 'showGrid', x=True, y=True, alpha=0.32)
+    _call_if_available(plot, 'showGrid', x=False, y=False, alpha=0.0)
     _call_if_available(plot, 'setMenuEnabled', False)
     view_box = getattr(plot, 'getViewBox', lambda: None)()
     _call_if_available(view_box, 'setBackgroundColor', '#F8F7F1')
@@ -113,6 +124,44 @@ def _configure_plot_surface(plot: object, pg: Any) -> None:
     _call_if_available(plot, 'setClipToView', True)
     _call_if_available(plot, 'setMouseEnabled', x=True, y=True)
     _configure_axis_pen(plot, pg, '#C9D2D4', '#5E6B6E', 1)
+
+
+def _create_grid_overlay(plot: object, pg: Any) -> object | None:
+    try:
+        grid_item = pg.GridItem(pen=pg.mkPen(_color_with_alpha(pg, '#B8C6C1', 0.65), width=1))
+    except Exception: # pylint: disable=broad-exception-caught
+        return None
+    _call_if_available(grid_item, 'setZValue', -10)
+    view_box = getattr(plot, 'getViewBox', lambda: None)()
+    _call_if_available(view_box, 'addItem', grid_item)
+    return grid_item
+
+
+def _configure_grid_overlay(
+        grid_item: object | None,
+        pg: Any,
+        *,
+        x_visible: bool,
+        y_visible: bool,
+        x_tick_step: float,
+        y_tick_step: float,
+        grid_alpha: float,
+        grid_width: int,
+        grid_color: str) -> None:
+    if grid_item is None:
+        return
+    visible = x_visible or y_visible
+    _call_if_available(grid_item, 'setVisible', visible)
+    if not visible:
+        return
+    pen = pg.mkPen(
+        _color_with_alpha(pg, _grid_display_color(grid_color), _visible_grid_alpha(grid_alpha)),
+        width=max(1, grid_width),
+    )
+    _call_if_available(grid_item, 'setPen', pen)
+    x_spacing = [float(x_tick_step)] if x_visible and x_tick_step > 0 else [None]
+    y_spacing = [float(y_tick_step)] if y_visible and y_tick_step > 0 else [None]
+    _call_if_available(grid_item, 'setTickSpacing', x=x_spacing, y=y_spacing)
 
 
 def _configure_axis_pen(plot: object, pg: Any, axis_color: str, text_color: str, width: int) -> None:
@@ -235,7 +284,31 @@ def _set_axis_tick_spacing(plot: object, axis_name: str, step: float) -> None:
 
 
 def _visible_grid_alpha(grid_alpha: float) -> float:
-    return min(1.0, max(0.28, grid_alpha * 1.6))
+    return min(1.0, max(0.62, grid_alpha * 3.0))
+
+
+def _grid_display_color(color: str) -> str:
+    normalized = color.strip().lstrip('#')
+    if len(normalized) != 6:
+        return color
+    try:
+        red = int(normalized[0:2], 16)
+        green = int(normalized[2:4], 16)
+        blue = int(normalized[4:6], 16)
+    except ValueError:
+        return color
+    luminance = ((0.2126 * red) + (0.7152 * green) + (0.0722 * blue)) / 255
+    if luminance > 0.72:
+        return '#A9B7B1'
+    return color
+
+
+def _color_with_alpha(pg: Any, color: str, opacity: float) -> object:
+    qcolor = pg.mkColor(color)
+    set_alpha = getattr(qcolor, 'setAlphaF', None)
+    if callable(set_alpha):
+        set_alpha(max(0.0, min(1.0, float(opacity))))
+    return qcolor
 
 
 def _call_with_optional_padding(
