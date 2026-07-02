@@ -4,9 +4,17 @@ from collections.abc import Callable
 import math
 from typing import Any
 
-from artisanlib.plot_snapshot import AxisSnapshot, CurveSnapshot, EventMarkerSnapshot, RendererViewState, RoastPlotSnapshot
+from artisanlib.plot_snapshot import (
+    AxisSnapshot,
+    CurveSnapshot,
+    EventMarkerSnapshot,
+    PhaseBandSnapshot,
+    RendererViewState,
+    RoastPlotSnapshot,
+)
 
 EventItemFactory = Callable[[EventMarkerSnapshot, RoastPlotSnapshot], object | None]
+PhaseItemFactory = Callable[[PhaseBandSnapshot, RoastPlotSnapshot], object | None]
 CurvePenFactory = Callable[[CurveSnapshot], object]
 
 
@@ -18,13 +26,16 @@ class PyQtGraphSnapshotRenderer:
             ror_plot: object | None = None,
             event_line_factory: EventItemFactory | None = None,
             event_label_factory: EventItemFactory | None = None,
+            phase_item_factory: PhaseItemFactory | None = None,
             pen_factory: CurvePenFactory | None = None) -> None:
         self._temperature_plot = temperature_plot
         self._ror_plot = ror_plot
         self._event_line_factory = event_line_factory or _default_event_line_factory
         self._event_label_factory = event_label_factory or _default_event_label_factory
+        self._phase_item_factory = phase_item_factory or _default_phase_item_factory
         self._pen_factory = pen_factory or _default_pen_factory
         self._items: dict[str, object] = {}
+        self._phase_items: list[object] = []
         self._event_items: list[object] = []
         self._last_view_state = RendererViewState(
             time_axis=AxisSnapshot(minimum=0.0, maximum=0.0, label='Time'),
@@ -32,13 +43,13 @@ class PyQtGraphSnapshotRenderer:
         )
 
     def set_snapshot(self, snapshot: RoastPlotSnapshot) -> None:
+        self._apply_phase_bands(snapshot)
         self._apply_curves(snapshot)
         self._apply_events(snapshot)
         self.reset_view(snapshot.export_view_state())
 
     def update_live_frame(self, snapshot: RoastPlotSnapshot) -> None:
         self._apply_curves(snapshot)
-        self._apply_events(snapshot)
 
     def reset_view(self, view_state: RendererViewState) -> None:
         _set_plot_ranges(self._temperature_plot, view_state.time_axis, view_state.temperature_axis)
@@ -59,6 +70,9 @@ class PyQtGraphSnapshotRenderer:
 
     def event_item_count(self) -> int:
         return len(self._event_items)
+
+    def phase_item_count(self) -> int:
+        return len(self._phase_items)
 
     def _apply_curves(self, snapshot: RoastPlotSnapshot) -> None:
         active_names = {curve.name for curve in snapshot.curves}
@@ -82,6 +96,20 @@ class PyQtGraphSnapshotRenderer:
         if curve.y_axis == 'ror' and self._ror_plot is not None:
             return self._ror_plot
         return self._temperature_plot
+
+    def _apply_phase_bands(self, snapshot: RoastPlotSnapshot) -> None:
+        self._clear_phase_items()
+        for band in snapshot.phase_bands:
+            item = self._phase_item_factory(band, snapshot)
+            if item is None:
+                continue
+            _call_if_available(self._temperature_plot, 'addItem', item)
+            self._phase_items.append(item)
+
+    def _clear_phase_items(self) -> None:
+        for item in self._phase_items:
+            _call_if_available(self._temperature_plot, 'removeItem', item)
+        self._phase_items.clear()
 
     def _apply_events(self, snapshot: RoastPlotSnapshot) -> None:
         self._clear_event_items()
@@ -107,7 +135,12 @@ class PyQtGraphSnapshotRenderer:
 
 
 def _pen_for_curve(curve: CurveSnapshot) -> dict[str, object]:
-    return {'color': curve.color, 'width': curve.line_width, 'style': curve.line_style}
+    return {
+        'color': curve.color,
+        'width': curve.line_width,
+        'style': curve.line_style,
+        'opacity': curve.opacity,
+    }
 
 
 def _pyqtgraph_y_values(values: tuple[float | None, ...]) -> tuple[float, ...]:
@@ -119,7 +152,7 @@ def _default_pen_factory(curve: CurveSnapshot) -> object:
         import pyqtgraph as pg  # type: ignore[import-not-found,unused-ignore]
     except ImportError:
         return _pen_for_curve(curve)
-    return pg.mkPen(color=curve.color, width=curve.line_width, style=_qt_pen_style(curve.line_style))
+    return pg.mkPen(color=_color_with_alpha(pg, curve.color, curve.opacity), width=curve.line_width, style=_qt_pen_style(curve.line_style))
 
 
 def _qt_pen_style(line_style: str) -> object:
@@ -184,7 +217,16 @@ def _default_event_line_factory(event: EventMarkerSnapshot, _: RoastPlotSnapshot
         import pyqtgraph as pg  # type: ignore[import-not-found,unused-ignore]
     except ImportError:
         return None
-    return pg.InfiniteLine(pos=event.time, angle=90, pen=pg.mkPen(color=event.color, width=1), movable=False)
+    width = 2 if event.kind == 'main' else 1
+    opacity = 0.65 if event.kind == 'main' else 0.45
+    item = pg.InfiniteLine(
+        pos=event.time,
+        angle=90,
+        pen=pg.mkPen(color=_color_with_alpha(pg, event.color, opacity), width=width),
+        movable=False,
+    )
+    _call_if_available(item, 'setZValue', 20)
+    return item
 
 
 def _default_event_label_factory(event: EventMarkerSnapshot, snapshot: RoastPlotSnapshot) -> object | None:
@@ -192,9 +234,59 @@ def _default_event_label_factory(event: EventMarkerSnapshot, snapshot: RoastPlot
         import pyqtgraph as pg  # type: ignore[import-not-found,unused-ignore]
     except ImportError:
         return None
-    item = pg.TextItem(text=event.label, color=event.color, anchor=(0, 1))
-    item.setPos(event.time, snapshot.temperature_axis.maximum)
+    text_color = '#FFFFFF' if event.kind in {'special', 'background'} else event.color
+    fill_opacity = 0.78 if event.kind == 'special' else 0.28
+    if event.kind == 'background':
+        fill_opacity = 0.36
+    item = pg.TextItem(
+        text=event.label,
+        color=text_color,
+        anchor=(0.5, 1),
+        fill=pg.mkBrush(_color_with_alpha(pg, event.color, fill_opacity)),
+        border=pg.mkPen(color=_color_with_alpha(pg, event.color, 0.65), width=1),
+    )
+    item.setPos(event.time, _event_label_y_position(event, snapshot))
+    _call_if_available(item, 'setZValue', 30)
     return item
+
+
+def _default_phase_item_factory(band: PhaseBandSnapshot, _: RoastPlotSnapshot) -> object | None:
+    try:
+        import pyqtgraph as pg  # type: ignore[import-not-found,unused-ignore]
+    except ImportError:
+        return None
+    try:
+        item = pg.LinearRegionItem(
+            values=(band.minimum, band.maximum),
+            orientation='horizontal',
+            movable=False,
+            brush=pg.mkBrush(_color_with_alpha(pg, band.color, band.opacity)),
+        )
+    except TypeError:
+        return None
+    _call_if_available(item, 'setZValue', -50)
+    for line in getattr(item, 'lines', []):
+        _call_if_available(line, 'setPen', pg.mkPen(color=_color_with_alpha(pg, band.color, 0.0), width=0))
+    return item
+
+
+def _event_label_y_position(event: EventMarkerSnapshot, snapshot: RoastPlotSnapshot) -> float:
+    if event.y_position is not None:
+        return event.y_position
+    span = max(1.0, snapshot.temperature_axis.maximum - snapshot.temperature_axis.minimum)
+    if event.kind == 'main':
+        row = max(0, event.event_type - 100) % 3
+        return snapshot.temperature_axis.maximum - span * (0.035 + row * 0.045)
+    row = event.event_type % 4
+    return snapshot.temperature_axis.maximum - span * (0.06 + row * 0.05)
+
+
+def _color_with_alpha(pg: object, color: str, opacity: float) -> object:
+    qcolor = pg.mkColor(color)
+    set_alpha = getattr(qcolor, 'setAlphaF', None)
+    if callable(set_alpha):
+        set_alpha(max(0.0, min(1.0, float(opacity))))
+    return qcolor
 
 
 __all__ = ['PyQtGraphSnapshotRenderer']

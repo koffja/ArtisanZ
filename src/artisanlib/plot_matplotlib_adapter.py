@@ -25,7 +25,6 @@ class MatplotlibSnapshotRenderer:
 
     def update_live_frame(self, snapshot: RoastPlotSnapshot) -> None:
         self._apply_curves(snapshot)
-        self._apply_events(snapshot)
         self._request_draw_idle()
 
     def reset_view(self, view_state: RendererViewState) -> None:
@@ -63,6 +62,7 @@ class MatplotlibSnapshotRenderer:
             _call_if_available(line, 'set_color', curve.color)
             _call_if_available(line, 'set_linestyle', curve.line_style)
             _call_if_available(line, 'set_linewidth', curve.line_width)
+            _call_if_available(line, 'set_alpha', curve.opacity)
             _call_if_available(line, 'set_visible', curve.visible)
         for name, line in self._lines.items():
             if name not in active_names:

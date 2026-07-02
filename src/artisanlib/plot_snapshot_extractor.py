@@ -1,15 +1,45 @@
 from __future__ import annotations
 
+import math
 from typing import Any
 
-from artisanlib.plot_snapshot import AxisSnapshot, CurveSnapshot, EventMarkerSnapshot, RoastPlotSnapshot, YAxisName
+from artisanlib.plot_snapshot import (
+    AxisSnapshot,
+    CurveSnapshot,
+    EventMarkerSnapshot,
+    PhaseBandSnapshot,
+    RoastPlotSnapshot,
+    YAxisName,
+)
 
 _DEFAULT_COLORS = {
     'bt': '#4E7180',
     'et': '#B5644F',
     'deltabt': '#78905D',
     'deltaet': '#B98A4B',
+    'backgroundbt': '#4E7180',
+    'backgroundet': '#B5644F',
+    'backgrounddeltabt': '#78905D',
+    'backgrounddeltaet': '#B98A4B',
+    'grid': '#C9D2D4',
+    'markers': '#5E6B6E',
+    'rect1': '#E5E5E5',
+    'rect2': '#B2B2B2',
+    'rect3': '#E5E5E5',
+    'specialeventtext': '#FFFFFF',
+    'bgeventtext': '#5E6B6E',
 }
+
+_MAIN_EVENTS = (
+    (0, 'CHARGE'),
+    (1, 'DRY'),
+    (2, 'FCs'),
+    (3, 'FCe'),
+    (4, 'SCs'),
+    (5, 'SCe'),
+    (6, 'DROP'),
+    (7, 'COOL'),
+)
 
 
 def build_roast_plot_snapshot(source: object) -> RoastPlotSnapshot:
@@ -30,13 +60,14 @@ def build_roast_plot_snapshot(source: object) -> RoastPlotSnapshot:
             color_key='deltaet',
             visible_attr='DeltaETflag',
             y_axis='ror'),
-    )
+    ) + _background_curves(source) + _projection_curves(source)
     return RoastPlotSnapshot(
         curves=curves,
         time_axis=_time_axis(source),
         temperature_axis=_temperature_axis(source),
         ror_axis=_ror_axis(source),
         events=_event_markers(source),
+        phase_bands=_phase_bands(source),
     )
 
 
@@ -55,6 +86,190 @@ def _curve(
         color=_palette_color(source, color_key),
         visible=bool(getattr(source, visible_attr, False)),
         y_axis=y_axis,
+        line_style=_line_style(source, _line_style_attr(name), '-'),
+        line_width=_line_width(source, _line_width_attr(name), 1.0),
+    )
+
+
+def _background_curves(source: object) -> tuple[CurveSnapshot, ...]:
+    if not _background_available(source):
+        return ()
+    return tuple(curve for curve in (
+        _background_curve(
+            source,
+            name='Background BT',
+            y_attr='temp2B',
+            smoothed_y_attr='stemp2B',
+            color_attr='backgroundbtcolor',
+            color_key='backgroundbt',
+            visible_attr='backgroundBTcurve',
+            line_style_attr='BTbacklinestyle',
+            line_width_attr='BTbacklinewidth'),
+        _background_curve(
+            source,
+            name='Background ET',
+            y_attr='temp1B',
+            smoothed_y_attr='stemp1B',
+            color_attr='backgroundmetcolor',
+            color_key='backgroundet',
+            visible_attr='backgroundETcurve',
+            line_style_attr='ETbacklinestyle',
+            line_width_attr='ETbacklinewidth'),
+        _curve_from_xy(
+            source,
+            name='Background Delta BT',
+            x=_sequence(source, 'timeB'),
+            y=_sequence(source, 'delta2B'),
+            color=_color_attr(source, 'backgrounddeltabtcolor', 'backgrounddeltabt'),
+            visible=bool(getattr(source, 'DeltaBTBflag', False)),
+            y_axis='ror',
+            line_style=_line_style(source, 'BTBdeltalinestyle', '-'),
+            line_width=_line_width(source, 'BTBdeltalinewidth', 1.0),
+            opacity=_opacity(source, 'backgroundalpha', 0.45)),
+        _curve_from_xy(
+            source,
+            name='Background Delta ET',
+            x=_sequence(source, 'timeB'),
+            y=_sequence(source, 'delta1B'),
+            color=_color_attr(source, 'backgrounddeltaetcolor', 'backgrounddeltaet'),
+            visible=bool(getattr(source, 'DeltaETBflag', False)),
+            y_axis='ror',
+            line_style=_line_style(source, 'ETBdeltalinestyle', '-'),
+            line_width=_line_width(source, 'ETBdeltalinewidth', 1.0),
+            opacity=_opacity(source, 'backgroundalpha', 0.45)),
+    ) if curve is not None)
+
+
+def _background_curve(
+        source: object,
+        *,
+        name: str,
+        y_attr: str,
+        smoothed_y_attr: str,
+        color_attr: str,
+        color_key: str,
+        visible_attr: str,
+        line_style_attr: str,
+        line_width_attr: str) -> CurveSnapshot | None:
+    y_source = y_attr if bool(getattr(source, 'flagon', False)) else smoothed_y_attr
+    y_values = _background_temperature_values(source, _sequence(source, y_source))
+    return _curve_from_xy(
+        source,
+        name=name,
+        x=_sequence(source, 'timeB'),
+        y=y_values,
+        color=_color_attr(source, color_attr, color_key),
+        visible=bool(getattr(source, visible_attr, False)),
+        line_style=_line_style(source, line_style_attr, '-'),
+        line_width=_line_width(source, line_width_attr, 1.0),
+        opacity=_opacity(source, 'backgroundalpha', 0.45),
+    )
+
+
+def _projection_curves(source: object) -> tuple[CurveSnapshot, ...]:
+    return tuple(curve for curve in (
+        _projection_curve(
+            source,
+            name='BT projection',
+            x_attr='BTprojection_tx',
+            y_attr='BTprojection_temp',
+            color_key='bt',
+            visible=bool(getattr(source, 'BTprojectFlag', False) and getattr(source, 'BTcurve', False))),
+        _projection_curve(
+            source,
+            name='ET projection',
+            x_attr='ETprojection_tx',
+            y_attr='ETprojection_temp',
+            color_key='et',
+            visible=bool(getattr(source, 'ETprojectFlag', False) and getattr(source, 'ETcurve', False))),
+        _projection_curve(
+            source,
+            name='Delta BT projection',
+            x_attr='DeltaBTprojection_tx',
+            y_attr='DeltaBTprojection_temp',
+            color_key='deltabt',
+            visible=bool(
+                getattr(source, 'BTprojectFlag', False) and
+                getattr(source, 'projectDeltaFlag', False) and
+                getattr(source, 'DeltaBTflag', False)),
+            y_axis='ror'),
+        _projection_curve(
+            source,
+            name='Delta ET projection',
+            x_attr='DeltaETprojection_tx',
+            y_attr='DeltaETprojection_temp',
+            color_key='deltaet',
+            visible=bool(
+                getattr(source, 'ETprojectFlag', False) and
+                getattr(source, 'projectDeltaFlag', False) and
+                getattr(source, 'DeltaETflag', False)),
+            y_axis='ror'),
+    ) if curve is not None)
+
+
+def _projection_curve(
+        source: object,
+        *,
+        name: str,
+        x_attr: str,
+        y_attr: str,
+        color_key: str,
+        visible: bool,
+        y_axis: YAxisName = 'temperature') -> CurveSnapshot | None:
+    x = _sequence(source, x_attr)
+    y = _sequence(source, y_attr)
+    if not visible or not x or not y:
+        return None
+    return _curve_from_xy(
+        source,
+        name=name,
+        x=x,
+        y=y,
+        color=_palette_color(source, color_key),
+        visible=visible,
+        y_axis=y_axis,
+        line_style='-.',
+        line_width=4.0,
+        opacity=0.35,
+    )
+
+
+def _curve_from_xy(
+        source: object,
+        *,
+        name: str,
+        x: list[Any],
+        y: list[Any],
+        color: str,
+        visible: bool,
+        y_axis: YAxisName = 'temperature',
+        line_style: str = '-',
+        line_width: float = 1.0,
+        opacity: float = 1.0) -> CurveSnapshot | None:
+    limit = min(len(x), len(y))
+    if limit == 0:
+        return CurveSnapshot.from_sequences(
+            name=name,
+            x=(),
+            y=(),
+            color=color,
+            visible=False,
+            y_axis=y_axis,
+            line_style=line_style,
+            line_width=line_width,
+            opacity=opacity,
+        )
+    del source
+    return CurveSnapshot.from_sequences(
+        name=name,
+        x=x[:limit],
+        y=[_temperature_value(value) for value in y[:limit]],
+        color=color,
+        visible=visible,
+        y_axis=y_axis,
+        line_style=line_style,
+        line_width=line_width,
+        opacity=opacity,
     )
 
 
@@ -94,6 +309,31 @@ def _palette_color(source: object, color_key: str) -> str:
 
 
 def _event_markers(source: object) -> tuple[EventMarkerSnapshot, ...]:
+    return _main_event_markers(source) + _foreground_event_markers(source) + _background_event_markers(source)
+
+
+def _main_event_markers(source: object) -> tuple[EventMarkerSnapshot, ...]:
+    timex = _sequence(source, 'timex')
+    timeindex = _sequence(source, 'timeindex')
+    markers: list[EventMarkerSnapshot] = []
+    for index, label in _MAIN_EVENTS:
+        if index >= len(timeindex):
+            continue
+        event_index = int(timeindex[index])
+        is_set = event_index >= 0 if index == 0 else event_index > 0
+        if not is_set or event_index >= len(timex):
+            continue
+        markers.append(EventMarkerSnapshot(
+            time=float(timex[event_index]),
+            label=label,
+            event_type=100 + index,
+            color=_palette_color(source, 'markers'),
+            kind='main',
+        ))
+    return tuple(markers)
+
+
+def _foreground_event_markers(source: object) -> tuple[EventMarkerSnapshot, ...]:
     timex = _sequence(source, 'timex')
     specialevents = _sequence(source, 'specialevents')
     event_types = _sequence(source, 'specialeventstype')
@@ -114,8 +354,61 @@ def _event_markers(source: object) -> tuple[EventMarkerSnapshot, ...]:
             event_type=event_type,
             color=_event_color(source, event_type),
             value=None if event_values[i] is None else float(event_values[i]),
+            kind='special',
         ))
     return tuple(markers)
+
+
+def _background_event_markers(source: object) -> tuple[EventMarkerSnapshot, ...]:
+    if not bool(getattr(source, 'backgroundeventsflag', False)):
+        return ()
+    timex = _sequence(source, 'timeB')
+    background_events = _sequence(source, 'backgroundEvents')
+    event_types = _sequence(source, 'backgroundEtypes')
+    event_values = _sequence(source, 'backgroundEvalues')
+    event_labels = _sequence(source, 'backgroundEStrings')
+    limit = min(len(background_events), len(event_types), len(event_values))
+    markers: list[EventMarkerSnapshot] = []
+    for i in range(limit):
+        event_type = int(event_types[i])
+        if not _event_type_visible(source, event_type):
+            continue
+        event_index = int(background_events[i])
+        if event_index < 0 or event_index >= len(timex):
+            continue
+        markers.append(EventMarkerSnapshot(
+            time=float(timex[event_index]),
+            label=_event_label(source, event_type, event_labels, i),
+            event_type=event_type,
+            color=_event_color(source, event_type),
+            value=None if event_values[i] is None else float(event_values[i]),
+            kind='background',
+        ))
+    return tuple(markers)
+
+
+def _phase_bands(source: object) -> tuple[PhaseBandSnapshot, ...]:
+    if not bool(getattr(source, 'watermarksflag', False)):
+        return ()
+    phases = _sequence(source, 'phases')
+    if len(phases) < 4:
+        return ()
+    bands: list[PhaseBandSnapshot] = []
+    for index, color_key in enumerate(('rect1', 'rect2', 'rect3')):
+        try:
+            minimum = float(phases[index])
+            maximum = float(phases[index + 1])
+        except (TypeError, ValueError):
+            continue
+        if maximum <= minimum:
+            continue
+        bands.append(PhaseBandSnapshot(
+            minimum=minimum,
+            maximum=maximum,
+            color=_palette_color(source, color_key),
+            opacity=0.15,
+        ))
+    return tuple(bands)
 
 
 def _event_type_visible(source: object, event_type: int) -> bool:
@@ -150,6 +443,91 @@ def _event_color(source: object, event_type: int) -> str:
         if isinstance(color, str):
             return color
     return '#ffffff'
+
+
+def _background_available(source: object) -> bool:
+    return (
+        bool(getattr(source, 'background', False)) or
+        getattr(source, 'backgroundprofile', None) is not None or
+        len(_sequence(source, 'timeB')) > 0
+    )
+
+
+def _background_temperature_values(source: object, values: list[Any]) -> list[float | None]:
+    if bool(getattr(source, 'backgroundShowFullflag', False)):
+        return [_temperature_value(value) for value in values]
+    length = len(values)
+    if length == 0:
+        return []
+    timeindex = _sequence(source, 'timeindexB')
+    charge_index = int(timeindex[0]) if len(timeindex) > 0 and int(timeindex[0]) > -1 else 0
+    drop_index = int(timeindex[6]) if len(timeindex) > 6 and int(timeindex[6]) > 0 else length - 1
+    if bool(getattr(source, 'autotimex', False)) and int(getattr(source, 'autotimexMode', 0)) != 0:
+        start_index = 0
+    else:
+        start_index = charge_index
+    return [
+        _temperature_value(value) if start_index <= index <= drop_index else None
+        for index, value in enumerate(values)
+    ]
+
+
+def _temperature_value(value: Any) -> float | None:
+    if value is None:
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    if number == -1 or math.isnan(number):
+        return None
+    return number
+
+
+def _color_attr(source: object, attr_name: str, color_key: str) -> str:
+    color = getattr(source, attr_name, None)
+    if isinstance(color, str) and color:
+        return color
+    return _palette_color(source, color_key)
+
+
+def _opacity(source: object, attr_name: str, default: float) -> float:
+    try:
+        return max(0.0, min(1.0, float(getattr(source, attr_name, default))))
+    except (TypeError, ValueError):
+        return default
+
+
+def _line_style(source: object, attr_name: str, default: str) -> str:
+    value = getattr(source, attr_name, default)
+    if isinstance(value, str) and value:
+        return value
+    return default
+
+
+def _line_width(source: object, attr_name: str, default: float) -> float:
+    try:
+        return float(getattr(source, attr_name, default))
+    except (TypeError, ValueError):
+        return default
+
+
+def _line_style_attr(name: str) -> str:
+    return {
+        'BT': 'BTlinestyle',
+        'ET': 'ETlinestyle',
+        'Delta BT': 'BTdeltalinestyle',
+        'Delta ET': 'ETdeltalinestyle',
+    }.get(name, '')
+
+
+def _line_width_attr(name: str) -> str:
+    return {
+        'BT': 'BTlinewidth',
+        'ET': 'ETlinewidth',
+        'Delta BT': 'BTdeltalinewidth',
+        'Delta ET': 'ETdeltalinewidth',
+    }.get(name, '')
 
 
 def _sequence(source: object, attr_name: str) -> list[Any]:

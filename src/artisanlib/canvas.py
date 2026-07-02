@@ -5140,6 +5140,54 @@ class tgraphcanvas(QObject):
                                     line_width=self.BTdeltalinewidth,
                                 ),
                             )
+                        if self.ETprojectFlag or self.BTprojectFlag:
+                            self.updateProjection()
+                            if self.BTprojectFlag and self.BTcurve:
+                                live_frame_curves.append(
+                                    LiveCurveData(
+                                        name='BT projection',
+                                        x=tuple(self.BTprojection_tx),
+                                        y=tuple(self.BTprojection_temp),
+                                        color=self.palette['bt'],
+                                        line_style='-.',
+                                        line_width=4.0,
+                                    ),
+                                )
+                            if self.ETprojectFlag and self.ETcurve:
+                                live_frame_curves.append(
+                                    LiveCurveData(
+                                        name='ET projection',
+                                        x=tuple(self.ETprojection_tx),
+                                        y=tuple(self.ETprojection_temp),
+                                        color=self.palette['et'],
+                                        line_style='-.',
+                                        line_width=4.0,
+                                    ),
+                                )
+                            if self.projectDeltaFlag and self.BTprojectFlag and self.DeltaBTflag:
+                                live_frame_curves.append(
+                                    LiveCurveData(
+                                        name='Delta BT projection',
+                                        x=tuple(self.DeltaBTprojection_tx),
+                                        y=tuple(self.DeltaBTprojection_temp),
+                                        y_axis='ror',
+                                        color=self.palette['deltabt'],
+                                        line_style='-.',
+                                        line_width=4.0,
+                                    ),
+                                )
+                            if self.projectDeltaFlag and self.ETprojectFlag and self.DeltaETflag:
+                                live_frame_curves.append(
+                                    LiveCurveData(
+                                        name='Delta ET projection',
+                                        x=tuple(self.DeltaETprojection_tx),
+                                        y=tuple(self.DeltaETprojection_temp),
+                                        y_axis='ror',
+                                        color=self.palette['deltaet'],
+                                        line_style='-.',
+                                        line_width=4.0,
+                                    ),
+                                )
                         if live_frame_curves:
                             self.apply_live_plot_frame(LivePlotFrame(curves=tuple(live_frame_curves)))
 
@@ -5148,9 +5196,6 @@ class tgraphcanvas(QObject):
                         if extended_end is not None:
                             self.endofx = extended_end
                             self.xaxistosm()
-                        if self.ETprojectFlag or self.BTprojectFlag:
-                            self.updateProjection()
-
                         # autodetect CHARGE event
                         # only if BT > 77C/170F
                         if processed_frame.events.charge_candidate:

@@ -6,7 +6,14 @@ import sys
 import pytest
 
 from artisanlib.plot_pyqtgraph_adapter import PyQtGraphSnapshotRenderer
-from artisanlib.plot_snapshot import AxisSnapshot, CurveSnapshot, EventMarkerSnapshot, RendererViewState, RoastPlotSnapshot
+from artisanlib.plot_snapshot import (
+    AxisSnapshot,
+    CurveSnapshot,
+    EventMarkerSnapshot,
+    PhaseBandSnapshot,
+    RendererViewState,
+    RoastPlotSnapshot,
+)
 
 
 class FakePlotDataItem:
@@ -79,10 +86,12 @@ class FakePlot:
 
 def _snapshot(
         *curves: CurveSnapshot,
-        events: tuple[EventMarkerSnapshot, ...] = ()) -> RoastPlotSnapshot:
+        events: tuple[EventMarkerSnapshot, ...] = (),
+        phase_bands: tuple[PhaseBandSnapshot, ...] = ()) -> RoastPlotSnapshot:
     return RoastPlotSnapshot(
         curves=curves,
         events=events,
+        phase_bands=phase_bands,
         time_axis=AxisSnapshot(minimum=-1.0, maximum=12.0, label='Time'),
         temperature_axis=AxisSnapshot(minimum=70.0, maximum=270.0, label='Temperature'),
         ror_axis=AxisSnapshot(minimum=-15.0, maximum=25.0, label='RoR'),
@@ -221,6 +230,53 @@ def test_set_snapshot_renders_and_replaces_event_items() -> None:
     renderer.set_snapshot(_snapshot())
 
     assert temperature_plot.removed_items == old_items
+    assert renderer.event_item_count() == 0
+
+
+def test_set_snapshot_renders_phase_bands_and_live_updates_preserve_static_overlays() -> None:
+    temperature_plot = FakePlot()
+
+    def phase_item_factory(band: PhaseBandSnapshot, _: RoastPlotSnapshot) -> FakeEventItem:
+        return FakeEventItem('phase', f'{band.minimum}:{band.maximum}', band.color)
+
+    def event_line_factory(event: EventMarkerSnapshot, _: RoastPlotSnapshot) -> FakeEventItem:
+        return FakeEventItem('line', event.label, event.color)
+
+    def event_label_factory(event: EventMarkerSnapshot, snapshot: RoastPlotSnapshot) -> FakeEventItem:
+        item = FakeEventItem('label', event.label, event.color)
+        item.setPos(event.time, snapshot.temperature_axis.maximum)
+        return item
+
+    renderer = PyQtGraphSnapshotRenderer(
+        temperature_plot=temperature_plot,
+        event_line_factory=event_line_factory,
+        event_label_factory=event_label_factory,
+        phase_item_factory=phase_item_factory,
+        pen_factory=_fake_pen_factory,
+    )
+
+    renderer.set_snapshot(_snapshot(
+        CurveSnapshot.from_sequences(name='BT', x=[0], y=[140], color='#4E7180'),
+        events=(EventMarkerSnapshot(time=4.5, label='charge', event_type=100, color='#CC0000', kind='main'),),
+        phase_bands=(PhaseBandSnapshot(minimum=100.0, maximum=150.0, color='#E5E5E5'),),
+    ))
+
+    assert renderer.phase_item_count() == 1
+    assert renderer.event_item_count() == 2
+    assert [item.kind for item in temperature_plot.added_items] == ['phase', 'line', 'label']
+
+    renderer.update_live_frame(_snapshot(
+        CurveSnapshot.from_sequences(name='BT', x=[0, 1], y=[140, 142], color='#4E7180'),
+    ))
+
+    assert renderer.phase_item_count() == 1
+    assert renderer.event_item_count() == 2
+
+    old_items = temperature_plot.added_items[:]
+    renderer.set_snapshot(_snapshot())
+
+    assert temperature_plot.removed_items == old_items
+    assert renderer.phase_item_count() == 0
     assert renderer.event_item_count() == 0
 
 

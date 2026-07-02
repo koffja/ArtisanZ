@@ -934,12 +934,16 @@ def ror_curve_window(
         sample_count: int,
         delta_filter: float,
         delta_samples: int) -> tuple[int, int] | None:
-    if charge_index <= -1:
+    if sample_count <= 1:
         return None
+    if charge_index <= -1:
+        return 1, sample_count
     ror_end = drop_index + 1 if drop_index > 0 else sample_count
     filter_warmup = int(round(delta_filter / 2.))
     sample_warmup = max(2, delta_samples + 1)
     ror_start = max(charge_index, charge_index + filter_warmup + sample_warmup)
+    if sample_count <= ror_start:
+        return 1, ror_end
     return ror_start, ror_end
 
 

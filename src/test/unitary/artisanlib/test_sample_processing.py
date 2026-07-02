@@ -2072,11 +2072,21 @@ def test_displayed_ror_value_combines_global_and_user_limits() -> None:
     ) is None
 
 
-def test_ror_curve_window_returns_none_before_charge() -> None:
+def test_ror_curve_window_starts_before_charge_after_first_rate_sample() -> None:
     assert ror_curve_window(
         charge_index=-1,
         drop_index=0,
         sample_count=20,
+        delta_filter=4,
+        delta_samples=3,
+    ) == (1, 20)
+
+
+def test_ror_curve_window_waits_until_two_samples_exist() -> None:
+    assert ror_curve_window(
+        charge_index=-1,
+        drop_index=0,
+        sample_count=1,
         delta_filter=4,
         delta_samples=3,
     ) is None
@@ -2097,6 +2107,13 @@ def test_ror_curve_window_skips_charge_warmup_and_stops_after_drop() -> None:
         delta_filter=0,
         delta_samples=0,
     ) == (7, 20)
+    assert ror_curve_window(
+        charge_index=5,
+        drop_index=0,
+        sample_count=6,
+        delta_filter=4,
+        delta_samples=3,
+    ) == (1, 6)
 
 
 def test_windowed_curve_data_returns_empty_payload_without_window() -> None:
@@ -2198,7 +2215,7 @@ def test_build_live_processed_sample_frame_collects_display_axis_and_event_decis
     assert frame.events.drop_candidate
 
 
-def test_build_live_processed_sample_frame_avoids_sample_access_when_gates_are_closed() -> None:
+def test_build_live_processed_sample_frame_returns_precharge_ror_windows_without_sample_access() -> None:
     frame = build_live_processed_sample_frame(
         timestamp=12.0,
         sample_count=4,
@@ -2238,8 +2255,8 @@ def test_build_live_processed_sample_frame_avoids_sample_access_when_gates_are_c
 
     assert frame.displayed_delta_et is None
     assert frame.displayed_delta_bt is None
-    assert frame.delta_et_window is None
-    assert frame.delta_bt_window is None
+    assert frame.delta_et_window == (1, 4)
+    assert frame.delta_bt_window == (1, 4)
     assert frame.live_x_axis_extension_end is None
     assert not frame.events.charge_candidate
     assert frame.events.turning_point_timeout_index is None

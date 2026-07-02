@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Literal, Protocol
 
 YAxisName = Literal['temperature', 'ror']
+EventMarkerKind = Literal['main', 'special', 'background']
 
 
 @dataclass(frozen=True, slots=True)
@@ -21,6 +22,17 @@ class EventMarkerSnapshot:
     event_type: int
     color: str
     value: float | None = None
+    kind: EventMarkerKind = 'special'
+    y_position: float | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class PhaseBandSnapshot:
+    minimum: float
+    maximum: float
+    color: str
+    opacity: float = 0.15
+    label: str = ''
 
 
 @dataclass(frozen=True, slots=True)
@@ -34,6 +46,7 @@ class CurveSnapshot:
     line_style: str = '-'
     line_width: float = 1.0
     fill_to_zero: bool = False
+    opacity: float = 1.0
 
     @classmethod
     def from_sequences(
@@ -47,7 +60,8 @@ class CurveSnapshot:
             y_axis: YAxisName = 'temperature',
             line_style: str = '-',
             line_width: float = 1.0,
-            fill_to_zero: bool = False) -> CurveSnapshot:
+            fill_to_zero: bool = False,
+            opacity: float = 1.0) -> CurveSnapshot:
         if len(x) != len(y):
             raise ValueError('x and y must have the same length')
         return cls(
@@ -60,6 +74,7 @@ class CurveSnapshot:
             line_style=line_style,
             line_width=line_width,
             fill_to_zero=fill_to_zero,
+            opacity=max(0.0, min(1.0, float(opacity))),
         )
 
 
@@ -77,6 +92,7 @@ class RoastPlotSnapshot:
     time_axis: AxisSnapshot
     ror_axis: AxisSnapshot | None = None
     events: tuple[EventMarkerSnapshot, ...] = ()
+    phase_bands: tuple[PhaseBandSnapshot, ...] = ()
 
     def visible_curves(self) -> tuple[CurveSnapshot, ...]:
         return tuple(curve for curve in self.curves if curve.visible)
@@ -106,8 +122,10 @@ class LivePlotRenderer(Protocol):
 __all__ = [
     'AxisSnapshot',
     'CurveSnapshot',
+    'EventMarkerKind',
     'EventMarkerSnapshot',
     'LivePlotRenderer',
+    'PhaseBandSnapshot',
     'RendererViewState',
     'RoastPlotSnapshot',
     'YAxisName',
