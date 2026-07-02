@@ -13,6 +13,7 @@ _APPLICATION.artisanviewerMode = False  # type: ignore[attr-defined]
 
 from artisanlib import canvas
 from artisanlib.plot_live_frame import LiveCurveData, LivePlotFrame
+from artisanlib.plot_snapshot import AxisSnapshot, PhaseBandSnapshot, RoastPlotSnapshot
 from artisanlib.plot_renderer_registry import create_default_renderer_registry
 from artisanlib.plot_renderer_settings import (
     ARTISANZ_RENDERER_ID,
@@ -164,6 +165,16 @@ def _renderer_selection(renderer_id: str) -> RendererSelection:
     )
 
 
+def _static_overlay_snapshot() -> RoastPlotSnapshot:
+    return RoastPlotSnapshot(
+        curves=(),
+        time_axis=AxisSnapshot(minimum=0.0, maximum=12.0, label='Time'),
+        temperature_axis=AxisSnapshot(minimum=70.0, maximum=270.0, label='Temperature'),
+        ror_axis=AxisSnapshot(minimum=-15.0, maximum=25.0, label='RoR'),
+        phase_bands=(PhaseBandSnapshot(minimum=100.0, maximum=150.0, color='#E5E5E5'),),
+    )
+
+
 def test_select_canvas_renderer_defaults_to_pyqtgraph(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv(ARTISANZ_RENDERER_ID, raising=False)
 
@@ -277,6 +288,48 @@ def test_apply_live_plot_frame_uses_embedded_pyqtgraph_target() -> None:
     assert bt_item is not None
     assert bt_item.x == (0.0, 1.0)
     assert window.l_temp2.x == (0.0, 1.0)
+
+
+def test_apply_live_plot_frame_merges_static_overlays_into_pyqtgraph_snapshot(
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    window = FakeLiveFrameCanvas(_renderer_selection('pyqtgraph-snapshot'))
+    window.plot_pyqtgraph_target = FakePyQtGraphTarget()
+    window.plot_display_widget = FakeWidget()
+    static_snapshot = _static_overlay_snapshot()
+    received_overlay_axes = []
+
+    def build_static_overlay_snapshot(
+            _source: object,
+            *,
+            time_axis: AxisSnapshot,
+            temperature_axis: AxisSnapshot,
+            ror_axis: AxisSnapshot | None) -> RoastPlotSnapshot:
+        received_overlay_axes.append((time_axis, temperature_axis, ror_axis))
+        return static_snapshot
+
+    monkeypatch.setattr(
+        canvas,
+        'build_roast_plot_static_overlay_snapshot',
+        build_static_overlay_snapshot)
+    frame = LivePlotFrame(curves=(
+        LiveCurveData.from_sequences(
+            name='BT',
+            x=[0, 1],
+            y=[120, 121],
+            color='#4E7180',
+        ),
+    ))
+
+    result = canvas.tgraphcanvas.apply_live_plot_frame(window, frame)
+
+    assert result.surface == 'pyqtgraph-plot'
+    assert window.plot_pyqtgraph_target.renderer.snapshots
+    snapshot = window.plot_pyqtgraph_target.renderer.snapshots[-1]
+    assert snapshot.curves[0].name == 'BT'
+    assert snapshot.phase_bands == static_snapshot.phase_bands
+    assert received_overlay_axes == [
+        (snapshot.time_axis, snapshot.temperature_axis, snapshot.ror_axis),
+    ]
 
 
 def test_apply_live_plot_frame_keeps_extra_curve_items_distinct() -> None:

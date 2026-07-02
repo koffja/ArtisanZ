@@ -52,21 +52,19 @@ class PyQtGraphSnapshotRenderer:
         self._event_items: list[object] = []
         self._event_value_items: list[tuple[object, object]] = []
         self._guide_items: list[tuple[object, object]] = []
+        self._static_overlay_signature: tuple[object, ...] | None = None
         self._last_view_state = RendererViewState(
             time_axis=AxisSnapshot(minimum=0.0, maximum=0.0, label='Time'),
             temperature_axis=AxisSnapshot(minimum=0.0, maximum=0.0, label='Temperature'),
         )
 
     def set_snapshot(self, snapshot: RoastPlotSnapshot) -> None:
-        self._apply_phase_bands(snapshot)
-        self._apply_areas(snapshot)
+        self._apply_static_overlays(snapshot, force=True)
         self._apply_curves(snapshot)
-        self._apply_event_values(snapshot)
-        self._apply_events(snapshot)
-        self._apply_guides(snapshot)
         self.reset_view(snapshot.export_view_state())
 
     def update_live_frame(self, snapshot: RoastPlotSnapshot) -> None:
+        self._apply_static_overlays(snapshot, force=False)
         self._apply_curves(snapshot)
 
     def reset_view(self, view_state: RendererViewState) -> None:
@@ -100,6 +98,17 @@ class PyQtGraphSnapshotRenderer:
 
     def area_item_count(self) -> int:
         return len(self._area_items)
+
+    def _apply_static_overlays(self, snapshot: RoastPlotSnapshot, *, force: bool) -> None:
+        signature = _static_overlay_signature(snapshot)
+        if not force and signature == self._static_overlay_signature:
+            return
+        self._apply_phase_bands(snapshot)
+        self._apply_areas(snapshot)
+        self._apply_event_values(snapshot)
+        self._apply_events(snapshot)
+        self._apply_guides(snapshot)
+        self._static_overlay_signature = signature
 
     def _apply_curves(self, snapshot: RoastPlotSnapshot) -> None:
         active_names = {curve.name for curve in snapshot.curves}
@@ -216,6 +225,19 @@ def _pen_for_curve(curve: CurveSnapshot) -> dict[str, object]:
         'style': curve.line_style,
         'opacity': curve.opacity,
     }
+
+
+def _static_overlay_signature(snapshot: RoastPlotSnapshot) -> tuple[object, ...]:
+    return (
+        snapshot.time_axis,
+        snapshot.temperature_axis,
+        snapshot.ror_axis,
+        snapshot.phase_bands,
+        snapshot.areas,
+        snapshot.event_values,
+        snapshot.events,
+        snapshot.guides,
+    )
 
 
 def _pyqtgraph_y_values(values: tuple[float | None, ...]) -> tuple[float, ...]:
@@ -393,7 +415,7 @@ def _default_phase_item_factory(band: PhaseBandSnapshot, _: RoastPlotSnapshot) -
             values=(band.minimum, band.maximum),
             orientation='horizontal',
             movable=False,
-            brush=pg.mkBrush(_color_with_alpha(pg, band.color, band.opacity)),
+            brush=pg.mkBrush(_color_with_alpha(pg, band.color, _visible_phase_band_opacity(band.opacity))),
         )
     except TypeError:
         return None
@@ -401,6 +423,10 @@ def _default_phase_item_factory(band: PhaseBandSnapshot, _: RoastPlotSnapshot) -
     for line in getattr(item, 'lines', []):
         _call_if_available(line, 'setPen', pg.mkPen(color=_color_with_alpha(pg, band.color, 0.0), width=0))
     return item
+
+
+def _visible_phase_band_opacity(opacity: float) -> float:
+    return min(0.38, max(0.24, float(opacity) * 1.5))
 
 
 def _event_label_y_position(event: EventMarkerSnapshot, snapshot: RoastPlotSnapshot) -> float:

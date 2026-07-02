@@ -18,8 +18,17 @@ from artisanlib.plot_live_frame import (
     apply_pyqtgraph_live_frame,
     apply_selected_live_frame,
     live_frame_to_snapshot,
+    merge_static_plot_overlays,
 )
-from artisanlib.plot_snapshot import AxisSnapshot
+from artisanlib.plot_snapshot import (
+    AreaFillSnapshot,
+    AxisSnapshot,
+    EventMarkerSnapshot,
+    EventValueSnapshot,
+    GuideLineSnapshot,
+    PhaseBandSnapshot,
+    RoastPlotSnapshot,
+)
 from artisanlib.plot_renderer_registry import create_default_renderer_registry
 from artisanlib.plot_renderer_settings import RendererSelection
 
@@ -378,3 +387,43 @@ def test_live_frame_to_snapshot_preserves_curve_style_payload() -> None:
     assert snapshot.curves[0].line_style == '--'
     assert snapshot.curves[0].line_width == 2.5
     assert snapshot.ror_axis == AxisSnapshot(minimum=-15.0, maximum=25.0, label='RoR')
+
+
+def test_merge_static_plot_overlays_keeps_live_curves_and_restores_background_layers() -> None:
+    live_snapshot = live_frame_to_snapshot(
+        LivePlotFrame(curves=(
+            LiveCurveData.from_sequences(name='BT', x=[0, 1], y=[120, 121], color='#4E7180'),
+        )),
+        time_axis=AxisSnapshot(minimum=0.0, maximum=12.0, label='Time'),
+        temperature_axis=AxisSnapshot(minimum=70.0, maximum=270.0, label='Temperature'),
+        ror_axis=AxisSnapshot(minimum=-15.0, maximum=25.0, label='RoR'),
+    )
+    static_snapshot = RoastPlotSnapshot(
+        curves=(),
+        time_axis=AxisSnapshot(minimum=10.0, maximum=99.0, label='Old Time'),
+        temperature_axis=AxisSnapshot(minimum=10.0, maximum=99.0, label='Old Temperature'),
+        ror_axis=None,
+        events=(EventMarkerSnapshot(time=2.0, label='CHARGE', event_type=100, color='#B85F56'),),
+        event_values=(EventValueSnapshot(time=3.0, value=40.0, event_type=1, color='#4E7180'),),
+        phase_bands=(PhaseBandSnapshot(minimum=100.0, maximum=150.0, color='#E5E5E5'),),
+        guides=(GuideLineSnapshot(position=4.0, label='AUC', color='#78905D'),),
+        areas=(AreaFillSnapshot.from_sequences(
+            x=[1.0, 2.0],
+            y=[120.0, 125.0],
+            baseline=100.0,
+            color='#767676',
+            label='AUC',
+        ),),
+    )
+
+    merged = merge_static_plot_overlays(live_snapshot, static_snapshot)
+
+    assert merged.curves == live_snapshot.curves
+    assert merged.time_axis == live_snapshot.time_axis
+    assert merged.temperature_axis == live_snapshot.temperature_axis
+    assert merged.ror_axis == live_snapshot.ror_axis
+    assert merged.events == static_snapshot.events
+    assert merged.event_values == static_snapshot.event_values
+    assert merged.phase_bands == static_snapshot.phase_bands
+    assert merged.guides == static_snapshot.guides
+    assert merged.areas == static_snapshot.areas

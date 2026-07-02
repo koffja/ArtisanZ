@@ -204,6 +204,22 @@ def live_frame_to_snapshot(
     )
 
 
+def merge_static_plot_overlays(
+        live_snapshot: RoastPlotSnapshot,
+        static_snapshot: RoastPlotSnapshot) -> RoastPlotSnapshot:
+    return RoastPlotSnapshot(
+        curves=live_snapshot.curves,
+        time_axis=live_snapshot.time_axis,
+        temperature_axis=live_snapshot.temperature_axis,
+        ror_axis=live_snapshot.ror_axis,
+        events=static_snapshot.events,
+        event_values=static_snapshot.event_values,
+        phase_bands=static_snapshot.phase_bands,
+        guides=static_snapshot.guides,
+        areas=static_snapshot.areas,
+    )
+
+
 def _pyqtgraph_y_values(values: tuple[float | None, ...]) -> tuple[float, ...]:
     return tuple(math.nan if value is None else value for value in values)
 
@@ -222,4 +238,5 @@ __all__ = [
     'apply_pyqtgraph_live_frame',
     'apply_selected_live_frame',
     'live_frame_to_snapshot',
+    'merge_static_plot_overlays',
 ]

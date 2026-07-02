@@ -128,10 +128,10 @@ def _configure_plot_surface(plot: object, pg: Any) -> None:
 
 def _create_grid_overlay(plot: object, pg: Any) -> object | None:
     try:
-        grid_item = pg.GridItem(pen=pg.mkPen(_color_with_alpha(pg, '#B8C6C1', 0.65), width=1))
+        grid_item = pg.GridItem(pen=pg.mkPen(_color_with_alpha(pg, '#96A6A0', 0.82), width=1))
     except Exception: # pylint: disable=broad-exception-caught
         return None
-    _call_if_available(grid_item, 'setZValue', -10)
+    _call_if_available(grid_item, 'setZValue', -5)
     view_box = getattr(plot, 'getViewBox', lambda: None)()
     _call_if_available(view_box, 'addItem', grid_item)
     return grid_item
@@ -284,7 +284,7 @@ def _set_axis_tick_spacing(plot: object, axis_name: str, step: float) -> None:
 
 
 def _visible_grid_alpha(grid_alpha: float) -> float:
-    return min(1.0, max(0.62, grid_alpha * 3.0))
+    return min(1.0, max(0.78, grid_alpha * 3.2))
 
 
 def _grid_display_color(color: str) -> str:
@@ -299,7 +299,7 @@ def _grid_display_color(color: str) -> str:
         return color
     luminance = ((0.2126 * red) + (0.7152 * green) + (0.0722 * blue)) / 255
     if luminance > 0.72:
-        return '#A9B7B1'
+        return '#8FA09A'
     return color
 
 

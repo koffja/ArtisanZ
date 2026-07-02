@@ -79,6 +79,26 @@ def build_roast_plot_snapshot(source: object) -> RoastPlotSnapshot:
     )
 
 
+def build_roast_plot_static_overlay_snapshot(
+        source: object,
+        *,
+        time_axis: AxisSnapshot,
+        temperature_axis: AxisSnapshot,
+        ror_axis: AxisSnapshot | None = None) -> RoastPlotSnapshot:
+    events = _event_markers(source)
+    return RoastPlotSnapshot(
+        curves=(),
+        time_axis=time_axis,
+        temperature_axis=temperature_axis,
+        ror_axis=ror_axis,
+        events=events,
+        event_values=_event_value_snapshots(events),
+        phase_bands=_phase_bands(source),
+        guides=_guide_lines(source),
+        areas=_area_fills(source),
+    )
+
+
 def _curve(
         source: object,
         *,

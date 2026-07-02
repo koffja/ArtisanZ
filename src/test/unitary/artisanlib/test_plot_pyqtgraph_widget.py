@@ -7,7 +7,7 @@ os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 import pytest
 from PyQt6.QtWidgets import QApplication
 
-from artisanlib.plot_pyqtgraph_widget import _grid_display_color, create_pyqtgraph_plot_target
+from artisanlib.plot_pyqtgraph_widget import _grid_display_color, _visible_grid_alpha, create_pyqtgraph_plot_target
 from artisanlib.plot_snapshot import AreaFillSnapshot, AxisSnapshot, CurveSnapshot, PhaseBandSnapshot, RoastPlotSnapshot
 
 pg = pytest.importorskip('pyqtgraph')
@@ -198,8 +198,14 @@ def test_pyqtgraph_grid_overlay_can_show_one_axis() -> None:
 
 
 def test_pyqtgraph_grid_display_color_keeps_default_grid_visible() -> None:
-    assert _grid_display_color('#d0d7d8') == '#A9B7B1'
+    assert _grid_display_color('#d0d7d8') == '#8FA09A'
     assert _grid_display_color('#65736f') == '#65736f'
+
+
+def test_pyqtgraph_grid_alpha_has_visible_floor_on_light_canvas() -> None:
+    assert _visible_grid_alpha(0.05) == 0.78
+    assert _visible_grid_alpha(0.25) == 0.8
+    assert _visible_grid_alpha(1.0) == 1.0
 
 
 def test_create_pyqtgraph_plot_target_restores_opengl_config_on_close() -> None:

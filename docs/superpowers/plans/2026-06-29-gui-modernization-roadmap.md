@@ -282,6 +282,18 @@ Important observations from the code review:
 
 **Remaining Gate:** This produces report-ready comparison assets but still does not switch `roastReport()`. The next report step should either run this comparison across the Phase 1.16 profile matrix or add an env-gated report image backend switch with Matplotlib fallback.
 
+## Phase 1.19: PyQtGraph Grid and Phase Background Live Parity
+
+**Goal:** Fix the default PyQtGraph live-renderer visual regression where background gridlines and roast phase temperature bands were either missing from live updates or too faint on the light canvas.
+
+**Closed:** 2026-07-03 with `build_roast_plot_static_overlay_snapshot()`, `merge_static_plot_overlays()`, live/static snapshot merging in `tgraphcanvas.apply_pyqtgraph_live_plot_frame()`, static-overlay application in `PyQtGraphSnapshotRenderer.update_live_frame()`, overlay signature caching to avoid repeated remove/add churn, stronger grid contrast, and a visible phase-band opacity floor.
+
+**Tracking Plan:** `docs/superpowers/plans/2026-07-03-gui-modernization-phase-1-19-pyqtgraph-grid-phase-live-parity.md`
+
+**Evidence:** Focused renderer/canvas/WebSocket tests produced `79 passed`; `py_compile` and `ruff check` passed on changed modules. CLI validation with `QT_QPA_PLATFORM=offscreen ./.venv/bin/python -m artisanlib.websocket_renderer_smoke --scenario event-heavy --samples 90 --fixed-step-ms 1000 --screenshot-file /tmp/artisanz-pyqtgraph-grid-phase-fix.png` produced `avg_update_ms=1.6805`, `max_update_ms=4.2407`, `live_update_count=87`, `renderer_event_item_count=6`, `renderer_event_value_item_count=2`, `renderer_guide_item_count=3`, `screenshot_byte_count=64841`, and `screenshot_sampled_non_background_pixel_count=27707`; visual review confirmed visible gridlines and horizontal phase temperature bands.
+
+**Remaining Gate:** This closes the immediate grid/phase visual regression in the default live PyQtGraph path. Remaining PyQtGraph parity work still needs richer Matplotlib overlay coverage, interactive graph edit parity, and report/export backend switching.
+
 ## Phase 2: Plot Renderer Boundary and PyQtGraph POC
 
 **Goal:** Make the live plot renderer replaceable without forcing a full Matplotlib rewrite.

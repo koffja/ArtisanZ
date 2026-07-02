@@ -116,9 +116,10 @@ from artisanlib.plot_live_frame import (
     apply_matplotlib_live_curve_sequences,
     apply_selected_live_frame,
     live_frame_to_snapshot,
+    merge_static_plot_overlays,
 )
 from artisanlib.plot_snapshot import AxisSnapshot, RendererViewState
-from artisanlib.plot_snapshot_extractor import build_roast_plot_snapshot
+from artisanlib.plot_snapshot_extractor import build_roast_plot_snapshot, build_roast_plot_static_overlay_snapshot
 from artisanlib.plot_renderer_registry import create_default_renderer_registry
 from artisanlib.plot_renderer_settings import (
     DEFAULT_RENDERER_ID,
@@ -5688,12 +5689,24 @@ class tgraphcanvas(QObject):
         if renderer is None:
             return {}
         self.configure_pyqtgraph_axes()
-        snapshot = live_frame_to_snapshot(
+        live_snapshot = live_frame_to_snapshot(
             frame,
             time_axis=self.live_time_axis_snapshot(),
             temperature_axis=self.live_temperature_axis_snapshot(),
             ror_axis=self.live_ror_axis_snapshot(),
         )
+        try:
+            static_overlay_snapshot = build_roast_plot_static_overlay_snapshot(
+                self,
+                time_axis=live_snapshot.time_axis,
+                temperature_axis=live_snapshot.temperature_axis,
+                ror_axis=live_snapshot.ror_axis,
+            )
+            snapshot = merge_static_plot_overlays(live_snapshot, static_overlay_snapshot)
+        except Exception as exc: # pylint: disable=broad-exception-caught
+            gui_perf_count('canvas.pyqtgraph_static_overlay_snapshot_error')
+            _log.debug('skipping PyQtGraph static plot overlays after snapshot failure: %s', exc)
+            snapshot = live_snapshot
         update_live_frame = getattr(renderer, 'update_live_frame', None)
         if callable(update_live_frame):
             update_live_frame(snapshot)

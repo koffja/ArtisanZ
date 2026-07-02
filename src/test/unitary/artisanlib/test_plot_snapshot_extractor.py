@@ -10,7 +10,7 @@ from artisanlib.plot_snapshot import (
     GuideLineSnapshot,
     PhaseBandSnapshot,
 )
-from artisanlib.plot_snapshot_extractor import build_roast_plot_snapshot
+from artisanlib.plot_snapshot_extractor import build_roast_plot_snapshot, build_roast_plot_static_overlay_snapshot
 
 
 @dataclass
@@ -207,6 +207,26 @@ def test_build_roast_plot_snapshot_extracts_overlay_curves_and_phase_bands() -> 
         PhaseBandSnapshot(minimum=150.0, maximum=190.0, color='#B0B0B0', opacity=0.22),
         PhaseBandSnapshot(minimum=190.0, maximum=230.0, color='#C0C0C0', opacity=0.22),
     )
+
+
+def test_build_roast_plot_static_overlay_snapshot_skips_curve_payload() -> None:
+    static_snapshot = build_roast_plot_static_overlay_snapshot(
+        FakeOverlayCanvas(),
+        time_axis=AxisSnapshot(minimum=0.0, maximum=12.0, label='Live Time'),
+        temperature_axis=AxisSnapshot(minimum=70.0, maximum=270.0, label='Live Temperature'),
+        ror_axis=AxisSnapshot(minimum=-15.0, maximum=25.0, label='Live RoR'),
+    )
+    full_snapshot = build_roast_plot_snapshot(FakeOverlayCanvas())
+
+    assert static_snapshot.curves == ()
+    assert static_snapshot.time_axis == AxisSnapshot(minimum=0.0, maximum=12.0, label='Live Time')
+    assert static_snapshot.temperature_axis == AxisSnapshot(minimum=70.0, maximum=270.0, label='Live Temperature')
+    assert static_snapshot.ror_axis == AxisSnapshot(minimum=-15.0, maximum=25.0, label='Live RoR')
+    assert static_snapshot.events == full_snapshot.events
+    assert static_snapshot.event_values == full_snapshot.event_values
+    assert static_snapshot.phase_bands == full_snapshot.phase_bands
+    assert static_snapshot.guides == full_snapshot.guides
+    assert static_snapshot.areas == full_snapshot.areas
 
 
 def test_build_roast_plot_snapshot_extracts_main_and_background_event_markers() -> None:
