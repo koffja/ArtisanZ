@@ -5,6 +5,7 @@ import math
 from typing import Any
 
 from artisanlib.plot_snapshot import (
+    AreaFillSnapshot,
     AxisSnapshot,
     CurveSnapshot,
     EventMarkerSnapshot,
@@ -19,6 +20,7 @@ EventItemFactory = Callable[[EventMarkerSnapshot, RoastPlotSnapshot], object | N
 EventValueItemFactory = Callable[[EventValueSnapshot, RoastPlotSnapshot], object | None]
 GuideItemFactory = Callable[[GuideLineSnapshot, RoastPlotSnapshot], object | None]
 PhaseItemFactory = Callable[[PhaseBandSnapshot, RoastPlotSnapshot], object | None]
+AreaItemFactory = Callable[[AreaFillSnapshot, RoastPlotSnapshot], object | None]
 CurvePenFactory = Callable[[CurveSnapshot], object]
 
 
@@ -33,6 +35,7 @@ class PyQtGraphSnapshotRenderer:
             event_value_factory: EventValueItemFactory | None = None,
             guide_item_factory: GuideItemFactory | None = None,
             phase_item_factory: PhaseItemFactory | None = None,
+            area_item_factory: AreaItemFactory | None = None,
             pen_factory: CurvePenFactory | None = None) -> None:
         self._temperature_plot = temperature_plot
         self._ror_plot = ror_plot
@@ -41,9 +44,11 @@ class PyQtGraphSnapshotRenderer:
         self._event_value_factory = event_value_factory or _default_event_value_factory
         self._guide_item_factory = guide_item_factory or _default_guide_item_factory
         self._phase_item_factory = phase_item_factory or _default_phase_item_factory
+        self._area_item_factory = area_item_factory or _default_area_item_factory
         self._pen_factory = pen_factory or _default_pen_factory
         self._items: dict[str, object] = {}
         self._phase_items: list[object] = []
+        self._area_items: list[tuple[object, object]] = []
         self._event_items: list[object] = []
         self._event_value_items: list[tuple[object, object]] = []
         self._guide_items: list[tuple[object, object]] = []
@@ -54,6 +59,7 @@ class PyQtGraphSnapshotRenderer:
 
     def set_snapshot(self, snapshot: RoastPlotSnapshot) -> None:
         self._apply_phase_bands(snapshot)
+        self._apply_areas(snapshot)
         self._apply_curves(snapshot)
         self._apply_event_values(snapshot)
         self._apply_events(snapshot)
@@ -92,6 +98,9 @@ class PyQtGraphSnapshotRenderer:
     def guide_item_count(self) -> int:
         return len(self._guide_items)
 
+    def area_item_count(self) -> int:
+        return len(self._area_items)
+
     def _apply_curves(self, snapshot: RoastPlotSnapshot) -> None:
         active_names = {curve.name for curve in snapshot.curves}
         for curve in snapshot.curves:
@@ -128,6 +137,24 @@ class PyQtGraphSnapshotRenderer:
         for item in self._phase_items:
             _call_if_available(self._temperature_plot, 'removeItem', item)
         self._phase_items.clear()
+
+    def _apply_areas(self, snapshot: RoastPlotSnapshot) -> None:
+        self._clear_area_items()
+        for area in snapshot.areas:
+            item = self._area_item_factory(area, snapshot)
+            if item is None:
+                continue
+            plot = self._plot_for_area(area)
+            _call_if_available(plot, 'addItem', item)
+            self._area_items.append((plot, item))
+
+    def _clear_area_items(self) -> None:
+        _clear_item_pairs(self._area_items)
+
+    def _plot_for_area(self, area: AreaFillSnapshot) -> object:
+        if area.y_axis == 'ror' and self._ror_plot is not None:
+            return self._ror_plot
+        return self._temperature_plot
 
     def _apply_events(self, snapshot: RoastPlotSnapshot) -> None:
         self._clear_event_items()
@@ -320,6 +347,23 @@ def _default_event_label_factory(event: EventMarkerSnapshot, snapshot: RoastPlot
     return item
 
 
+def _default_area_item_factory(area: AreaFillSnapshot, _: RoastPlotSnapshot) -> object | None:
+    try:
+        import pyqtgraph as pg  # type: ignore[import-not-found,unused-ignore]
+    except ImportError:
+        return None
+    item = pg.PlotDataItem(
+        area.x,
+        _pyqtgraph_y_values(area.y),
+        pen=pg.mkPen(color=_color_with_alpha(pg, area.color, min(0.6, area.opacity + 0.15)), width=1),
+        fillLevel=area.baseline,
+        brush=pg.mkBrush(_color_with_alpha(pg, area.color, area.opacity)),
+        name=area.label,
+    )
+    _call_if_available(item, 'setZValue', -15)
+    return item
+
+
 def _default_guide_item_factory(guide: GuideLineSnapshot, _: RoastPlotSnapshot) -> object | None:
     try:
         import pyqtgraph as pg  # type: ignore[import-not-found,unused-ignore]
@@ -363,11 +407,48 @@ def _event_label_y_position(event: EventMarkerSnapshot, snapshot: RoastPlotSnaps
     if event.y_position is not None:
         return event.y_position
     span = max(1.0, snapshot.temperature_axis.maximum - snapshot.temperature_axis.minimum)
+    row = _event_label_row(event, snapshot)
     if event.kind == 'main':
-        row = max(0, event.event_type - 100) % 3
         return snapshot.temperature_axis.maximum - span * (0.035 + row * 0.045)
-    row = event.event_type % 4
     return snapshot.temperature_axis.maximum - span * (0.06 + row * 0.05)
+
+
+def _event_label_row(event: EventMarkerSnapshot, snapshot: RoastPlotSnapshot) -> int:
+    events = list(snapshot.events)
+    if not events:
+        return 0
+    target_index = _event_index(event, events)
+    ordered_events = sorted(enumerate(events), key=lambda item: (item[1].time, item[0]))
+    row_by_index: dict[int, int] = {}
+    threshold = _event_cluster_threshold(snapshot)
+    for original_index, candidate in ordered_events:
+        occupied_rows = {
+            row
+            for other_index, row in row_by_index.items()
+            if abs(candidate.time - events[other_index].time) <= threshold
+        }
+        row = 0
+        while row in occupied_rows:
+            row += 1
+        row_by_index[original_index] = row
+        if original_index == target_index:
+            return row
+    return 0
+
+
+def _event_index(event: EventMarkerSnapshot, events: list[EventMarkerSnapshot]) -> int:
+    for index, candidate in enumerate(events):
+        if candidate is event:
+            return index
+    for index, candidate in enumerate(events):
+        if candidate == event:
+            return index
+    return 0
+
+
+def _event_cluster_threshold(snapshot: RoastPlotSnapshot) -> float:
+    span = max(1.0, snapshot.time_axis.maximum - snapshot.time_axis.minimum)
+    return max(6.0, min(45.0, span * 0.045))
 
 
 def _event_value_y_position(event_value: EventValueSnapshot, snapshot: RoastPlotSnapshot) -> float:

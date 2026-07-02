@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from artisanlib.plot_snapshot import (
+    AreaFillSnapshot,
     AxisSnapshot,
     EventMarkerSnapshot,
     EventValueSnapshot,
@@ -121,6 +122,37 @@ class FakeOverlayCanvas(FakeCanvas):
     }
 
 
+class FakeAucAw:
+    @staticmethod
+    def findTP() -> int:
+        return 1
+
+
+class FakeAucTsAw(FakeAucAw):
+    @staticmethod
+    def ts() -> tuple[None, None, None, int]:
+        return (None, None, None, 2)
+
+
+class FakeAucCanvas(FakeCanvas):
+    timex = [0.0, 60.0, 120.0, 180.0]
+    temp1 = [130.0, 140.0, 155.0, 175.0]
+    temp2 = [120.0, 130.0, 150.0, 170.0]
+    stemp2 = [120.0, 130.0, 150.0, 170.0]
+    delta1 = [None, 4.0, 5.0, 4.5]
+    delta2 = [None, 5.0, 6.0, 5.0]
+    timeindex = [0, 0, 0, 0, 0, 0, 3, 0]
+    AUCshowFlag = True
+    AUCbaseFlag = False
+    AUCbase = 135.0
+    flagon = False
+    aw = FakeAucAw()
+    palette = {
+        **FakeCanvas.palette,
+        'aucarea': '#767676',
+    }
+
+
 def test_build_roast_plot_snapshot_extracts_main_curves_and_axes() -> None:
     snapshot = build_roast_plot_snapshot(FakeCanvas())
 
@@ -233,3 +265,85 @@ def test_build_roast_plot_snapshot_extracts_guides_when_source_data_exists() -> 
         opacity=0.42,
         kind='charge_target',
     ) in snapshot.guides
+
+
+def test_build_roast_plot_snapshot_extracts_auc_area_fill() -> None:
+    snapshot = build_roast_plot_snapshot(FakeAucCanvas())
+
+    assert snapshot.areas == (
+        AreaFillSnapshot.from_sequences(
+            x=[60.0, 120.0, 180.0],
+            y=[130.0, 150.0, 170.0],
+            baseline=130.0,
+            color='#767676',
+            label='AUC area',
+            opacity=0.28,
+            kind='auc',
+        ),
+    )
+
+
+def test_build_roast_plot_snapshot_skips_auc_area_before_drop() -> None:
+    class Canvas(FakeAucCanvas):
+        timeindex = [0, 0, 0, 0, 0, 0, 0, 0]
+
+    snapshot = build_roast_plot_snapshot(Canvas())
+
+    assert snapshot.areas == ()
+
+
+def test_build_roast_plot_snapshot_skips_auc_area_when_disabled() -> None:
+    class Canvas(FakeAucCanvas):
+        AUCshowFlag = False
+
+    snapshot = build_roast_plot_snapshot(Canvas())
+
+    assert snapshot.areas == ()
+
+
+def test_build_roast_plot_snapshot_skips_auc_area_while_recording() -> None:
+    class Canvas(FakeAucCanvas):
+        flagon = True
+
+    snapshot = build_roast_plot_snapshot(Canvas())
+
+    assert snapshot.areas == ()
+
+
+def test_build_roast_plot_snapshot_uses_auc_ts_base_index() -> None:
+    class Canvas(FakeAucCanvas):
+        AUCbaseFlag = True
+        aw = FakeAucTsAw()
+
+    snapshot = build_roast_plot_snapshot(Canvas())
+
+    assert snapshot.areas == (
+        AreaFillSnapshot.from_sequences(
+            x=[120.0, 180.0],
+            y=[150.0, 170.0],
+            baseline=150.0,
+            color='#767676',
+            label='AUC area',
+            opacity=0.28,
+            kind='auc',
+        ),
+    )
+
+
+def test_build_roast_plot_snapshot_keeps_auc_base_offsets_with_invalid_samples() -> None:
+    class Canvas(FakeAucCanvas):
+        stemp2 = [120.0, -1.0, 150.0, 170.0]
+
+    snapshot = build_roast_plot_snapshot(Canvas())
+
+    assert snapshot.areas == (
+        AreaFillSnapshot.from_sequences(
+            x=[120.0, 180.0],
+            y=[150.0, 170.0],
+            baseline=150.0,
+            color='#767676',
+            label='AUC area',
+            opacity=0.28,
+            kind='auc',
+        ),
+    )

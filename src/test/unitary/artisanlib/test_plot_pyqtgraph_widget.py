@@ -8,7 +8,7 @@ import pytest
 from PyQt6.QtWidgets import QApplication
 
 from artisanlib.plot_pyqtgraph_widget import _grid_display_color, create_pyqtgraph_plot_target
-from artisanlib.plot_snapshot import AxisSnapshot, CurveSnapshot, PhaseBandSnapshot, RoastPlotSnapshot
+from artisanlib.plot_snapshot import AreaFillSnapshot, AxisSnapshot, CurveSnapshot, PhaseBandSnapshot, RoastPlotSnapshot
 
 pg = pytest.importorskip('pyqtgraph')
 _APPLICATION = QApplication.instance() or QApplication([])
@@ -82,6 +82,31 @@ def test_create_pyqtgraph_plot_target_renders_phase_band_overlay() -> None:
         _APPLICATION.processEvents()
 
         assert target.renderer.phase_item_count() == 1
+    finally:
+        target.close()
+
+
+def test_create_pyqtgraph_plot_target_renders_area_fill_overlay() -> None:
+    target = create_pyqtgraph_plot_target(use_opengl=False, include_ror=True)
+    try:
+        snapshot = RoastPlotSnapshot(
+            curves=(),
+            time_axis=AxisSnapshot(minimum=-1.0, maximum=12.0, label='Time'),
+            temperature_axis=AxisSnapshot(minimum=70.0, maximum=270.0, label='Temperature'),
+            ror_axis=AxisSnapshot(minimum=-15.0, maximum=25.0, label='RoR'),
+            areas=(AreaFillSnapshot.from_sequences(
+                x=[1.0, 2.0, 3.0],
+                y=[120.0, 140.0, 160.0],
+                baseline=110.0,
+                color='#767676',
+                label='AUC area',
+                kind='auc',
+            ),),
+        )
+        target.renderer.set_snapshot(snapshot)
+        _APPLICATION.processEvents()
+
+        assert target.renderer.area_item_count() == 1
     finally:
         target.close()
 

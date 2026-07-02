@@ -8,6 +8,7 @@ YAxisName = Literal['temperature', 'ror']
 EventMarkerKind = Literal['main', 'special', 'background']
 GuideOrientation = Literal['vertical', 'horizontal']
 GuideKind = Literal['auc', 'bbp', 'charge_target', 'time', 'custom']
+AreaFillKind = Literal['auc', 'custom']
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,6 +61,43 @@ class PhaseBandSnapshot:
     color: str
     opacity: float = 0.15
     label: str = ''
+
+
+@dataclass(frozen=True, slots=True)
+class AreaFillSnapshot:
+    x: tuple[float, ...]
+    y: tuple[float | None, ...]
+    baseline: float
+    color: str
+    label: str = ''
+    y_axis: YAxisName = 'temperature'
+    opacity: float = 0.25
+    kind: AreaFillKind = 'custom'
+
+    @classmethod
+    def from_sequences(
+            cls,
+            *,
+            x: Sequence[float],
+            y: Sequence[float | None],
+            baseline: float,
+            color: str,
+            label: str = '',
+            y_axis: YAxisName = 'temperature',
+            opacity: float = 0.25,
+            kind: AreaFillKind = 'custom') -> AreaFillSnapshot:
+        if len(x) != len(y):
+            raise ValueError('x and y must have the same length')
+        return cls(
+            x=tuple(float(value) for value in x),
+            y=tuple(None if value is None else float(value) for value in y),
+            baseline=float(baseline),
+            color=color,
+            label=label,
+            y_axis=y_axis,
+            opacity=max(0.0, min(1.0, float(opacity))),
+            kind=kind,
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -122,6 +160,7 @@ class RoastPlotSnapshot:
     event_values: tuple[EventValueSnapshot, ...] = ()
     phase_bands: tuple[PhaseBandSnapshot, ...] = ()
     guides: tuple[GuideLineSnapshot, ...] = ()
+    areas: tuple[AreaFillSnapshot, ...] = ()
 
     def visible_curves(self) -> tuple[CurveSnapshot, ...]:
         return tuple(curve for curve in self.curves if curve.visible)
@@ -149,6 +188,8 @@ class LivePlotRenderer(Protocol):
 
 
 __all__ = [
+    'AreaFillKind',
+    'AreaFillSnapshot',
     'AxisSnapshot',
     'CurveSnapshot',
     'EventMarkerKind',

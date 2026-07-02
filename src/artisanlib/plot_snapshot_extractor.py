@@ -4,6 +4,7 @@ import math
 from typing import Any
 
 from artisanlib.plot_snapshot import (
+    AreaFillSnapshot,
     AxisSnapshot,
     CurveSnapshot,
     EventMarkerSnapshot,
@@ -23,6 +24,7 @@ _DEFAULT_COLORS = {
     'backgroundet': '#B5644F',
     'backgrounddeltabt': '#78905D',
     'backgrounddeltaet': '#B98A4B',
+    'aucarea': '#767676',
     'grid': '#C9D2D4',
     'markers': '#5E6B6E',
     'rect1': '#E5E5E5',
@@ -73,6 +75,7 @@ def build_roast_plot_snapshot(source: object) -> RoastPlotSnapshot:
         event_values=_event_value_snapshots(events),
         phase_bands=_phase_bands(source),
         guides=_guide_lines(source),
+        areas=_area_fills(source),
     )
 
 
@@ -452,6 +455,107 @@ def _guide_lines(source: object) -> tuple[GuideLineSnapshot, ...]:
     if charge_target_guide is not None:
         guides.append(charge_target_guide)
     return tuple(guides)
+
+
+def _area_fills(source: object) -> tuple[AreaFillSnapshot, ...]:
+    auc_area = _auc_area_fill(source)
+    if auc_area is None:
+        return ()
+    return (auc_area,)
+
+
+def _auc_area_fill(source: object) -> AreaFillSnapshot | None:
+    if bool(getattr(source, 'flagon', False)) or not bool(getattr(source, 'AUCshowFlag', False)):
+        return None
+    timex = _sequence(source, 'timex')
+    stemp2 = _sequence(source, 'stemp2')
+    timeindex = _sequence(source, 'timeindex')
+    if len(timeindex) <= 6 or not timeindex[6]:
+        return None
+    try:
+        drop_index = int(timeindex[6])
+    except (TypeError, ValueError):
+        return None
+    if drop_index <= 0 or drop_index >= min(len(timex), len(stemp2)):
+        return None
+
+    tp_index = _tp_index(source)
+    if tp_index is None or tp_index < 0 or tp_index >= drop_index:
+        return None
+    base_index = _auc_base_index(source, tp_index, drop_index, stemp2)
+    if base_index is None or base_index < 0 or base_index > drop_index:
+        return None
+    baseline = _temperature_value(stemp2[base_index])
+    if baseline is None or baseline <= 0:
+        return None
+    x_values = timex[base_index:drop_index + 1]
+    y_values = [_temperature_value(value) for value in stemp2[base_index:drop_index + 1]]
+    if len(x_values) <= 1 or not any(value is not None and value > 0 for value in y_values):
+        return None
+    return AreaFillSnapshot.from_sequences(
+        x=x_values,
+        y=y_values,
+        baseline=baseline,
+        color=_palette_color(source, 'aucarea'),
+        label='AUC area',
+        opacity=0.28,
+        kind='auc',
+    )
+
+
+def _tp_index(source: object) -> int | None:
+    aw = getattr(source, 'aw', None)
+    find_tp = getattr(aw, 'findTP', None)
+    if callable(find_tp):
+        try:
+            return int(find_tp())
+        except (TypeError, ValueError):
+            return None
+    return _first_index(source, ('TP_index', 'TPindex', 'TPalarmtimeindex'))
+
+
+def _auc_base_index(source: object, tp_index: int, drop_index: int, stemp2: list[Any]) -> int | None:
+    if bool(getattr(source, 'AUCbaseFlag', False)):
+        aw = getattr(source, 'aw', None)
+        ts = getattr(aw, 'ts', None)
+        if callable(ts):
+            try:
+                result = ts()
+                if len(result) >= 4:
+                    return int(result[3])
+            except (TypeError, ValueError):
+                return None
+    auc_base = _numeric_attr(source, 'AUCbase')
+    if auc_base is None:
+        return tp_index
+    numeric_segment = [_numeric_value(value) for value in stemp2[tp_index:drop_index]]
+    if not numeric_segment or any(value is None for value in numeric_segment):
+        return None
+    return tp_index + _bisection([value for value in numeric_segment if value is not None], auc_base)
+
+
+def _bisection(values: list[float], value: float) -> int:
+    if not values:
+        return -1
+    if value < values[0]:
+        return -1
+    if value > values[-1]:
+        return len(values)
+    if value == values[0]:
+        return 0
+    if value == values[-1]:
+        return len(values) - 1
+    lower = 0
+    upper = len(values) - 1
+    while upper - lower > 1:
+        middle = (upper + lower) >> 1
+        if value >= values[middle]:
+            lower = middle
+        else:
+            upper = middle
+    if abs(value - values[lower]) > abs(values[upper] - value):
+        return upper
+    return lower
 
 
 def _auc_guides(source: object) -> tuple[GuideLineSnapshot, ...]:

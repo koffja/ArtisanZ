@@ -5,8 +5,9 @@ import sys
 
 import pytest
 
-from artisanlib.plot_pyqtgraph_adapter import PyQtGraphSnapshotRenderer
+from artisanlib.plot_pyqtgraph_adapter import PyQtGraphSnapshotRenderer, _event_label_y_position
 from artisanlib.plot_snapshot import (
+    AreaFillSnapshot,
     AxisSnapshot,
     CurveSnapshot,
     EventMarkerSnapshot,
@@ -91,12 +92,14 @@ def _snapshot(
         events: tuple[EventMarkerSnapshot, ...] = (),
         event_values: tuple[EventValueSnapshot, ...] = (),
         phase_bands: tuple[PhaseBandSnapshot, ...] = (),
+        areas: tuple[AreaFillSnapshot, ...] = (),
         guides: tuple[GuideLineSnapshot, ...] = ()) -> RoastPlotSnapshot:
     return RoastPlotSnapshot(
         curves=curves,
         events=events,
         event_values=event_values,
         phase_bands=phase_bands,
+        areas=areas,
         guides=guides,
         time_axis=AxisSnapshot(minimum=-1.0, maximum=12.0, label='Time'),
         temperature_axis=AxisSnapshot(minimum=70.0, maximum=270.0, label='Temperature'),
@@ -246,6 +249,9 @@ def test_set_snapshot_renders_phase_bands_and_live_updates_preserve_static_overl
     def phase_item_factory(band: PhaseBandSnapshot, _: RoastPlotSnapshot) -> FakeEventItem:
         return FakeEventItem('phase', f'{band.minimum}:{band.maximum}', band.color)
 
+    def area_item_factory(area: AreaFillSnapshot, _: RoastPlotSnapshot) -> FakeEventItem:
+        return FakeEventItem('area', area.label, area.color)
+
     def event_line_factory(event: EventMarkerSnapshot, _: RoastPlotSnapshot) -> FakeEventItem:
         return FakeEventItem('line', event.label, event.color)
 
@@ -268,6 +274,7 @@ def test_set_snapshot_renders_phase_bands_and_live_updates_preserve_static_overl
         event_value_factory=event_value_factory,
         guide_item_factory=guide_item_factory,
         phase_item_factory=phase_item_factory,
+        area_item_factory=area_item_factory,
         pen_factory=_fake_pen_factory,
     )
 
@@ -276,6 +283,14 @@ def test_set_snapshot_renders_phase_bands_and_live_updates_preserve_static_overl
         events=(EventMarkerSnapshot(time=4.5, label='charge', event_type=100, color='#CC0000', kind='main'),),
         event_values=(EventValueSnapshot(time=4.5, value=55.0, event_type=1, color='#CC0000', label='power'),),
         phase_bands=(PhaseBandSnapshot(minimum=100.0, maximum=150.0, color='#E5E5E5'),),
+        areas=(AreaFillSnapshot.from_sequences(
+            x=[1.0, 2.0],
+            y=[120.0, 150.0],
+            baseline=110.0,
+            color='#767676',
+            label='AUC area',
+            kind='auc',
+        ),),
         guides=(
             GuideLineSnapshot(position=4.0, label='AUC guide', color='#336677', kind='auc'),
             GuideLineSnapshot(position=6.0, label='RoR guide', color='#78905D', y_axis='ror'),
@@ -283,11 +298,13 @@ def test_set_snapshot_renders_phase_bands_and_live_updates_preserve_static_overl
     ))
 
     assert renderer.phase_item_count() == 1
+    assert renderer.area_item_count() == 1
     assert renderer.event_item_count() == 2
     assert renderer.event_value_item_count() == 1
     assert renderer.guide_item_count() == 2
     assert [item.kind for item in temperature_plot.added_items] == [
         'phase',
+        'area',
         'event-value',
         'line',
         'label',
@@ -300,6 +317,7 @@ def test_set_snapshot_renders_phase_bands_and_live_updates_preserve_static_overl
     ))
 
     assert renderer.phase_item_count() == 1
+    assert renderer.area_item_count() == 1
     assert renderer.event_item_count() == 2
     assert renderer.event_value_item_count() == 1
     assert renderer.guide_item_count() == 2
@@ -311,9 +329,37 @@ def test_set_snapshot_renders_phase_bands_and_live_updates_preserve_static_overl
     assert temperature_plot.removed_items == old_items
     assert ror_plot.removed_items == old_ror_items
     assert renderer.phase_item_count() == 0
+    assert renderer.area_item_count() == 0
     assert renderer.event_item_count() == 0
     assert renderer.event_value_item_count() == 0
     assert renderer.guide_item_count() == 0
+
+
+def test_event_label_y_position_uses_distinct_rows_for_time_clusters() -> None:
+    events = (
+        EventMarkerSnapshot(time=10.0, label='Power', event_type=1, color='#CC0000'),
+        EventMarkerSnapshot(time=11.0, label='Fan', event_type=2, color='#00AA00'),
+        EventMarkerSnapshot(time=12.0, label='Drum', event_type=3, color='#0000CC'),
+        EventMarkerSnapshot(time=90.0, label='Far', event_type=4, color='#333333'),
+    )
+    snapshot = _snapshot(events=events)
+
+    clustered_positions = [_event_label_y_position(event, snapshot) for event in events[:3]]
+
+    assert len(set(clustered_positions)) == 3
+    assert _event_label_y_position(events[3], snapshot) == clustered_positions[0]
+
+
+def test_event_label_y_position_does_not_wrap_dense_clusters() -> None:
+    events = tuple(
+        EventMarkerSnapshot(time=10.0 + index * 0.5, label=f'Event {index}', event_type=index, color='#333333')
+        for index in range(8)
+    )
+    snapshot = _snapshot(events=events)
+
+    clustered_positions = [_event_label_y_position(event, snapshot) for event in events]
+
+    assert len(set(clustered_positions)) == len(events)
 
 
 def test_event_markers_are_optional_when_pyqtgraph_is_not_installed(monkeypatch: pytest.MonkeyPatch) -> None:
