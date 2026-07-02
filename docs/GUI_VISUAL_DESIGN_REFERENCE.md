@@ -32,6 +32,7 @@ Implementation anchor: `artisanlib.gui_theme.apply_modern_dialog_polish()` and `
 
 - Grid visibility follows the existing Axes dialog settings: `time_grid` and `temp_grid`.
 - When enabled, PyQtGraph must draw major grid lines only, using the configured time/temperature step values.
+- Grid style, width, and opacity must follow the existing Axes dialog controls. Solid, dashed, dash-dot, and dotted styles must map to the visible PyQtGraph grid pen.
 - Do not use PyQtGraph's dense default minor-grid look on the main roast chart.
 - Grid color should be visible on the light roast canvas but lower priority than curves, events, and guide lines.
 
@@ -43,6 +44,8 @@ Implementation anchor: `artisanlib.plot_pyqtgraph_widget.PyQtGraphMajorGridItem`
 - Bands must render on the initial empty PyQtGraph surface as soon as the renderer target is created.
 - Bands must remain behind curves, grid, events, guide lines, and labels.
 - Default opacity should be high enough to inspect, but not compete with curve colors.
+- Completed-roast development time ranges are separate from horizontal temperature phase bands. Preserve the vertical development block from first crack start to drop when the required event indexes exist.
+- Completed roasts should show top phase summaries with duration, percentage, and BT delta. These summaries are analytical context, not decoration.
 
 Implementation anchor: `tgraphcanvas.sync_pyqtgraph_static_overlays_from_canvas()` plus the renderer static overlay snapshot path.
 
@@ -51,6 +54,13 @@ Implementation anchor: `tgraphcanvas.sync_pyqtgraph_static_overlays_from_canvas(
 - Avoid nested card/value-block compositions that can visually separate or misalign.
 - Long metric titles should wrap within a fixed-width telemetry column rather than widening the column into the graph.
 - Numeric value surfaces should align to their container and keep enough padding for segmented-digit fonts.
+
+## Roast Analysis Overlays
+
+- Main roast events such as CHARGE, DRY, FCs, and DROP must include BT temperature when available.
+- Event labels should remain anchored to meaningful data points where possible; do not reduce them to unlabeled vertical guide lines.
+- The right-bottom legend is part of the analytical surface. It should include visible ET/BT and RoR curves while skipping projection/background helper curves unless a future mode explicitly exposes them.
+- RoR curves must use sufficient line weight and z-order to stay visible on the right-axis overlay.
 
 ## Review Checklist
 

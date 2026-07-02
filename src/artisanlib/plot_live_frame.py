@@ -215,6 +215,8 @@ def merge_static_plot_overlays(
         events=static_snapshot.events,
         event_values=static_snapshot.event_values,
         phase_bands=static_snapshot.phase_bands,
+        time_ranges=static_snapshot.time_ranges,
+        phase_summaries=static_snapshot.phase_summaries,
         guides=static_snapshot.guides,
         areas=static_snapshot.areas,
     )

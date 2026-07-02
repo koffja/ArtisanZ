@@ -11,7 +11,9 @@ from artisanlib.plot_snapshot import (
     EventValueSnapshot,
     GuideLineSnapshot,
     PhaseBandSnapshot,
+    PhaseSummarySnapshot,
     RoastPlotSnapshot,
+    TimeRangeSnapshot,
     YAxisName,
 )
 
@@ -74,6 +76,8 @@ def build_roast_plot_snapshot(source: object) -> RoastPlotSnapshot:
         events=events,
         event_values=_event_value_snapshots(events),
         phase_bands=_phase_bands(source),
+        time_ranges=_time_ranges(source),
+        phase_summaries=_phase_summaries(source),
         guides=_guide_lines(source),
         areas=_area_fills(source),
     )
@@ -94,6 +98,8 @@ def build_roast_plot_static_overlay_snapshot(
         events=events,
         event_values=_event_value_snapshots(events),
         phase_bands=_phase_bands(source),
+        time_ranges=_time_ranges(source),
+        phase_summaries=_phase_summaries(source),
         guides=_guide_lines(source),
         areas=_area_fills(source),
     )
@@ -382,6 +388,7 @@ def _main_event_markers(source: object) -> tuple[EventMarkerSnapshot, ...]:
             label=label,
             event_type=100 + index,
             color=_palette_color(source, 'markers'),
+            temperature=_temperature_at(source, 'temp2', event_index),
             kind='main',
         ))
     return tuple(markers)
@@ -463,6 +470,103 @@ def _phase_bands(source: object) -> tuple[PhaseBandSnapshot, ...]:
             opacity=0.22,
         ))
     return tuple(bands)
+
+
+def _time_ranges(source: object) -> tuple[TimeRangeSnapshot, ...]:
+    phase_times = _phase_event_times(source)
+    if phase_times is None:
+        return ()
+    _, _, first_crack_start, drop = phase_times
+    if drop <= first_crack_start:
+        return ()
+    return (
+        TimeRangeSnapshot(
+            start=first_crack_start,
+            end=drop,
+            color=_palette_color_with_default(source, 'roastphase3', '#FFF6A8'),
+            opacity=0.28,
+            label='Development',
+            kind='development',
+        ),
+    )
+
+
+def _phase_summaries(source: object) -> tuple[PhaseSummarySnapshot, ...]:
+    phase_times = _phase_event_times(source)
+    phase_indexes = _phase_event_indexes(source)
+    if phase_times is None or phase_indexes is None:
+        return ()
+    charge, dry, first_crack_start, drop = phase_times
+    charge_index, dry_index, first_crack_index, drop_index = phase_indexes
+    if not (charge < dry < first_crack_start < drop):
+        return ()
+    total_duration = drop - charge
+    if total_duration <= 0:
+        return ()
+    phase_specs = (
+        ('Drying', charge, dry, charge_index, dry_index, 'roastphase1', '#DDE8E0'),
+        ('Maillard', dry, first_crack_start, dry_index, first_crack_index, 'roastphase2', '#E7DEC9'),
+        ('Development', first_crack_start, drop, first_crack_index, drop_index, 'roastphase3', '#FFF6A8'),
+    )
+    summaries: list[PhaseSummarySnapshot] = []
+    for label, start, end, start_index, end_index, color_key, default_color in phase_specs:
+        duration = end - start
+        summaries.append(PhaseSummarySnapshot(
+            start=start,
+            end=end,
+            label=label,
+            duration_text=_format_seconds_as_minsec(duration),
+            percent_text=f'{duration / total_duration * 100.0:.1f}%',
+            delta_text=_temperature_delta_text(source, start_index, end_index),
+            color=_palette_color_with_default(source, color_key, default_color),
+        ))
+    return tuple(summaries)
+
+
+def _phase_event_times(source: object) -> tuple[float, float, float, float] | None:
+    indexes = _phase_event_indexes(source)
+    if indexes is None:
+        return None
+    timex = _sequence(source, 'timex')
+    charge_index, dry_index, first_crack_index, drop_index = indexes
+    if drop_index >= len(timex):
+        return None
+    return (
+        float(timex[charge_index]),
+        float(timex[dry_index]),
+        float(timex[first_crack_index]),
+        float(timex[drop_index]),
+    )
+
+
+def _phase_event_indexes(source: object) -> tuple[int, int, int, int] | None:
+    timeindex = _sequence(source, 'timeindex')
+    if len(timeindex) <= 6:
+        return None
+    try:
+        charge_index = int(timeindex[0])
+        dry_index = int(timeindex[1])
+        first_crack_index = int(timeindex[2])
+        drop_index = int(timeindex[6])
+    except (TypeError, ValueError):
+        return None
+    if charge_index < 0 or dry_index <= 0 or first_crack_index <= 0 or drop_index <= 0:
+        return None
+    return charge_index, dry_index, first_crack_index, drop_index
+
+
+def _format_seconds_as_minsec(seconds: float) -> str:
+    total_seconds = max(0, int(round(seconds)))
+    minutes, remaining_seconds = divmod(total_seconds, 60)
+    return f'{minutes}:{remaining_seconds:02d}'
+
+
+def _temperature_delta_text(source: object, start_index: int, end_index: int) -> str:
+    start_temperature = _temperature_at(source, 'temp2', start_index)
+    end_temperature = _temperature_at(source, 'temp2', end_index)
+    if start_temperature is None or end_temperature is None:
+        return ''
+    return f'{end_temperature - start_temperature:.1f}'
 
 
 def _guide_lines(source: object) -> tuple[GuideLineSnapshot, ...]:
@@ -727,6 +831,13 @@ def _temperature_value(value: Any) -> float | None:
     if number == -1 or math.isnan(number):
         return None
     return number
+
+
+def _temperature_at(source: object, attr_name: str, index: int) -> float | None:
+    values = _sequence(source, attr_name)
+    if index < 0 or index >= len(values):
+        return None
+    return _temperature_value(values[index])
 
 
 def _color_attr(source: object, attr_name: str, color_key: str) -> str:

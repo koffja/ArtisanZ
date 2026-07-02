@@ -39,6 +39,7 @@ class PyQtGraphPlotTarget:
             grid_alpha: float,
             grid_width: int,
             grid_color: str,
+            grid_line_style: str = '-',
             axis_color: str) -> None:
         # A dedicated GridItem gives consistent visible gridlines across Qt
         # styles; PlotItem.showGrid can be too faint on the light roast canvas.
@@ -53,6 +54,7 @@ class PyQtGraphPlotTarget:
             grid_alpha=grid_alpha,
             grid_width=grid_width,
             grid_color=grid_color,
+            grid_line_style=grid_line_style,
         )
         _configure_axis_pen(self.temperature_plot, self._pyqtgraph, grid_color, axis_color, grid_width)
         _set_axis_tick_spacing(self.temperature_plot, 'bottom', time_tick_step)
@@ -84,6 +86,7 @@ def create_pyqtgraph_plot_target(
     temperature_plot = widget.addPlot(row=0, col=0, axisItems={'bottom': time_axis})
     _configure_temperature_plot(temperature_plot, pg)
     grid_item = _create_grid_overlay(temperature_plot, pg)
+    legend_item = _create_legend(temperature_plot, pg)
     ror_plot = None
     ror_axis = None
     if include_ror:
@@ -92,6 +95,7 @@ def create_pyqtgraph_plot_target(
     renderer = PyQtGraphSnapshotRenderer(
         temperature_plot=temperature_plot,
         ror_plot=ror_plot,
+        legend_item=legend_item,
     )
     return PyQtGraphPlotTarget(
         widget=widget,
@@ -138,6 +142,20 @@ def _create_grid_overlay(plot: object, pg: Any) -> object | None:
     return grid_item
 
 
+def _create_legend(plot: object, pg: Any) -> object | None:
+    try:
+        legend = plot.addLegend(
+            offset=(-12, -12),
+            labelTextColor='#5E6B6E',
+            brush=pg.mkBrush(_color_with_alpha(pg, '#FCFBF7', 0.82)),
+            pen=pg.mkPen(_color_with_alpha(pg, '#CAD5D0', 0.88), width=1),
+        )
+    except Exception: # pylint: disable=broad-exception-caught
+        return None
+    _call_if_available(legend, 'setZValue', 40)
+    return legend
+
+
 def _configure_grid_overlay(
         grid_item: object | None,
         pg: Any,
@@ -148,7 +166,8 @@ def _configure_grid_overlay(
         y_tick_step: float,
         grid_alpha: float,
         grid_width: int,
-        grid_color: str) -> None:
+        grid_color: str,
+        grid_line_style: str) -> None:
     if grid_item is None:
         return
     visible = x_visible or y_visible
@@ -158,8 +177,10 @@ def _configure_grid_overlay(
     pen = pg.mkPen(
         _color_with_alpha(pg, _grid_display_color(grid_color), _visible_grid_alpha(grid_alpha)),
         width=max(1, grid_width),
+        style=_qt_pen_style(grid_line_style),
     )
     _call_if_available(grid_item, 'setPen', pen)
+    _call_if_available(grid_item, 'setLineStyle', grid_line_style)
     x_spacing = [float(x_tick_step)] if x_visible and x_tick_step > 0 else [None]
     y_spacing = [float(y_tick_step)] if y_visible and y_tick_step > 0 else [None]
     _call_if_available(grid_item, 'setTickSpacing', x=x_spacing, y=y_spacing)
@@ -256,6 +277,10 @@ class PyQtGraphMajorGridItem:
 
             def setPen(self, new_pen: object) -> None:  # noqa: N802
                 self._pen = new_pen
+                self.update()
+
+            def setLineStyle(self, line_style: str) -> None:  # noqa: N802
+                self.opts['lineStyle'] = line_style
                 self.update()
 
             def setTickSpacing(self, *, x: list[float | None], y: list[float | None]) -> None:  # noqa: N802
@@ -370,6 +395,17 @@ def _set_axis_tick_spacing(plot: object, axis_name: str, step: float) -> None:
         _call_if_available(axis, 'setTickSpacing')
         return
     _call_if_available(axis, 'setTickSpacing', levels=[(float(step), 0.0)])
+
+
+def _qt_pen_style(line_style: str) -> object:
+    from PyQt6.QtCore import Qt
+
+    return {
+        '-': Qt.PenStyle.SolidLine,
+        '--': Qt.PenStyle.DashLine,
+        ':': Qt.PenStyle.DotLine,
+        '-.': Qt.PenStyle.DashDotLine,
+    }.get(line_style, Qt.PenStyle.SolidLine)
 
 
 def _visible_grid_alpha(grid_alpha: float) -> float:

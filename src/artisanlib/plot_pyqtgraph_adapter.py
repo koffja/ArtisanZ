@@ -12,14 +12,18 @@ from artisanlib.plot_snapshot import (
     EventValueSnapshot,
     GuideLineSnapshot,
     PhaseBandSnapshot,
+    PhaseSummarySnapshot,
     RendererViewState,
     RoastPlotSnapshot,
+    TimeRangeSnapshot,
 )
 
 EventItemFactory = Callable[[EventMarkerSnapshot, RoastPlotSnapshot], object | None]
 EventValueItemFactory = Callable[[EventValueSnapshot, RoastPlotSnapshot], object | None]
 GuideItemFactory = Callable[[GuideLineSnapshot, RoastPlotSnapshot], object | None]
 PhaseItemFactory = Callable[[PhaseBandSnapshot, RoastPlotSnapshot], object | None]
+TimeRangeItemFactory = Callable[[TimeRangeSnapshot, RoastPlotSnapshot], object | tuple[object, ...] | None]
+PhaseSummaryItemFactory = Callable[[PhaseSummarySnapshot, RoastPlotSnapshot], object | tuple[object, ...] | None]
 AreaItemFactory = Callable[[AreaFillSnapshot, RoastPlotSnapshot], object | None]
 CurvePenFactory = Callable[[CurveSnapshot], object]
 
@@ -30,24 +34,32 @@ class PyQtGraphSnapshotRenderer:
             *,
             temperature_plot: object,
             ror_plot: object | None = None,
+            legend_item: object | None = None,
             event_line_factory: EventItemFactory | None = None,
             event_label_factory: EventItemFactory | None = None,
             event_value_factory: EventValueItemFactory | None = None,
             guide_item_factory: GuideItemFactory | None = None,
             phase_item_factory: PhaseItemFactory | None = None,
+            time_range_factory: TimeRangeItemFactory | None = None,
+            phase_summary_factory: PhaseSummaryItemFactory | None = None,
             area_item_factory: AreaItemFactory | None = None,
             pen_factory: CurvePenFactory | None = None) -> None:
         self._temperature_plot = temperature_plot
         self._ror_plot = ror_plot
+        self._legend_item = legend_item
         self._event_line_factory = event_line_factory or _default_event_line_factory
         self._event_label_factory = event_label_factory or _default_event_label_factory
         self._event_value_factory = event_value_factory or _default_event_value_factory
         self._guide_item_factory = guide_item_factory or _default_guide_item_factory
         self._phase_item_factory = phase_item_factory or _default_phase_item_factory
+        self._time_range_factory = time_range_factory or _default_time_range_item_factory
+        self._phase_summary_factory = phase_summary_factory or _default_phase_summary_item_factory
         self._area_item_factory = area_item_factory or _default_area_item_factory
         self._pen_factory = pen_factory or _default_pen_factory
         self._items: dict[str, object] = {}
         self._phase_items: list[object] = []
+        self._time_range_items: list[object] = []
+        self._phase_summary_items: list[object] = []
         self._area_items: list[tuple[object, object]] = []
         self._event_items: list[object] = []
         self._event_value_items: list[tuple[object, object]] = []
@@ -90,6 +102,12 @@ class PyQtGraphSnapshotRenderer:
     def phase_item_count(self) -> int:
         return len(self._phase_items)
 
+    def time_range_item_count(self) -> int:
+        return len(self._time_range_items)
+
+    def phase_summary_item_count(self) -> int:
+        return len(self._phase_summary_items)
+
     def event_value_item_count(self) -> int:
         return len(self._event_value_items)
 
@@ -104,6 +122,8 @@ class PyQtGraphSnapshotRenderer:
         if not force and signature == self._static_overlay_signature:
             return
         self._apply_phase_bands(snapshot)
+        self._apply_time_ranges(snapshot)
+        self._apply_phase_summaries(snapshot)
         self._apply_areas(snapshot)
         self._apply_event_values(snapshot)
         self._apply_events(snapshot)
@@ -123,10 +143,26 @@ class PyQtGraphSnapshotRenderer:
         for name, item in self._items.items():
             if name not in active_names:
                 _call_if_available(item, 'setVisible', False)
+        self._apply_legend(snapshot)
+
+    def _apply_legend(self, snapshot: RoastPlotSnapshot) -> None:
+        if self._legend_item is None:
+            return
+        clear = getattr(self._legend_item, 'clear', None)
+        if callable(clear):
+            clear()
+        for curve in snapshot.curves:
+            if not curve.visible or _legend_should_skip(curve):
+                continue
+            item = self._items.get(curve.name)
+            if item is not None:
+                _call_if_available(self._legend_item, 'addItem', item, _legend_label(curve.name))
 
     def _create_item(self, curve: CurveSnapshot) -> object:
         plot = self._plot_for_curve(curve)
-        return plot.plot(curve.x, _pyqtgraph_y_values(curve.y), pen=self._pen_factory(curve), name=curve.name)
+        item = plot.plot(curve.x, _pyqtgraph_y_values(curve.y), pen=self._pen_factory(curve), name=curve.name)
+        _call_if_available(item, 'setZValue', 15 if curve.y_axis == 'ror' else 10)
+        return item
 
     def _plot_for_curve(self, curve: CurveSnapshot) -> Any:
         if curve.y_axis == 'ror' and self._ror_plot is not None:
@@ -146,6 +182,30 @@ class PyQtGraphSnapshotRenderer:
         for item in self._phase_items:
             _call_if_available(self._temperature_plot, 'removeItem', item)
         self._phase_items.clear()
+
+    def _apply_time_ranges(self, snapshot: RoastPlotSnapshot) -> None:
+        self._clear_time_range_items()
+        for time_range in snapshot.time_ranges:
+            for item in _as_items(self._time_range_factory(time_range, snapshot)):
+                _call_if_available(self._temperature_plot, 'addItem', item)
+                self._time_range_items.append(item)
+
+    def _clear_time_range_items(self) -> None:
+        for item in self._time_range_items:
+            _call_if_available(self._temperature_plot, 'removeItem', item)
+        self._time_range_items.clear()
+
+    def _apply_phase_summaries(self, snapshot: RoastPlotSnapshot) -> None:
+        self._clear_phase_summary_items()
+        for summary in snapshot.phase_summaries:
+            for item in _as_items(self._phase_summary_factory(summary, snapshot)):
+                _call_if_available(self._temperature_plot, 'addItem', item)
+                self._phase_summary_items.append(item)
+
+    def _clear_phase_summary_items(self) -> None:
+        for item in self._phase_summary_items:
+            _call_if_available(self._temperature_plot, 'removeItem', item)
+        self._phase_summary_items.clear()
 
     def _apply_areas(self, snapshot: RoastPlotSnapshot) -> None:
         self._clear_area_items()
@@ -233,6 +293,8 @@ def _static_overlay_signature(snapshot: RoastPlotSnapshot) -> tuple[object, ...]
         snapshot.temperature_axis,
         snapshot.ror_axis,
         snapshot.phase_bands,
+        snapshot.time_ranges,
+        snapshot.phase_summaries,
         snapshot.areas,
         snapshot.event_values,
         snapshot.events,
@@ -244,12 +306,28 @@ def _pyqtgraph_y_values(values: tuple[float | None, ...]) -> tuple[float, ...]:
     return tuple(math.nan if value is None else value for value in values)
 
 
+def _legend_should_skip(curve: CurveSnapshot) -> bool:
+    return 'projection' in curve.name.lower() or curve.name.startswith('Background ')
+
+
+def _legend_label(curve_name: str) -> str:
+    return {
+        'Delta BT': 'ΔBT',
+        'Delta ET': 'ΔET',
+        'Background BT': 'BT bg',
+        'Background ET': 'ET bg',
+        'Background Delta BT': 'ΔBT bg',
+        'Background Delta ET': 'ΔET bg',
+    }.get(curve_name, curve_name)
+
+
 def _default_pen_factory(curve: CurveSnapshot) -> object:
     try:
         import pyqtgraph as pg  # type: ignore[import-not-found,unused-ignore]
     except ImportError:
         return _pen_for_curve(curve)
-    return pg.mkPen(color=_color_with_alpha(pg, curve.color, curve.opacity), width=curve.line_width, style=_qt_pen_style(curve.line_style))
+    line_width = max(1.8, curve.line_width) if curve.y_axis == 'ror' else curve.line_width
+    return pg.mkPen(color=_color_with_alpha(pg, curve.color, curve.opacity), width=line_width, style=_qt_pen_style(curve.line_style))
 
 
 def _qt_pen_style(line_style: str) -> object:
@@ -315,6 +393,14 @@ def _clear_item_pairs(items: list[tuple[object, object]]) -> None:
     items.clear()
 
 
+def _as_items(factory_result: object | tuple[object, ...] | None) -> tuple[object, ...]:
+    if factory_result is None:
+        return ()
+    if isinstance(factory_result, tuple):
+        return factory_result
+    return (factory_result,)
+
+
 def _default_event_line_factory(event: EventMarkerSnapshot, _: RoastPlotSnapshot) -> object | None:
     try:
         import pyqtgraph as pg  # type: ignore[import-not-found,unused-ignore]
@@ -358,7 +444,7 @@ def _default_event_label_factory(event: EventMarkerSnapshot, snapshot: RoastPlot
     if event.kind == 'background':
         fill_opacity = 0.36
     item = pg.TextItem(
-        text=event.label,
+        text=_event_label_text(event),
         color=text_color,
         anchor=_event_label_anchor(event, snapshot),
         fill=pg.mkBrush(_color_with_alpha(pg, event.color, fill_opacity)),
@@ -367,6 +453,14 @@ def _default_event_label_factory(event: EventMarkerSnapshot, snapshot: RoastPlot
     item.setPos(event.time, _event_label_y_position(event, snapshot))
     _call_if_available(item, 'setZValue', 30)
     return item
+
+
+def _event_label_text(event: EventMarkerSnapshot) -> str:
+    if event.temperature is not None:
+        return f'{event.temperature:.1f}\n{event.label}'
+    if event.value is not None and event.kind != 'main':
+        return f'{event.label}\n{event.value:.0f}'
+    return event.label
 
 
 def _default_area_item_factory(area: AreaFillSnapshot, _: RoastPlotSnapshot) -> object | None:
@@ -425,6 +519,61 @@ def _default_phase_item_factory(band: PhaseBandSnapshot, _: RoastPlotSnapshot) -
     return item
 
 
+def _default_time_range_item_factory(time_range: TimeRangeSnapshot, _: RoastPlotSnapshot) -> object | None:
+    try:
+        import pyqtgraph as pg  # type: ignore[import-not-found,unused-ignore]
+    except ImportError:
+        return None
+    try:
+        item = pg.LinearRegionItem(
+            values=(time_range.start, time_range.end),
+            orientation='vertical',
+            movable=False,
+            brush=pg.mkBrush(_color_with_alpha(pg, time_range.color, time_range.opacity)),
+        )
+    except TypeError:
+        return None
+    _call_if_available(item, 'setZValue', -17)
+    for line in getattr(item, 'lines', []):
+        _call_if_available(line, 'setPen', pg.mkPen(color=_color_with_alpha(pg, time_range.color, 0.0), width=0))
+    return item
+
+
+def _default_phase_summary_item_factory(
+        summary: PhaseSummarySnapshot,
+        snapshot: RoastPlotSnapshot) -> tuple[object, ...] | None:
+    try:
+        import pyqtgraph as pg  # type: ignore[import-not-found,unused-ignore]
+    except ImportError:
+        return None
+    y_top = snapshot.temperature_axis.maximum
+    span = max(1.0, snapshot.temperature_axis.maximum - snapshot.temperature_axis.minimum)
+    y_bar = y_top - span * 0.07
+    y_text = y_top - span * 0.035
+    x_mid = (summary.start + summary.end) / 2.0
+    bar = pg.PlotDataItem(
+        [summary.start, summary.end],
+        [y_bar, y_bar],
+        pen=pg.mkPen(color=_color_with_alpha(pg, summary.color, summary.opacity), width=7),
+    )
+    _call_if_available(bar, 'setZValue', 12)
+    label = pg.TextItem(
+        text=f'{summary.duration_text}  {summary.percent_text}',
+        color='#20272B',
+        anchor=(0.5, 0.5),
+    )
+    label.setPos(x_mid, y_text)
+    _call_if_available(label, 'setZValue', 34)
+    delta = pg.TextItem(
+        text=summary.delta_text,
+        color='#20272B',
+        anchor=(0.5, 0.5),
+    )
+    delta.setPos(x_mid, y_top - span * 0.105)
+    _call_if_available(delta, 'setZValue', 34)
+    return bar, label, delta
+
+
 def _visible_phase_band_opacity(opacity: float) -> float:
     return min(0.38, max(0.24, float(opacity) * 1.5))
 
@@ -433,6 +582,8 @@ def _event_label_y_position(event: EventMarkerSnapshot, snapshot: RoastPlotSnaps
     if event.y_position is not None:
         return event.y_position
     span = max(1.0, snapshot.temperature_axis.maximum - snapshot.temperature_axis.minimum)
+    if event.temperature is not None:
+        return _clamp(event.temperature + span * 0.075, snapshot.temperature_axis.minimum, snapshot.temperature_axis.maximum - span * 0.04)
     row = _event_label_row(event, snapshot)
     if event.kind == 'main':
         return snapshot.temperature_axis.maximum - span * (0.035 + row * 0.045)

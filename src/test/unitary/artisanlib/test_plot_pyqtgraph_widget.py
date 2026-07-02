@@ -198,6 +198,30 @@ def test_pyqtgraph_grid_overlay_can_show_one_axis() -> None:
         target.close()
 
 
+def test_pyqtgraph_grid_overlay_applies_configured_line_style() -> None:
+    target = create_pyqtgraph_plot_target(use_opengl=False, include_ror=True)
+    try:
+        target.configure_axes(
+            time_grid=True,
+            temperature_grid=True,
+            time_tick_step=60.0,
+            temperature_tick_step=10.0,
+            ror_tick_step=5.0,
+            time_label_mode='minutes',
+            time_axis_start=60.0,
+            grid_alpha=0.2,
+            grid_width=2,
+            grid_color='#d0d7d8',
+            grid_line_style=':',
+            axis_color='#5e6b6e',
+        )
+
+        assert target.grid_item is not None
+        assert target.grid_item.opts['lineStyle'] == ':'
+    finally:
+        target.close()
+
+
 def test_pyqtgraph_grid_display_color_keeps_default_grid_visible() -> None:
     assert _grid_display_color('#d0d7d8') == '#8FA09A'
     assert _grid_display_color('#65736f') == '#65736f'

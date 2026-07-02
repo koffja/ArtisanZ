@@ -24,8 +24,10 @@ from artisanlib.plot_snapshot import (
     EventValueSnapshot,
     GuideLineSnapshot,
     PhaseBandSnapshot,
+    PhaseSummarySnapshot,
     RendererViewState,
     RoastPlotSnapshot,
+    TimeRangeSnapshot,
 )
 
 
@@ -284,6 +286,7 @@ def build_snapshot_from_websocket_stream(
             event_type=event.event_type,
             color=event.color,
             value=event.value,
+            temperature=_nearest_bt(samples, event.time_s) if event.kind == 'main' else None,
             kind=event.kind,
         )
         for event in events
@@ -314,6 +317,8 @@ def build_snapshot_from_websocket_stream(
         events=event_markers,
         event_values=event_values,
         phase_bands=_phase_bands(),
+        time_ranges=_development_time_ranges(events),
+        phase_summaries=_phase_summaries(samples, events),
         guides=_guide_lines(),
         areas=_auc_area_fills(samples, events),
     )
@@ -449,6 +454,87 @@ def _phase_bands() -> tuple[PhaseBandSnapshot, ...]:
         PhaseBandSnapshot(minimum=160.0, maximum=195.0, color='#E7DEC9', opacity=0.22, label='Maillard'),
         PhaseBandSnapshot(minimum=195.0, maximum=230.0, color='#D9E4EA', opacity=0.22, label='Development'),
     )
+
+
+def _development_time_ranges(events: tuple[WebSocketPushEvent, ...]) -> tuple[TimeRangeSnapshot, ...]:
+    first_crack = _event_time(events, 102)
+    drop = _event_time(events, 106)
+    if first_crack is None or drop is None or drop <= first_crack:
+        return ()
+    return (
+        TimeRangeSnapshot(
+            start=first_crack,
+            end=drop,
+            color='#FFF6A8',
+            opacity=0.28,
+            label='Development',
+            kind='development',
+        ),
+    )
+
+
+def _phase_summaries(
+        samples: tuple[WebSocketTemperatureSample, ...],
+        events: tuple[WebSocketPushEvent, ...]) -> tuple[PhaseSummarySnapshot, ...]:
+    charge = _event_time(events, 100)
+    dry = _event_time(events, 101)
+    first_crack = _event_time(events, 102)
+    drop = _event_time(events, 106)
+    if charge is None or dry is None or first_crack is None or drop is None:
+        return ()
+    if not (charge < dry < first_crack < drop):
+        return ()
+    total = drop - charge
+    if total <= 0:
+        return ()
+    specs = (
+        ('Drying', charge, dry, '#DDE8E0'),
+        ('Maillard', dry, first_crack, '#E7DEC9'),
+        ('Development', first_crack, drop, '#FFF6A8'),
+    )
+    return tuple(
+        PhaseSummarySnapshot(
+            start=start,
+            end=end,
+            label=label,
+            duration_text=_format_seconds_as_minsec(end - start),
+            percent_text=f'{(end - start) / total * 100.0:.1f}%',
+            delta_text=_sample_delta_text(samples, start, end),
+            color=color,
+        )
+        for label, start, end, color in specs
+    )
+
+
+def _event_time(events: tuple[WebSocketPushEvent, ...], event_type: int) -> float | None:
+    event = next((candidate for candidate in events if candidate.event_type == event_type), None)
+    if event is None:
+        return None
+    return event.time_s
+
+
+def _format_seconds_as_minsec(seconds: float) -> str:
+    total_seconds = max(0, int(round(seconds)))
+    minutes, remaining_seconds = divmod(total_seconds, 60)
+    return f'{minutes}:{remaining_seconds:02d}'
+
+
+def _sample_delta_text(
+        samples: tuple[WebSocketTemperatureSample, ...],
+        start_time: float,
+        end_time: float) -> str:
+    start = _nearest_bt(samples, start_time)
+    end = _nearest_bt(samples, end_time)
+    if start is None or end is None:
+        return ''
+    return f'{end - start:.1f}'
+
+
+def _nearest_bt(samples: tuple[WebSocketTemperatureSample, ...], time_s: float) -> float | None:
+    if not samples:
+        return None
+    nearest = min(samples, key=lambda sample: abs(sample.time_s - time_s))
+    return nearest.bt
 
 
 def _guide_lines() -> tuple[GuideLineSnapshot, ...]:

@@ -9,6 +9,8 @@ from artisanlib.plot_snapshot import (
     EventValueSnapshot,
     GuideLineSnapshot,
     PhaseBandSnapshot,
+    PhaseSummarySnapshot,
+    TimeRangeSnapshot,
 )
 from artisanlib.plot_snapshot_extractor import build_roast_plot_snapshot, build_roast_plot_static_overlay_snapshot
 
@@ -153,6 +155,25 @@ class FakeAucCanvas(FakeCanvas):
     }
 
 
+class FakeCompletedRoastCanvas(FakeOverlayCanvas):
+    timex = [float(index * 60) for index in range(11)]
+    temp1 = [160.0, 155.0, 150.0, 160.0, 170.0, 180.0, 190.0, 200.0, 210.0, 218.0, 215.0]
+    temp2 = [150.0, 130.0, 110.0, 125.0, 140.0, 155.0, 170.0, 185.0, 200.0, 208.0, 212.0]
+    delta1 = [None, 1.0, 2.0, 3.0, 4.0, 4.5, 5.0, 4.8, 4.2, 3.8, 3.0]
+    delta2 = [None, 1.2, 2.2, 3.2, 4.2, 4.6, 5.2, 4.9, 4.4, 3.9, 3.2]
+    stemp2 = temp2
+    timeindex = [0, 3, 7, 0, 0, 0, 10, 0]
+    flagon = False
+    statisticsflags = [True, True, True, True]
+    palette = {
+        **FakeOverlayCanvas.palette,
+        'roastphasetext': '#20272B',
+        'roastphase1': '#DDE8E0',
+        'roastphase2': '#E7DEC9',
+        'roastphase3': '#FFF6A8',
+    }
+
+
 def test_build_roast_plot_snapshot_extracts_main_curves_and_axes() -> None:
     snapshot = build_roast_plot_snapshot(FakeCanvas())
 
@@ -233,8 +254,8 @@ def test_build_roast_plot_snapshot_extracts_main_and_background_event_markers() 
     snapshot = build_roast_plot_snapshot(FakeOverlayCanvas())
 
     assert snapshot.events[:2] == (
-        EventMarkerSnapshot(time=0.0, label='CHARGE', event_type=100, color='#666666', kind='main'),
-        EventMarkerSnapshot(time=2.0, label='FCs', event_type=102, color='#666666', kind='main'),
+        EventMarkerSnapshot(time=0.0, label='CHARGE', event_type=100, color='#666666', temperature=140.0, kind='main'),
+        EventMarkerSnapshot(time=2.0, label='FCs', event_type=102, color='#666666', temperature=144.0, kind='main'),
     )
     assert EventMarkerSnapshot(
         time=1.0,
@@ -253,6 +274,50 @@ def test_build_roast_plot_snapshot_extracts_main_and_background_event_markers() 
         kind='background',
         opacity=0.34,
     ) in snapshot.event_values
+
+
+def test_build_roast_plot_snapshot_extracts_completed_phase_summary_and_development_range() -> None:
+    snapshot = build_roast_plot_snapshot(FakeCompletedRoastCanvas())
+
+    assert snapshot.time_ranges == (
+        TimeRangeSnapshot(
+            start=420.0,
+            end=600.0,
+            color='#FFF6A8',
+            opacity=0.28,
+            label='Development',
+            kind='development',
+        ),
+    )
+    assert snapshot.phase_summaries == (
+        PhaseSummarySnapshot(
+            start=0.0,
+            end=180.0,
+            label='Drying',
+            duration_text='3:00',
+            percent_text='30.0%',
+            delta_text='-25.0',
+            color='#DDE8E0',
+        ),
+        PhaseSummarySnapshot(
+            start=180.0,
+            end=420.0,
+            label='Maillard',
+            duration_text='4:00',
+            percent_text='40.0%',
+            delta_text='60.0',
+            color='#E7DEC9',
+        ),
+        PhaseSummarySnapshot(
+            start=420.0,
+            end=600.0,
+            label='Development',
+            duration_text='3:00',
+            percent_text='30.0%',
+            delta_text='27.0',
+            color='#FFF6A8',
+        ),
+    )
 
 
 def test_build_roast_plot_snapshot_extracts_guides_when_source_data_exists() -> None:

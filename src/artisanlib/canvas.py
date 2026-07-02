@@ -5794,6 +5794,12 @@ class tgraphcanvas(QObject):
         if not callable(configure_axes):
             return
         palette = getattr(self, 'palette', {})
+        grid_styles = getattr(self, 'gridstyles', ['-', '--', '-.', ':'])
+        try:
+            grid_style_index = int(getattr(self, 'gridlinestyle', 0))
+            grid_line_style = str(grid_styles[grid_style_index])
+        except (IndexError, TypeError, ValueError):
+            grid_line_style = '-'
         configure_axes(
             time_grid=bool(getattr(self, 'time_grid', False)),
             temperature_grid=bool(getattr(self, 'temp_grid', False)),
@@ -5805,6 +5811,7 @@ class tgraphcanvas(QObject):
             grid_alpha=float(getattr(self, 'gridalpha', 0.2)),
             grid_width=int(getattr(self, 'gridthickness', 1)),
             grid_color=str(palette.get('grid', '#C9D2D4')),
+            grid_line_style=grid_line_style,
             axis_color=str(palette.get('xlabel', '#5E6B6E')),
         )
 

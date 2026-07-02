@@ -19,8 +19,10 @@ from artisanlib.plot_snapshot import (
     EventValueSnapshot,
     GuideLineSnapshot,
     PhaseBandSnapshot,
+    PhaseSummarySnapshot,
     RendererViewState,
     RoastPlotSnapshot,
+    TimeRangeSnapshot,
 )
 
 
@@ -52,6 +54,19 @@ class FakeEventItem:
 
     def setPos(self, x: float, y: float) -> None:  # noqa: N802
         self.position = (x, y)
+
+
+class FakeLegend:
+    def __init__(self) -> None:
+        self.items: list[tuple[FakePlotDataItem, str]] = []
+        self.clear_count = 0
+
+    def clear(self) -> None:
+        self.clear_count += 1
+        self.items.clear()
+
+    def addItem(self, item: FakePlotDataItem, label: str) -> None:  # noqa: N802
+        self.items.append((item, label))
 
 
 class FakePlot:
@@ -97,6 +112,8 @@ def _snapshot(
         events: tuple[EventMarkerSnapshot, ...] = (),
         event_values: tuple[EventValueSnapshot, ...] = (),
         phase_bands: tuple[PhaseBandSnapshot, ...] = (),
+        time_ranges: tuple[TimeRangeSnapshot, ...] = (),
+        phase_summaries: tuple[PhaseSummarySnapshot, ...] = (),
         areas: tuple[AreaFillSnapshot, ...] = (),
         guides: tuple[GuideLineSnapshot, ...] = ()) -> RoastPlotSnapshot:
     return RoastPlotSnapshot(
@@ -104,6 +121,8 @@ def _snapshot(
         events=events,
         event_values=event_values,
         phase_bands=phase_bands,
+        time_ranges=time_ranges,
+        phase_summaries=phase_summaries,
         areas=areas,
         guides=guides,
         time_axis=AxisSnapshot(minimum=-1.0, maximum=12.0, label='Time'),
@@ -157,6 +176,27 @@ def test_set_snapshot_creates_curve_items_and_applies_ranges() -> None:
     assert ror_plot.y_range == (-15.0, 25.0)
     assert temperature_plot.range_padding == [0.0, 0.0]
     assert ror_plot.range_padding == [0.0, 0.0]
+
+
+def test_set_snapshot_populates_legend_with_temperature_and_ror_curves() -> None:
+    temperature_plot = FakePlot()
+    ror_plot = FakePlot()
+    legend = FakeLegend()
+    renderer = PyQtGraphSnapshotRenderer(
+        temperature_plot=temperature_plot,
+        ror_plot=ror_plot,
+        legend_item=legend,
+        pen_factory=_fake_pen_factory,
+    )
+
+    renderer.set_snapshot(_snapshot(
+        CurveSnapshot.from_sequences(name='ET', x=[0], y=[150], color='#B5644F'),
+        CurveSnapshot.from_sequences(name='BT', x=[0], y=[140], color='#4E7180'),
+        CurveSnapshot.from_sequences(name='Delta BT', x=[0], y=[None], color='#78905D', y_axis='ror'),
+        CurveSnapshot.from_sequences(name='BT projection', x=[0], y=[140], color='#4E7180'),
+    ))
+
+    assert [label for _, label in legend.items] == ['ET', 'BT', 'ΔBT']
 
 
 def test_update_live_frame_reuses_items_and_hides_missing_curves_without_resetting_view() -> None:
@@ -254,6 +294,12 @@ def test_set_snapshot_renders_phase_bands_and_live_updates_preserve_static_overl
     def phase_item_factory(band: PhaseBandSnapshot, _: RoastPlotSnapshot) -> FakeEventItem:
         return FakeEventItem('phase', f'{band.minimum}:{band.maximum}', band.color)
 
+    def time_range_factory(time_range: TimeRangeSnapshot, _: RoastPlotSnapshot) -> FakeEventItem:
+        return FakeEventItem('time-range', f'{time_range.start}:{time_range.end}', time_range.color)
+
+    def phase_summary_factory(summary: PhaseSummarySnapshot, _: RoastPlotSnapshot) -> FakeEventItem:
+        return FakeEventItem('phase-summary', summary.percent_text, summary.color)
+
     def area_item_factory(area: AreaFillSnapshot, _: RoastPlotSnapshot) -> FakeEventItem:
         return FakeEventItem('area', area.label, area.color)
 
@@ -279,6 +325,8 @@ def test_set_snapshot_renders_phase_bands_and_live_updates_preserve_static_overl
         event_value_factory=event_value_factory,
         guide_item_factory=guide_item_factory,
         phase_item_factory=phase_item_factory,
+        time_range_factory=time_range_factory,
+        phase_summary_factory=phase_summary_factory,
         area_item_factory=area_item_factory,
         pen_factory=_fake_pen_factory,
     )
@@ -286,6 +334,16 @@ def test_set_snapshot_renders_phase_bands_and_live_updates_preserve_static_overl
     events = (EventMarkerSnapshot(time=4.5, label='charge', event_type=100, color='#CC0000', kind='main'),)
     event_values = (EventValueSnapshot(time=4.5, value=55.0, event_type=1, color='#CC0000', label='power'),)
     phase_bands = (PhaseBandSnapshot(minimum=100.0, maximum=150.0, color='#E5E5E5'),)
+    time_ranges = (TimeRangeSnapshot(start=8.0, end=10.0, color='#FFF6A8', label='Development'),)
+    phase_summaries = (PhaseSummarySnapshot(
+        start=8.0,
+        end=10.0,
+        label='Development',
+        duration_text='2:00',
+        percent_text='20.0%',
+        delta_text='12.0',
+        color='#FFF6A8',
+    ),)
     areas = (AreaFillSnapshot.from_sequences(
         x=[1.0, 2.0],
         y=[120.0, 150.0],
@@ -304,17 +362,23 @@ def test_set_snapshot_renders_phase_bands_and_live_updates_preserve_static_overl
         events=events,
         event_values=event_values,
         phase_bands=phase_bands,
+        time_ranges=time_ranges,
+        phase_summaries=phase_summaries,
         areas=areas,
         guides=guides,
     ))
 
     assert renderer.phase_item_count() == 1
+    assert renderer.time_range_item_count() == 1
+    assert renderer.phase_summary_item_count() == 1
     assert renderer.area_item_count() == 1
     assert renderer.event_item_count() == 2
     assert renderer.event_value_item_count() == 1
     assert renderer.guide_item_count() == 2
     assert [item.kind for item in temperature_plot.added_items] == [
         'phase',
+        'time-range',
+        'phase-summary',
         'area',
         'event-value',
         'line',
@@ -328,11 +392,15 @@ def test_set_snapshot_renders_phase_bands_and_live_updates_preserve_static_overl
         events=events,
         event_values=event_values,
         phase_bands=phase_bands,
+        time_ranges=time_ranges,
+        phase_summaries=phase_summaries,
         areas=areas,
         guides=guides,
     ))
 
     assert renderer.phase_item_count() == 1
+    assert renderer.time_range_item_count() == 1
+    assert renderer.phase_summary_item_count() == 1
     assert renderer.area_item_count() == 1
     assert renderer.event_item_count() == 2
     assert renderer.event_value_item_count() == 1
@@ -345,6 +413,8 @@ def test_set_snapshot_renders_phase_bands_and_live_updates_preserve_static_overl
     assert temperature_plot.removed_items == old_items
     assert ror_plot.removed_items == old_ror_items
     assert renderer.phase_item_count() == 0
+    assert renderer.time_range_item_count() == 0
+    assert renderer.phase_summary_item_count() == 0
     assert renderer.area_item_count() == 0
     assert renderer.event_item_count() == 0
     assert renderer.event_value_item_count() == 0

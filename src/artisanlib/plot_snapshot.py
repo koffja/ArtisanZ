@@ -25,6 +25,7 @@ class EventMarkerSnapshot:
     event_type: int
     color: str
     value: float | None = None
+    temperature: float | None = None
     kind: EventMarkerKind = 'special'
     y_position: float | None = None
 
@@ -61,6 +62,28 @@ class PhaseBandSnapshot:
     color: str
     opacity: float = 0.15
     label: str = ''
+
+
+@dataclass(frozen=True, slots=True)
+class TimeRangeSnapshot:
+    start: float
+    end: float
+    color: str
+    opacity: float = 0.18
+    label: str = ''
+    kind: str = 'custom'
+
+
+@dataclass(frozen=True, slots=True)
+class PhaseSummarySnapshot:
+    start: float
+    end: float
+    label: str
+    duration_text: str
+    percent_text: str
+    delta_text: str
+    color: str = '#C9D2D4'
+    opacity: float = 0.38
 
 
 @dataclass(frozen=True, slots=True)
@@ -159,6 +182,8 @@ class RoastPlotSnapshot:
     events: tuple[EventMarkerSnapshot, ...] = ()
     event_values: tuple[EventValueSnapshot, ...] = ()
     phase_bands: tuple[PhaseBandSnapshot, ...] = ()
+    time_ranges: tuple[TimeRangeSnapshot, ...] = ()
+    phase_summaries: tuple[PhaseSummarySnapshot, ...] = ()
     guides: tuple[GuideLineSnapshot, ...] = ()
     areas: tuple[AreaFillSnapshot, ...] = ()
 
@@ -200,7 +225,9 @@ __all__ = [
     'GuideOrientation',
     'LivePlotRenderer',
     'PhaseBandSnapshot',
+    'PhaseSummarySnapshot',
     'RendererViewState',
     'RoastPlotSnapshot',
+    'TimeRangeSnapshot',
     'YAxisName',
 ]
