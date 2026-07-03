@@ -7,6 +7,7 @@ import pytest
 
 from artisanlib.plot_pyqtgraph_adapter import (
     PyQtGraphSnapshotRenderer,
+    _default_pen_factory,
     _event_label_anchor,
     _event_label_y_position,
     _visible_phase_band_opacity,
@@ -192,11 +193,32 @@ def test_set_snapshot_populates_legend_with_temperature_and_ror_curves() -> None
     renderer.set_snapshot(_snapshot(
         CurveSnapshot.from_sequences(name='ET', x=[0], y=[150], color='#B5644F'),
         CurveSnapshot.from_sequences(name='BT', x=[0], y=[140], color='#4E7180'),
+        CurveSnapshot.from_sequences(name='Delta ET', x=[0], y=[None], color='#B98A4B', y_axis='ror'),
         CurveSnapshot.from_sequences(name='Delta BT', x=[0], y=[None], color='#78905D', y_axis='ror'),
         CurveSnapshot.from_sequences(name='BT projection', x=[0], y=[140], color='#4E7180'),
     ))
 
-    assert [label for _, label in legend.items] == ['ET', 'BT', 'ΔBT']
+    assert [label for _, label in legend.items] == ['ET', 'BT', 'ΔET', 'ΔBT']
+
+
+def test_default_pen_factory_keeps_bt_visibly_stronger_than_secondary_curves() -> None:
+    bt_pen = _default_pen_factory(CurveSnapshot.from_sequences(
+        name='BT',
+        x=[0],
+        y=[140],
+        color='#4E7180',
+        line_width=1.0,
+    ))
+    et_pen = _default_pen_factory(CurveSnapshot.from_sequences(
+        name='ET',
+        x=[0],
+        y=[150],
+        color='#B5644F',
+        line_width=1.0,
+    ))
+
+    assert bt_pen.widthF() >= 2.2
+    assert et_pen.widthF() == 1.0
 
 
 def test_update_live_frame_reuses_items_and_hides_missing_curves_without_resetting_view() -> None:

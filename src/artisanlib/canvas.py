@@ -158,6 +158,7 @@ from artisanlib.sample_processing import (
     turning_point_temperature_is_valid,
     windowed_curve_data,
 )
+
 from Phidget22.VoltageRange import VoltageRange # type: ignore[import-untyped]
 
 try:
@@ -169,6 +170,46 @@ except Exception: # pylint: disable=broad-except
 
 
 _log: Final[logging.Logger] = logging.getLogger(__name__)
+
+
+DEFAULT_GRAPH_PALETTE: Final[dict[str, str]] = {
+    'background': '#FFFDF8',
+    'grid': '#E1E4E0',
+    'ylabel': '#686E6A',
+    'xlabel': '#686E6A',
+    'title': '#667C84',
+    'title_focus': '#A76557',
+    'title_hidden': '#A09A90',
+    'rect1': '#F7F6F0',
+    'rect2': '#EEF2F0',
+    'rect3': '#F4F2EC',
+    'rect4': '#ECF3F3',
+    'rect5': '#E9EDE9',
+    'et': '#A76557',
+    'bt': '#4E7180',
+    'xt': '#66615A',
+    'yt': '#66615A',
+    'deltaet': '#C18A6B',
+    'deltabt': '#90A1A8',
+    'markers': '#55514A',
+    'text': '#505451',
+    'watermarks': '#E1D8C5',
+    'timeguide': '#8EA9B4',
+    'canvas': '#F7F6F0',
+    'legendbg': '#FFFDF8',
+    'legendborder': '#D6D9D3',
+    'specialeventbox': '#C7A093',
+    'specialeventtext': '#FFFFFF',
+    'bgeventmarker': '#C8CBC6',
+    'bgeventtext': '#505451',
+    'mettext': '#FFFFFF',
+    'metbox': '#C08373',
+    'aucguide': '#7D909A',
+    'messages': '#505451',
+    'aucarea': '#D4CCBF',
+    'analysismask': '#D6D1C6',
+    'statsanalysisbkgnd': '#FFFDF8',
+}
 
 
 
@@ -212,6 +253,36 @@ def select_canvas_renderer() -> RendererSelection:
             registry=registry,
             fallback_reason='selection_error',
         )
+
+
+def _nearest_sample_index(times: Sequence[float], position: float) -> int | None:
+    if len(times) == 0:
+        return None
+    return min(range(len(times)), key=lambda index: abs(float(times[index]) - float(position)))
+
+
+def _sequence_value_at(values: Sequence[float], index: int | None, fallback: float) -> float:
+    if index is None or index < 0 or index >= len(values):
+        return float(fallback)
+    try:
+        return float(values[index])
+    except (TypeError, ValueError):
+        return float(fallback)
+
+
+def _optional_sequence_value_at(
+        values: Sequence[float | None],
+        index: int | None,
+        fallback: float | None) -> float | None:
+    if index is None or index < 0 or index >= len(values):
+        return fallback
+    value = values[index]
+    if value is None:
+        return fallback
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return fallback
 
 
 #######################################################################################
@@ -475,17 +546,7 @@ class tgraphcanvas(QObject):
         #default palette of colors
         self.locale_str:str = locale
         self.alpha:dict[str,float] = {'analysismask':0.4,'statsanalysisbkgnd':1.0,'legendbg':0.8}
-        self.palette:dict[str,str] = {'background':'#ffffff','grid':'#e5e5e5','ylabel':'#808080','xlabel':'#808080','title':'#0c6aa6',
-                        'title_focus':'#cc0f50', 'title_hidden':'#808080',
-                        'rect1':'#e5e5e5','rect2':'#b2b2b2','rect3':'#e5e5e5','rect4':'#bde0ee','rect5':'#d3d3d3',
-                        'et':'#cc0f50','bt':'#0a5c90','xt':'#404040','yt':'#404040','deltaet':'#cc0f50',
-                        'deltabt':'#0a5c90','markers':'#000000','text':'#000000','watermarks':'#ffff00','timeguide':'#0a5c90',
-                        'canvas':'#f8f8f8','legendbg':'#ffffff','legendborder':'#a9a9a9',
-                        'specialeventbox':'#ff5871','specialeventtext':'#ffffff',
-                        'bgeventmarker':'#7f7f7f','bgeventtext':'#000000',
-                        'mettext':'#ffffff','metbox':'#cc0f50',
-                        'aucguide':'#0c6aa6','messages':'#000000','aucarea':'#767676',
-                        'analysismask':'#bababa','statsanalysisbkgnd':'#ffffff'}
+        self.palette:dict[str,str] = DEFAULT_GRAPH_PALETTE.copy()
         self.palette1 = self.palette.copy()
         self.EvalueColor_default:Final[list[str]] = ['#43a7cf','#49b160','#800080','#ad0427']
         self.EvalueTextColor_default:Final[list[str]] = ['#ffffff','#ffffff','#ffffff','#ffffff']
@@ -5611,6 +5672,74 @@ class tgraphcanvas(QObject):
     def graph_widget(self) -> QWidget:
         return self.plot_display_widget
 
+    def update_pyqtgraph_cursor_message(
+            self,
+            time_position: float,
+            temperature_position: float,
+            ror_position: float | None) -> None:
+        toolbar = getattr(getattr(self.fig, 'canvas', None), 'toolbar', None)
+        set_message = getattr(toolbar, 'set_message', None)
+        if not callable(set_message):
+            return
+        if not bool(getattr(self, 'fmt_data_ON', True)):
+            set_message('<PRE></PRE>')
+            return
+        channel, temperature, ror = tgraphcanvas._pyqtgraph_cursor_curve_values(
+            self,
+            time_position,
+            temperature_position,
+            ror_position,
+        )
+        time_text = tgraphcanvas._pyqtgraph_cursor_time_text(self, time_position)
+        unit = str(getattr(self, 'mode', '') or '')
+        temperature_text = tgraphcanvas._pyqtgraph_cursor_value_text(self, temperature)
+        ror_text = tgraphcanvas._pyqtgraph_cursor_value_text(self, ror)
+        set_message(
+            f'<PRE>{time_text}\n'
+            f'{channel} {temperature_text}°{unit}  RoR {ror_text}°{unit}/min</PRE>',
+        )
+
+    def _pyqtgraph_cursor_curve_values(
+            self,
+            time_position: float,
+            temperature_position: float,
+            ror_position: float | None) -> tuple[str, float, float | None]:
+        curve_selector = int(getattr(self, 'fmt_data_curve', 1))
+        use_et = curve_selector == 2
+        aw = getattr(self, 'aw', None)
+        channel = str(getattr(aw, 'ETname' if use_et else 'BTname', 'ET' if use_et else 'BT'))
+        temperature_values = getattr(self, 'temp1' if use_et else 'temp2', [])
+        ror_values = getattr(self, 'delta1' if use_et else 'delta2', [])
+        index = _nearest_sample_index(getattr(self, 'timex', []), time_position)
+        temperature = _sequence_value_at(temperature_values, index, temperature_position)
+        ror = _optional_sequence_value_at(ror_values, index, ror_position)
+        return channel, temperature, ror
+
+    def _pyqtgraph_cursor_time_text(self, time_position: float) -> str:
+        start_time = 0.0
+        timeindex = getattr(self, 'timeindex', [])
+        timex = getattr(self, 'timex', [])
+        try:
+            charge_index = int(timeindex[0])
+        except (IndexError, TypeError, ValueError):
+            charge_index = -1
+        if 0 <= charge_index < len(timex):
+            start_time = float(timex[charge_index])
+        label_mode = str(getattr(self, 'time_axis_label_mode', 'minutes'))
+        seconds = int(round(time_position - start_time))
+        if label_mode == 'seconds':
+            return str(seconds)
+        sign = '-' if seconds < 0 else ''
+        minutes, remaining_seconds = divmod(abs(seconds), 60)
+        return f'{sign}{minutes}:{remaining_seconds:02d}'
+
+    def _pyqtgraph_cursor_value_text(self, value: float | None) -> str:
+        if value is None:
+            return '-'
+        if bool(getattr(self, 'LCDdecimalplaces', False)):
+            return str(float2float(value))
+        return str(int(round(value)))
+
     def enable_selected_plot_widget(self, parent: QWidget) -> None:
         if self.plot_renderer_selection.plugin.surface != 'pyqtgraph-plot':
             return
@@ -5626,6 +5755,14 @@ class tgraphcanvas(QObject):
             widget.setContentsMargins(0, 0, 0, 0)
             widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
             self.plot_pyqtgraph_target = target
+            set_cursor_callback = getattr(target, 'set_cursor_callback', None)
+            if callable(set_cursor_callback):
+                set_cursor_callback(lambda time, temperature, ror: tgraphcanvas.update_pyqtgraph_cursor_message(
+                    self,
+                    time,
+                    temperature,
+                    ror,
+                ))
             self.plot_display_widget = widget
             self.canvas.setVisible(False)
             self.sync_pyqtgraph_static_overlays_from_canvas()

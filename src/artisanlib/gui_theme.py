@@ -45,6 +45,7 @@ def apply_modern_dialog_polish(dialog: object) -> None:
             QGroupBox,
             QHeaderView,
             QLayout,
+            QLineEdit,
             QTableView,
             QTabWidget,
         )
@@ -63,6 +64,9 @@ def apply_modern_dialog_polish(dialog: object) -> None:
 
     for combo_box in _find_children(dialog, QComboBox):
         _polish_dialog_combo_box(combo_box)
+
+    for line_edit in _find_children(dialog, QLineEdit):
+        _polish_dialog_line_edit(line_edit)
 
     for spin_box in _find_children(dialog, QAbstractSpinBox):
         _polish_dialog_spin_box(spin_box)
@@ -183,10 +187,20 @@ def _polish_dialog_combo_box(combo_box: Any) -> None:
     _refresh_widget_style(combo_box)
 
 
+def _polish_dialog_line_edit(line_edit: Any) -> None:
+    size_hint = getattr(line_edit, 'minimumSizeHint', lambda: None)()
+    hint_width = 0 if size_hint is None else int(size_hint.width())
+    minimum_width = max(110, hint_width)
+    line_edit.setMinimumWidth(max(line_edit.minimumWidth(), minimum_width))
+    if line_edit.maximumWidth() < line_edit.minimumWidth():
+        line_edit.setMaximumWidth(line_edit.minimumWidth() + 8)
+    _refresh_widget_style(line_edit)
+
+
 def _polish_dialog_spin_box(spin_box: Any) -> None:
     size_hint = getattr(spin_box, 'minimumSizeHint', lambda: None)()
     hint_width = 0 if size_hint is None else int(size_hint.width())
-    minimum_width = max(82, hint_width)
+    minimum_width = max(110, hint_width)
     spin_box.setMinimumWidth(max(spin_box.minimumWidth(), minimum_width))
     if spin_box.maximumWidth() < spin_box.minimumWidth():
         spin_box.setMaximumWidth(spin_box.minimumWidth() + 8)
@@ -584,7 +598,7 @@ def modern_application_stylesheet(theme: ModernTheme | None = None) -> str:
             padding: 3px 6px 2px 6px;
         }}
         QFrame[roastEventRail="true"] {{
-            background-color: #E6ECEB;
+            background-color: {t.window};
             border-top: 1px solid {t.border};
             border-bottom: 1px solid {t.border};
         }}

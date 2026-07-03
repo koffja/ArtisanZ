@@ -47,6 +47,11 @@ Important observations from the code review:
 | 1.16 | Saved Profile Export Matrix | Closed: four-profile `.alog` matrix plus WebSocket regression evidence | Profile matrix CLI, aggregate parity summary, default sanity fixtures | Report/export replacement evidence covers multiple saved profiles, not a single fixture |
 | 1.17 | Opt-In PyQtGraph PNG Export Action | Closed: user-visible Save Graph action added | `File > Save Graph > PyQtGraph PNG...` plus user-export helper | Users can manually export the modern renderer without replacing Matplotlib report/export paths |
 | 1.18 | Report Graph Export Comparison | Closed: report-ready graph asset comparison added | Matplotlib/PyQtGraph report graph image assets with file URLs | Future report replacement can compare backend assets before changing `roastReport()` |
+| 1.19 | PyQtGraph Grid and Phase Live Parity | Closed: live/static overlay merge restores visible grid and phase bands | Static overlay snapshot merge, grid visibility floor, phase-band visibility floor | Default live PyQtGraph no longer drops grid/phase backgrounds |
+| 1.20 | PyQtGraph Major Grid and Dialog Controls | Closed: major-only grid and wider flat dialog controls | Major-grid item, Axes dialog spin/combo width and chrome fixes | Grid is readable without visual noise; key controls do not clip values |
+| 1.21 | PyQtGraph Roast-Analysis Parity | Closed: legend, phase summary, development highlight, event values | Analysis overlays and legend in PyQtGraph | Completed roast analysis keeps the core legacy visual semantics |
+| 1.22 | PyQtGraph Original Annotation and RoR Pass | Closed: original-style event annotations, TP, visible RoR overlay | Event points/leaders/value labels, TP marker, thicker phase bars | PyQtGraph annotations are no longer reduced to vertical-line labels |
+| 1.23 | PyQtGraph Cursor, i18n, and Theme Parity | Closed: toolbar cursor readout, translated labels, Morandi default palette | Cursor time/temp/RoR callback, i18n event labels, wider inputs, flat theme preservation | The default renderer restores key interaction feedback and theme consistency |
 | 2 | Plot Renderer Boundary and PyQtGraph POC | Guarded PyQtGraph main-splitter embed implemented and benchmarked in offscreen/native-window simulator smokes | Read-only plot snapshot model, Matplotlib adapter, PyQtGraph live adapter prototype | POC is benchmarkable before any live renderer swap |
 | 3 | Sampling Post-Processing Decoupling | Pure helper extraction surface audited; remaining work is orchestration/renderer payload | Pure data pipeline for filtering, RoR, PID inputs, alarm/event decisions | GUI thread consumes snapshots instead of doing heavy processing inline |
 | 4 | Main UI Information Architecture | Closed at IA/policy/status-hint layer | Scenario-oriented Roast Control, QC Analysis, Device Setup, Production, and Expert workspaces | Users can switch task modes without losing existing expert controls |
@@ -293,6 +298,18 @@ Important observations from the code review:
 **Evidence:** Focused renderer/canvas/WebSocket tests produced `79 passed`; `py_compile` and `ruff check` passed on changed modules. CLI validation with `QT_QPA_PLATFORM=offscreen ./.venv/bin/python -m artisanlib.websocket_renderer_smoke --scenario event-heavy --samples 90 --fixed-step-ms 1000 --screenshot-file /tmp/artisanz-pyqtgraph-grid-phase-fix.png` produced `avg_update_ms=1.6805`, `max_update_ms=4.2407`, `live_update_count=87`, `renderer_event_item_count=6`, `renderer_event_value_item_count=2`, `renderer_guide_item_count=3`, `screenshot_byte_count=64841`, and `screenshot_sampled_non_background_pixel_count=27707`; visual review confirmed visible gridlines and horizontal phase temperature bands.
 
 **Remaining Gate:** This closes the immediate grid/phase visual regression in the default live PyQtGraph path. Remaining PyQtGraph parity work still needs richer Matplotlib overlay coverage, interactive graph edit parity, and report/export backend switching.
+
+## Phase 1.23: PyQtGraph Cursor, i18n, and Theme Parity
+
+**Goal:** Close the user-visible interaction and language regressions left after switching the default main graph to PyQtGraph.
+
+**Closed:** 2026-07-03 with translated main-event/TP labels from the existing Qt i18n path, a PyQtGraph cursor callback that restores the toolbar time/temperature/RoR readout, a hidden PyQtGraph auto-range button so the stray lower-left `A` no longer appears, wider line-edit/spin controls for Axes and other polished dialogs, a bottom event rail background matched to the LCD/main surface, a thicker BT default pen, a visible Delta ET legend/render path, and a Morandi/Wu Guanzhong-inspired default color palette. The previous Artisan color default is preserved as `Themes/Artisan/Artisan.athm`; `Themes/Artisan/Default.athm` now carries the softer ArtisanZ default.
+
+**Tracking Plan:** `docs/superpowers/plans/2026-07-03-gui-modernization-phase-1-23-pyqtgraph-cursor-i18n-theme.md`
+
+**Evidence:** Focused renderer/widget/canvas/theme/extractor tests produced `97 passed`; `py_compile`, targeted `ruff check`, and `git diff --check` passed. WebSocket event-heavy smoke with `/tmp/artisanz-phase123-pyqtgraph-cursor-theme.png` produced `ror_item_count=2`, `temperature_item_count=7`, `renderer_event_item_count=9`, and `screenshot_sampled_non_background_pixel_count=25257`.
+
+**Remaining Gate:** If a real saved profile still hides ET RoR, inspect the actual persisted curve-visibility flags and profile data path next. The code path now renders Delta ET when `DeltaETflag` is true and includes it in the PyQtGraph legend, but a user-specific configuration/profile can still disable that curve before it reaches the renderer.
 
 ## Phase 2: Plot Renderer Boundary and PyQtGraph POC
 

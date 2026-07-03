@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from types import SimpleNamespace
+
+import pytest
 
 from artisanlib.plot_snapshot import (
     AreaFillSnapshot,
@@ -12,6 +15,7 @@ from artisanlib.plot_snapshot import (
     PhaseSummarySnapshot,
     TimeRangeSnapshot,
 )
+from artisanlib import plot_snapshot_extractor
 from artisanlib.plot_snapshot_extractor import build_roast_plot_snapshot, build_roast_plot_static_overlay_snapshot
 
 
@@ -284,6 +288,31 @@ def test_build_roast_plot_snapshot_extracts_main_and_background_event_markers() 
         kind='background',
         opacity=0.34,
     ) in snapshot.event_values
+
+
+def test_build_roast_plot_snapshot_translates_main_event_markers(
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    translations = {
+        ('Label', 'CHARGE'): '投豆',
+        ('Label', 'FCs'): '一爆开始',
+    }
+
+    def translate(context: str, text: str) -> str:
+        return translations.get((context, text), text)
+
+    monkeypatch.setattr(
+        plot_snapshot_extractor,
+        'QApplication',
+        SimpleNamespace(translate=translate),
+        raising=False,
+    )
+
+    snapshot = build_roast_plot_snapshot(FakeOverlayCanvas())
+
+    assert snapshot.events[:2] == (
+        EventMarkerSnapshot(time=0.0, label='投豆', event_type=100, color='#666666', temperature=140.0, kind='main'),
+        EventMarkerSnapshot(time=2.0, label='一爆开始 0:02', event_type=102, color='#666666', temperature=144.0, kind='main'),
+    )
 
 
 def test_build_roast_plot_snapshot_extracts_completed_phase_summary_and_development_range() -> None:

@@ -90,6 +90,7 @@ def test_modern_application_stylesheet_uses_supplied_theme() -> None:
     assert '#111111' in stylesheet
     assert '#222222' in stylesheet
     assert '#123456' in stylesheet
+    assert 'QFrame[roastEventRail="true"] {\n            background-color: #111111;' in stylesheet
 
 
 def test_lcd_value_stylesheet_uses_self_contained_surface() -> None:
@@ -172,9 +173,12 @@ def test_apply_modern_dialog_polish_expands_compact_value_controls(qapp: QApplic
     layout = QVBoxLayout()
     combo_box = QComboBox()
     combo_box.addItems(['Minutes', 'Seconds'])
+    line_edit = QLineEdit('-12:00')
+    line_edit.setMaximumWidth(50)
     spin_box = QSpinBox()
     spin_box.setMaximumWidth(40)
     layout.addWidget(combo_box)
+    layout.addWidget(line_edit)
     layout.addWidget(spin_box)
     dialog.setLayout(layout)
 
@@ -182,7 +186,9 @@ def test_apply_modern_dialog_polish_expands_compact_value_controls(qapp: QApplic
 
     assert combo_box.minimumContentsLength() >= 7
     assert combo_box.minimumWidth() >= 104
-    assert spin_box.minimumWidth() >= 66
+    assert line_edit.minimumWidth() >= 110
+    assert line_edit.maximumWidth() >= line_edit.minimumWidth()
+    assert spin_box.minimumWidth() >= 110
     assert spin_box.maximumWidth() >= spin_box.minimumWidth()
 
 

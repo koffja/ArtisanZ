@@ -74,6 +74,29 @@ def test_create_pyqtgraph_plot_target_layers_ror_overlay_above_temperature_surfa
         target.close()
 
 
+def test_create_pyqtgraph_plot_target_hides_pyqtgraph_auto_range_button() -> None:
+    target = create_pyqtgraph_plot_target(use_opengl=False, include_ror=True)
+    try:
+        auto_button = getattr(target.temperature_plot, 'autoBtn', None)
+        assert auto_button is not None
+        assert auto_button.parentItem() is None
+    finally:
+        target.close()
+
+
+def test_pyqtgraph_plot_target_emits_cursor_positions_to_callback() -> None:
+    target = create_pyqtgraph_plot_target(use_opengl=False, include_ror=True)
+    received: list[tuple[float, float, float | None]] = []
+    try:
+        target.set_cursor_callback(lambda x, y, ror_y: received.append((x, y, ror_y)))
+
+        target.emit_cursor_position(90.0, 166.0, 7.5)
+
+        assert received == [(90.0, 166.0, 7.5)]
+    finally:
+        target.close()
+
+
 def test_create_pyqtgraph_plot_target_can_skip_ror_plot() -> None:
     target = create_pyqtgraph_plot_target(use_opengl=False, include_ror=False)
     try:

@@ -322,7 +322,12 @@ def _default_pen_factory(curve: CurveSnapshot) -> object:
         import pyqtgraph as pg  # type: ignore[import-not-found,unused-ignore]
     except ImportError:
         return _pen_for_curve(curve)
-    line_width = max(2.4, curve.line_width) if curve.y_axis == 'ror' else curve.line_width
+    if curve.name == 'BT' and curve.y_axis == 'temperature':
+        line_width = max(2.2, curve.line_width)
+    elif curve.y_axis == 'ror':
+        line_width = max(2.4, curve.line_width)
+    else:
+        line_width = curve.line_width
     return pg.mkPen(color=_color_with_alpha(pg, curve.color, curve.opacity), width=line_width, style=_qt_pen_style(curve.line_style))
 
 

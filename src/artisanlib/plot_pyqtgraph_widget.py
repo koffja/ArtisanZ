@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 import math
 from typing import Any
 
 from artisanlib.plot_pyqtgraph_adapter import PyQtGraphSnapshotRenderer
+
+CursorPositionCallback = Callable[[float, float, float | None], None]
 
 
 @dataclass(slots=True)
@@ -19,6 +22,8 @@ class PyQtGraphPlotTarget:
     opengl_requested: bool
     _previous_opengl: bool
     _pyqtgraph: Any
+    _cursor_callback: CursorPositionCallback | None = None
+    _cursor_mouse_move_handler: object | None = None
 
     def close(self) -> None:
         close_widget = getattr(self.widget, 'close', None)
@@ -67,6 +72,13 @@ class PyQtGraphPlotTarget:
         time_label = 'Time (s)' if time_label_mode == 'seconds' else 'Time (min)'
         _call_if_available(self.temperature_plot, 'setLabel', 'bottom', time_label)
 
+    def set_cursor_callback(self, callback: CursorPositionCallback | None) -> None:
+        self._cursor_callback = callback
+
+    def emit_cursor_position(self, time: float, temperature: float, ror: float | None) -> None:
+        if self._cursor_callback is not None:
+            self._cursor_callback(float(time), float(temperature), None if ror is None else float(ror))
+
 
 def create_pyqtgraph_plot_target(
         *,
@@ -97,7 +109,7 @@ def create_pyqtgraph_plot_target(
         ror_plot=ror_plot,
         legend_item=legend_item,
     )
-    return PyQtGraphPlotTarget(
+    target = PyQtGraphPlotTarget(
         widget=widget,
         temperature_plot=temperature_plot,
         ror_plot=ror_plot,
@@ -109,6 +121,8 @@ def create_pyqtgraph_plot_target(
         _previous_opengl=previous_opengl,
         _pyqtgraph=pg,
     )
+    _connect_cursor_tracking(target)
+    return target
 
 
 def _configure_temperature_plot(plot: object, pg: Any) -> None:
@@ -120,6 +134,7 @@ def _configure_temperature_plot(plot: object, pg: Any) -> None:
 def _configure_plot_surface(plot: object, pg: Any) -> None:
     _call_if_available(plot, 'showGrid', x=False, y=False, alpha=0.0)
     _call_if_available(plot, 'setMenuEnabled', False)
+    _remove_auto_range_button(plot)
     view_box = getattr(plot, 'getViewBox', lambda: None)()
     _call_if_available(view_box, 'setBackgroundColor', '#F8F7F1')
     _call_if_available(view_box, 'setDefaultPadding', 0.0)
@@ -129,6 +144,63 @@ def _configure_plot_surface(plot: object, pg: Any) -> None:
     _call_if_available(plot, 'setClipToView', True)
     _call_if_available(plot, 'setMouseEnabled', x=True, y=True)
     _configure_axis_pen(plot, pg, '#C9D2D4', '#5E6B6E', 1)
+
+
+def _remove_auto_range_button(plot: object) -> None:
+    auto_button = getattr(plot, 'autoBtn', None)
+    if auto_button is None:
+        return
+    _call_if_available(auto_button, 'hide')
+    _call_if_available(auto_button, 'setEnabled', False)
+    set_parent_item = getattr(auto_button, 'setParentItem', None)
+    if callable(set_parent_item):
+        set_parent_item(None)
+
+
+def _connect_cursor_tracking(target: PyQtGraphPlotTarget) -> None:
+    scene = getattr(target.temperature_plot, 'scene', lambda: None)()
+    signal = getattr(scene, 'sigMouseMoved', None)
+    connect = getattr(signal, 'connect', None)
+    if not callable(connect):
+        return
+
+    def on_mouse_moved(scene_pos: object) -> None:
+        if not _plot_scene_contains(target.temperature_plot, scene_pos):
+            return
+        view_box = getattr(target.temperature_plot, 'getViewBox', lambda: None)()
+        map_scene_to_view = getattr(view_box, 'mapSceneToView', None)
+        if not callable(map_scene_to_view):
+            return
+        point = map_scene_to_view(scene_pos)
+        ror_value = _mapped_ror_value(target.ror_plot, scene_pos)
+        target.emit_cursor_position(float(point.x()), float(point.y()), ror_value)
+
+    target._cursor_mouse_move_handler = on_mouse_moved
+    connect(on_mouse_moved)
+
+
+def _plot_scene_contains(plot: object, scene_pos: object) -> bool:
+    scene_rect = getattr(plot, 'sceneBoundingRect', lambda: None)()
+    contains = getattr(scene_rect, 'contains', None)
+    if callable(contains):
+        return bool(contains(scene_pos))
+    return True
+
+
+def _mapped_ror_value(ror_plot: object | None, scene_pos: object) -> float | None:
+    if ror_plot is None:
+        return None
+    view_box = getattr(ror_plot, 'view_box', None)
+    if view_box is None:
+        view_box = getattr(ror_plot, 'getViewBox', lambda: None)()
+    map_scene_to_view = getattr(view_box, 'mapSceneToView', None)
+    if not callable(map_scene_to_view):
+        return None
+    try:
+        point = map_scene_to_view(scene_pos)
+        return float(point.y())
+    except Exception:  # pylint: disable=broad-exception-caught
+        return None
 
 
 def _create_grid_overlay(plot: object, pg: Any) -> object | None:

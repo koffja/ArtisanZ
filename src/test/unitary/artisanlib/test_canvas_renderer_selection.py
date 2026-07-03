@@ -79,12 +79,24 @@ class FakePyQtGraphTarget:
         self.renderer = FakePyQtGraphRenderer(fail_update=fail_update)
         self.closed = False
         self.axis_configs: list[dict[str, object]] = []
+        self.cursor_callback = None
 
     def close(self) -> None:
         self.closed = True
 
     def configure_axes(self, **kwargs: object) -> None:
         self.axis_configs.append(kwargs)
+
+    def set_cursor_callback(self, callback: object) -> None:
+        self.cursor_callback = callback
+
+
+class FakeToolbar:
+    def __init__(self) -> None:
+        self.message = ''
+
+    def set_message(self, message: str) -> None:
+        self.message = message
 
 
 class FakeWidget:
@@ -152,6 +164,16 @@ class FakeLiveFrameCanvas:
         self.palette = {'grid': '#e5e5e5', 'xlabel': '#808080'}
         self.timeindex = [0]
         self.timex = [0.0]
+        self.temp1 = [140.0]
+        self.temp2 = [130.0]
+        self.delta1 = [3.0]
+        self.delta2 = [5.0]
+        self.mode = 'C'
+        self.LCDdecimalplaces = True
+        self.fmt_data_ON = True
+        self.fig = SimpleNamespace(canvas=SimpleNamespace(toolbar=FakeToolbar()))
+        self.aw.BTname = 'BT'
+        self.aw.ETname = 'ET'
 
     def apply_pyqtgraph_live_plot_frame(self, frame: LivePlotFrame) -> dict[str, object | None]:
         return canvas.tgraphcanvas.apply_pyqtgraph_live_plot_frame(self, frame)
@@ -246,6 +268,16 @@ def test_canvas_renderer_selection_slot_is_declared() -> None:
     assert 'plot_live_frame_apply_result' in canvas.tgraphcanvas.__slots__
 
 
+def test_default_graph_palette_uses_morandi_roast_colors() -> None:
+    assert canvas.DEFAULT_GRAPH_PALETTE['background'] == '#FFFDF8'
+    assert canvas.DEFAULT_GRAPH_PALETTE['canvas'] == '#F7F6F0'
+    assert canvas.DEFAULT_GRAPH_PALETTE['grid'] == '#E1E4E0'
+    assert canvas.DEFAULT_GRAPH_PALETTE['bt'] == '#4E7180'
+    assert canvas.DEFAULT_GRAPH_PALETTE['et'] == '#A76557'
+    assert canvas.DEFAULT_GRAPH_PALETTE['deltabt'] == '#90A1A8'
+    assert canvas.DEFAULT_GRAPH_PALETTE['rect3'] == '#F4F2EC'
+
+
 def test_apply_live_plot_frame_uses_selected_matplotlib_renderer() -> None:
     window = FakeLiveFrameCanvas(_renderer_selection('matplotlib-snapshot'))
     frame = LivePlotFrame(curves=(
@@ -311,6 +343,23 @@ def test_enable_selected_plot_widget_syncs_initial_pyqtgraph_snapshot(
     assert window.canvas.visible is False
     assert target.renderer.snapshots == [snapshot]
     assert target.axis_configs
+    assert callable(target.cursor_callback)
+
+
+def test_update_pyqtgraph_cursor_message_writes_time_temperature_and_ror_to_toolbar() -> None:
+    window = FakeLiveFrameCanvas(_renderer_selection('pyqtgraph-snapshot'))
+    window.timex = [0.0, 60.0, 120.0]
+    window.temp2 = [130.0, 150.0, 166.4]
+    window.delta2 = [5.0, 7.0, 8.2]
+    window.timeindex = [0]
+
+    canvas.tgraphcanvas.update_pyqtgraph_cursor_message(window, 120.0, 165.9, 8.2)
+
+    message = window.fig.canvas.toolbar.message
+    assert '2:00' in message
+    assert 'BT' in message
+    assert '166.4°C' in message
+    assert 'RoR 8.2°C/min' in message
 
 
 def test_enable_selected_plot_widget_keeps_pyqtgraph_when_initial_static_overlay_fails(

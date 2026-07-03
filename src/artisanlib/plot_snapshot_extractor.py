@@ -3,6 +3,11 @@ from __future__ import annotations
 import math
 from typing import Any
 
+try:
+    from PyQt6.QtWidgets import QApplication
+except ImportError:  # pragma: no cover - PyQt6 is a runtime dependency in normal builds
+    QApplication = None  # type: ignore[assignment]
+
 from artisanlib.plot_snapshot import (
     AreaFillSnapshot,
     AxisSnapshot,
@@ -429,7 +434,7 @@ def _turning_point_marker(
     tp_index = _tp_index(source)
     if tp_index is None or tp_index <= 0 or tp_index >= len(timex):
         return None
-    label = f'TP {_event_elapsed_label(timex, timeindex, tp_index)}'
+    label = f'{_translate_label("TP")} {_event_elapsed_label(timex, timeindex, tp_index)}'
     return EventMarkerSnapshot(
         time=float(timex[tp_index]),
         label=label,
@@ -441,15 +446,26 @@ def _turning_point_marker(
 
 
 def _main_event_label(timex: list[Any], timeindex: list[Any], event_number: int, fallback: str) -> str:
+    label = _translate_label(fallback)
     if event_number == 0:
-        return fallback
+        return label
     if event_number >= len(timeindex):
-        return fallback
+        return label
     try:
         event_index = int(timeindex[event_number])
     except (TypeError, ValueError):
-        return fallback
-    return f'{fallback} {_event_elapsed_label(timex, timeindex, event_index)}'
+        return label
+    return f'{label} {_event_elapsed_label(timex, timeindex, event_index)}'
+
+
+def _translate_label(text: str) -> str:
+    translate = getattr(QApplication, 'translate', None)
+    if not callable(translate):
+        return text
+    try:
+        return str(translate('Label', text))
+    except Exception:  # pylint: disable=broad-exception-caught
+        return text
 
 
 def _event_elapsed_label(timex: list[Any], timeindex: list[Any], event_index: int) -> str:
