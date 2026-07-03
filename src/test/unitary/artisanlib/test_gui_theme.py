@@ -43,6 +43,8 @@ def test_modern_application_stylesheet_contains_core_surfaces() -> None:
 
     assert 'QMainWindow' in stylesheet
     assert 'QToolBar' in stylesheet
+    assert 'QToolBar#roastNavigationToolbar' in stylesheet
+    assert 'QToolBar#roastNavigationToolbar::separator' in stylesheet
     assert 'QMenuBar' in stylesheet
     assert 'QPushButton' in stylesheet
     assert 'QLCDNumber[lcdValue="true"]' in stylesheet
@@ -116,6 +118,16 @@ def test_modern_toolbar_icon_path_handles_png_names() -> None:
 
     assert icon_path is not None
     assert icon_path.endswith('/Icons/qt4_editor_options.svg')
+
+
+def test_modern_toolbar_icon_path_uses_cotrix_brand_icon() -> None:
+    icon_path = modern_toolbar_icon_path('cotrix', white_icons=False, svg_support=True)
+    white_icon_path = modern_toolbar_icon_path('cotrix', white_icons=True, svg_support=True)
+
+    assert icon_path is not None
+    assert icon_path.endswith('/Icons/cotrix.svg')
+    assert white_icon_path is not None
+    assert white_icon_path.endswith('/Icons/white_cotrix.svg')
 
 
 def test_apply_modern_dialog_polish_sets_runtime_visual_roles(qapp: QApplication) -> None: # noqa: ARG001

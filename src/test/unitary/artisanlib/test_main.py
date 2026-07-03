@@ -112,6 +112,7 @@ import os
 import tempfile
 from pathlib import Path
 from collections.abc import Generator
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import Mock, patch
 
@@ -186,6 +187,37 @@ if not QApplication.instance():
 from artisanlib.atypes import RecentRoast
 from artisanlib.main import ApplicationWindow
 from artisanlib.widgets import MyQLCDNumber, SliderUnclickable
+
+
+class FakeToolbarAction:
+    def __init__(self) -> None:
+        self.icon: object | None = None
+        self.tooltip: str | None = None
+        self.enabled: bool | None = None
+        self.visible: bool | None = None
+
+    def setIcon(self, icon: object) -> None:  # noqa: N802
+        self.icon = icon
+
+    def setToolTip(self, tooltip: str) -> None:  # noqa: N802
+        self.tooltip = tooltip
+
+    def setEnabled(self, enabled: bool) -> None:  # noqa: N802
+        self.enabled = enabled
+
+    def setVisible(self, visible: bool) -> None:  # noqa: N802
+        self.visible = visible
+
+
+class FakePlusToolbar:
+    def __init__(self) -> None:
+        self._actions = [FakeToolbarAction(), FakeToolbarAction()]
+
+    def actions(self) -> list[FakeToolbarAction]:
+        return self._actions
+
+    def _icon(self, name: str) -> str:
+        return name
 
 
 @pytest.fixture(autouse=True)
@@ -3329,6 +3361,35 @@ class TestSettingsUtilities:
 
         # Cleanup
         settings.endGroup()
+
+
+def test_update_plus_status_uses_cotrix_brand_and_hides_empty_subscription(
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    from artisanlib import main
+
+    toolbar = FakePlusToolbar()
+    window = SimpleNamespace(
+        plus_account=None,
+        plus_subscription=None,
+        plus_paidUntil=None,
+        plus_rlimit=0,
+        plus_used=0,
+        editgraphdialog=True,
+        qmc=SimpleNamespace(adderror=Mock()),
+    )
+    monkeypatch.setattr(main, 'svgsupport', True)
+    monkeypatch.setattr(
+        main,
+        'translatedServiceMessage',
+        lambda message, **_kwargs: message.replace('artisan.plus', 'Cotrix'),
+    )
+
+    ApplicationWindow.updatePlusStatus(window, toolbar)
+
+    assert toolbar.actions()[0].icon == 'cotrix.svg'
+    assert toolbar.actions()[0].tooltip == 'Connect Cotrix'
+    assert toolbar.actions()[1].enabled is False
+    assert toolbar.actions()[1].visible is False
 
 
 class TestRecentRoastUtilities:

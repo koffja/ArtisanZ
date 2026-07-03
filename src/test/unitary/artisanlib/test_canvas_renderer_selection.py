@@ -360,6 +360,8 @@ def test_update_pyqtgraph_cursor_message_writes_time_temperature_and_ror_to_tool
     assert 'BT' in message
     assert '166.4°C' in message
     assert 'RoR 8.2°C/min' in message
+    assert '<PRE>' not in message
+    assert '\n' not in message
 
 
 def test_enable_selected_plot_widget_keeps_pyqtgraph_when_initial_static_overlay_fails(

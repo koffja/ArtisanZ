@@ -52,6 +52,7 @@ Important observations from the code review:
 | 1.21 | PyQtGraph Roast-Analysis Parity | Closed: legend, phase summary, development highlight, event values | Analysis overlays and legend in PyQtGraph | Completed roast analysis keeps the core legacy visual semantics |
 | 1.22 | PyQtGraph Original Annotation and RoR Pass | Closed: original-style event annotations, TP, visible RoR overlay | Event points/leaders/value labels, TP marker, thicker phase bars | PyQtGraph annotations are no longer reduced to vertical-line labels |
 | 1.23 | PyQtGraph Cursor, i18n, and Theme Parity | Closed: toolbar cursor readout, translated labels, Morandi default palette | Cursor time/temp/RoR callback, i18n event labels, wider inputs, flat theme preservation | The default renderer restores key interaction feedback and theme consistency |
+| 1.24 | Cotrix Toolbar and Cursor Fit Pass | Closed: Cotrix brand entry, compact toolbar, unclipped cursor text | Cotrix SVG assets, hidden empty subscription action, single-line cursor readout | Toolbar no longer carries obvious Artisan Plus leftovers or clipped telemetry |
 | 2 | Plot Renderer Boundary and PyQtGraph POC | Guarded PyQtGraph main-splitter embed implemented and benchmarked in offscreen/native-window simulator smokes | Read-only plot snapshot model, Matplotlib adapter, PyQtGraph live adapter prototype | POC is benchmarkable before any live renderer swap |
 | 3 | Sampling Post-Processing Decoupling | Pure helper extraction surface audited; remaining work is orchestration/renderer payload | Pure data pipeline for filtering, RoR, PID inputs, alarm/event decisions | GUI thread consumes snapshots instead of doing heavy processing inline |
 | 4 | Main UI Information Architecture | Closed at IA/policy/status-hint layer | Scenario-oriented Roast Control, QC Analysis, Device Setup, Production, and Expert workspaces | Users can switch task modes without losing existing expert controls |
@@ -310,6 +311,16 @@ Important observations from the code review:
 **Evidence:** Focused renderer/widget/canvas/theme/extractor tests produced `97 passed`; `py_compile`, targeted `ruff check`, and `git diff --check` passed. WebSocket event-heavy smoke with `/tmp/artisanz-phase123-pyqtgraph-cursor-theme.png` produced `ror_item_count=2`, `temperature_item_count=7`, `renderer_event_item_count=9`, and `screenshot_sampled_non_background_pixel_count=25257`.
 
 **Remaining Gate:** If a real saved profile still hides ET RoR, inspect the actual persisted curve-visibility flags and profile data path next. The code path now renders Delta ET when `DeltaETflag` is true and includes it in the PyQtGraph legend, but a user-specific configuration/profile can still disable that curve before it reaches the renderer.
+
+## Phase 1.24: Cotrix Toolbar and Cursor Fit Pass
+
+**Goal:** Remove the most visible toolbar leftovers from Artisan Plus and fix PyQtGraph cursor telemetry clipping.
+
+**Closed:** 2026-07-03 with a Cotrix brand action replacing the plus-sign service icon, dedicated light/dark Cotrix SVG assets, hidden subscription placeholder actions when there is no active subscription state, a flatter and more stable roast navigation toolbar style, removal of the old square separator artifact, reduced cursor-label font scaling, vertically centered toolbar telemetry, and a single-line PyQtGraph cursor readout instead of the previous two-line `<PRE>` block.
+
+**Evidence:** Focused toolbar/theme/cursor tests produced `29 passed`; `py_compile`, targeted `ruff check`, and `git diff --check` passed. Offscreen main-window screenshot smoke wrote `/tmp/artisanz-toolbar-redesign.png` from a saved profile and visually confirmed the Cotrix entry, no empty subscription gap, no separator block, and a loaded PyQtGraph profile view.
+
+**Remaining Gate:** The current toolbar still keeps Home/Back/Forward/Pan/Zoom for Matplotlib compatibility and the existing Lines action for curve style configuration. A follow-up PyQtGraph-native toolbar pass should decide whether to replace those Matplotlib navigation actions with PyQtGraph-specific reset/fit/interaction controls.
 
 ## Phase 2: Plot Renderer Boundary and PyQtGraph POC
 

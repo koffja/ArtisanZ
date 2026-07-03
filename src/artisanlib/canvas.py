@@ -5682,7 +5682,7 @@ class tgraphcanvas(QObject):
         if not callable(set_message):
             return
         if not bool(getattr(self, 'fmt_data_ON', True)):
-            set_message('<PRE></PRE>')
+            set_message('')
             return
         channel, temperature, ror = tgraphcanvas._pyqtgraph_cursor_curve_values(
             self,
@@ -5694,10 +5694,7 @@ class tgraphcanvas(QObject):
         unit = str(getattr(self, 'mode', '') or '')
         temperature_text = tgraphcanvas._pyqtgraph_cursor_value_text(self, temperature)
         ror_text = tgraphcanvas._pyqtgraph_cursor_value_text(self, ror)
-        set_message(
-            f'<PRE>{time_text}\n'
-            f'{channel} {temperature_text}°{unit}  RoR {ror_text}°{unit}/min</PRE>',
-        )
+        set_message(f'{time_text}   {channel} {temperature_text}°{unit}   RoR {ror_text}°{unit}/min')
 
     def _pyqtgraph_cursor_curve_values(
             self,

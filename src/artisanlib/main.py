@@ -136,7 +136,7 @@ from PyQt6.QtGui import (QScreen, QPageLayout, QAction, QImageReader, QWindow,
 from PyQt6.QtPrintSupport import (QPrinter,QPrintDialog)
 from PyQt6.QtCore import (QStandardPaths, QLibraryInfo, QTranslator, QLocale, QFileInfo, PYQT_VERSION_STR, pyqtSignal, pyqtSlot, QtMsgType,
                           qVersion, QVersionNumber, QTime, QTimer, QFile, QIODevice, QTextStream, QSettings,
-                          QRegularExpression, QDate, QUrl, QUrlQuery, QDir, Qt, QPoint, QEvent, QDateTime, QThread, qInstallMessageHandler)
+                          QRegularExpression, QDate, QUrl, QUrlQuery, QDir, Qt, QPoint, QEvent, QDateTime, QThread, QSize, qInstallMessageHandler)
 from PyQt6.QtNetwork import QLocalSocket
 
 QtWebEngineSupport:bool = False # set to True if the QtWebEngine was successfully imported
@@ -762,12 +762,11 @@ class VMToolbar(NavigationToolbar): # pylint: disable=abstract-method
 
         # toolitem entries of the form (text, tooltip_text, image_file, callback)
         self.toolitems: list[tuple[str, ...] | tuple[None, ...]] = [ # zuban:ignore[assignment] # pyrefly:ignore[bad-override]
-                ('Plus', QApplication.translate('Tooltip', 'Connect to plus service'), 'plus', 'plus'),
+                ('Cotrix', translatedServiceMessage('Connect artisan.plus', context='Tooltip'), 'cotrix', 'plus'),
                 ('', QApplication.translate('Tooltip', 'Subscription'), 'plus-pro', 'subscription'),
                 (QApplication.translate('Toolbar', 'Home'), QApplication.translate('Tooltip', 'Reset original view'), 'home', 'home'),
                 (QApplication.translate('Toolbar', 'Back'), QApplication.translate('Tooltip', 'Back to  previous view'), 'back', 'back'),
                 (QApplication.translate('Toolbar', 'Forward'), QApplication.translate('Tooltip', 'Forward to next view'), 'forward', 'forward'),
-                (None, None, None, None),
                 (QApplication.translate('Toolbar', 'Pan'), QApplication.translate('Tooltip', 'Pan axes with left mouse, zoom with right'), 'move', 'pan'),
                 (QApplication.translate('Toolbar', 'Zoom'), QApplication.translate('Tooltip', 'Zoom to rectangle'), 'zoom_to_rect', 'zoom'),
         ]
@@ -784,20 +783,31 @@ class VMToolbar(NavigationToolbar): # pylint: disable=abstract-method
         self._last_event:mplLocationevent|None = None
 
         NavigationToolbar.__init__(self, plotCanvas, parent) # type:ignore[no-untyped-call]
+        self.setObjectName('roastNavigationToolbar')
+        self.setMovable(False)
+        self.setFloatable(False)
+        self.setIconSize(QSize(30, 30))
+        self.setContentsMargins(6, 4, 6, 4)
 
         # lets make the font of the coordinates QLabel a little larger
         f = self.locLabel.font()
 
         if platform.system() == 'Linux':
-            f.setPointSize(f.pointSize()-1)
+            f.setPointSize(max(8, f.pointSize() - 1))
         else:
-            f.setPointSize(f.pointSize()+4)
+            f.setPointSize(max(10, f.pointSize() + 1))
 ##        f.setStyleHint(QFont.StyleHint.TypeWriter) # not monospaced!
 #        f.setStyleHint(QFont.StyleHint.Monospace)
 #        f.setFamily('monospace')
 ##        f.setWeight(QFont.Bold)
 ##        f.setBold(True)
         self.locLabel.setFont(f)
+        self.locLabel.setMinimumHeight(30)
+        self.locLabel.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight)
+        self.locLabel.setContentsMargins(8, 0, 8, 0)
+        self.locLabel.setStyleSheet(
+            'QLabel { color:#006EA0; padding:0 6px; margin:0; font-weight:600; }',
+        )
 
 # WORK:
 
@@ -805,7 +815,7 @@ class VMToolbar(NavigationToolbar): # pylint: disable=abstract-method
         self.edit_curve_parameters_action = None
 
         # adjust for dark or light canvas and set hover/selection style
-        for a in self.actions():
+        for i, a in enumerate(self.actions()):
             if self.qmc.palette['canvas'] == 'None':
                 canvas_color = QColor('#ECECEC')
             else:
@@ -819,11 +829,25 @@ class VMToolbar(NavigationToolbar): # pylint: disable=abstract-method
             else:
                 selected_canvas_color = canvas_color.darker(120)
                 border_color = '#000000'
-            self.widgetForAction(a).setStyleSheet(' \
-                    QToolButton:checked {border:1px solid transparent; margin: 1px; padding: 2px; background-color:' + selected_canvas_color.name() + ';border-radius: 3px;} \
-                    QToolButton:hover {border:1px solid ' + border_color + '; margin: 2px; padding: 2px; background-color:transparent;border-radius: 3px;} \
-                    QToolButton:checked:hover {border:1px solid ' + border_color + '; margin: 2px; padding: 2px; background-color:' + selected_canvas_color.name() + ';border-radius: 3px;} \
-                    QToolButton {border:1px solid transparent; margin: 2px; padding: 2px; background-color: transparent;border-radius: 3px;}')
+            button = self.widgetForAction(a)
+            if button is None:
+                continue
+            button.setProperty('modernToolbarButton', True)
+            button.setMinimumHeight(36)
+            button.setMinimumWidth(42)
+            if i == 0:
+                button.setProperty('modernToolbarRole', 'brand')
+                set_tool_button_style = getattr(button, 'setToolButtonStyle', None)
+                if callable(set_tool_button_style):
+                    set_tool_button_style(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+                button.setMinimumWidth(104)
+            button.setStyleSheet(' \
+                    QToolButton {min-width:34px; min-height:34px; border:1px solid transparent; margin: 1px; padding: 5px 8px; background-color: transparent;border-radius: 8px;color:#485251;} \
+                    QToolButton:hover {min-width:34px; min-height:34px; border:1px solid #D5DDDA; margin: 1px; padding: 5px 8px; background-color:#EEF3F1;border-radius: 8px;color:#2F4F55;} \
+                    QToolButton:checked {min-width:34px; min-height:34px; border:1px solid transparent; margin: 1px; padding: 5px 8px; background-color:' + selected_canvas_color.name() + ';border-radius: 8px;color:' + border_color + ';} \
+                    QToolButton:checked:hover {min-width:34px; min-height:34px; border:1px solid #BFCAC6; margin: 1px; padding: 5px 8px; background-color:' + selected_canvas_color.name() + ';border-radius: 8px;color:' + border_color + ';} \
+                    QToolButton[modernToolbarRole="brand"] {min-width:96px; min-height:34px; font-weight:700; padding-left:9px; padding-right:12px; background-color:#F6FAF8;border:1px solid #D9E3DF;color:#2F5960;} \
+                    QToolButton[modernToolbarRole="brand"]:hover {background-color:#EAF3F0;border:1px solid #BFD1CB;color:#234B52;}')
 
         self.aw.updatePlusStatus(self)
 
@@ -5633,6 +5657,7 @@ class ApplicationWindow(QMainWindow):
             else:
                 plus_icon = 'plus-off'
                 tooltip = translatedServiceMessage('Connect artisan.plus', context='Tooltip')
+            plus_icon = 'cotrix'
             if svgsupport:
                 plus_icon += '.svg'
             else:
@@ -5650,9 +5675,11 @@ class ApplicationWindow(QMainWindow):
                     a = ntb.actions()[1] # the plus subscription action is the second one
                     if subscription_icon is None:
                         a.setEnabled(False)
+                        a.setVisible(False)
                         a.setIcon(QIcon())
                     else:
                         a.setEnabled(True)
+                        a.setVisible(True)
                         a.setIcon(ntb._icon(subscription_icon)) # pylint: disable=protected-access
         except Exception as e: # pylint: disable=broad-except
             _log.exception(e)

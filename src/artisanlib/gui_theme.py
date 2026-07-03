@@ -563,6 +563,18 @@ def modern_application_stylesheet(theme: ModernTheme | None = None) -> str:
             spacing: 4px;
             padding: 3px;
         }}
+        QToolBar#roastNavigationToolbar {{
+            background-color: #F7F9F6;
+            border: 0;
+            border-bottom: 1px solid #DDE5E1;
+            spacing: 6px;
+            padding: 6px 8px;
+        }}
+        QToolBar#roastNavigationToolbar::separator {{
+            background-color: #D1DBD7;
+            width: 1px;
+            margin: 7px 9px;
+        }}
         QStatusBar {{
             background-color: {t.surface};
             border-top: 1px solid {t.border};
