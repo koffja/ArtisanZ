@@ -156,6 +156,7 @@ hiddenimports_list=['charset_normalizer.md__mypyc', # part of requests 2.28.2 # 
                             ]
 
 datas = collect_data_files('bleak', subdir=r'backends\winrt')
+datas += collect_data_files('pyqtgraph')  # bundle pyqtgraph icons/QSS/etc.
 
 binaries = collect_dynamic_libs('bleak')
 block_cipher = None

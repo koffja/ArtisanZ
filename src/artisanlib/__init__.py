@@ -1,7 +1,8 @@
 __version__ = '4.2.1'
 __revision__ = ''
 __build__ = '0'
-__artisan_os__ = 'Linux'
+import platform as _platform
+__artisan_os__ = 'Darwin' if _platform.system() == 'Darwin' else ('Windows' if _platform.system() == 'Windows' else 'Linux')
 
 # Keep in sync with plus.service_identity.DISPLAY_NAME and WEB_BASE_URL.
 # We cannot import from plus.* here because plus.connection imports

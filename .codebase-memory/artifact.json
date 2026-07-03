@@ -1,11 +1,11 @@
 {
     "schema_version": 1,
-    "commit": "580cd237647b9953136d4154dd3a6ed7a3d3db7d",
-    "indexed_at": "2026-07-03T07:47:20Z",
+    "commit": "1f2380182061ce1ba5254d22bf114ca5a31d22c2",
+    "indexed_at": "2026-07-03T07:59:46Z",
     "project": "Users-chengzhe-Projects-ArtisanZ",
-    "nodes": 29914,
-    "edges": 85585,
-    "original_size": 74252288,
-    "compressed_size": 11835586,
+    "nodes": 781,
+    "edges": 1093,
+    "original_size": 3211264,
+    "compressed_size": 372568,
     "compression_level": 3
 }
