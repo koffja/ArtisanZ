@@ -769,7 +769,7 @@ ROAST_TOOLBAR_VISUAL_METRICS: Final[dict[str, int]] = {
     'toolbar_vertical_padding': 6,
     'button_height': 44,
     'button_width': 48,
-    'brand_width': 148,
+    'brand_width': 112,
     'icon_size': 30,
     'label_height': 44,
 }
@@ -973,7 +973,7 @@ class VMToolbar(NavigationToolbar): # pylint: disable=abstract-method
                 QToolButton:hover {border:1px solid #D5DDDA; background-color:#EEF3F1;color:#2F4F55;} \
                 QToolButton:checked {border:1px solid transparent; background-color:' + selected_canvas_color + ';color:' + border_color + ';} \
                 QToolButton:checked:hover {border:1px solid #BFCAC6; background-color:' + selected_canvas_color + ';color:' + border_color + ';} \
-                QToolButton[modernToolbarRole="brand"] {min-width:' + str(metrics['brand_width']) + 'px; max-width:' + str(metrics['brand_width']) + 'px; min-height:' + str(metrics['button_height']) + 'px; max-height:' + str(metrics['button_height']) + 'px; font-weight:700; padding-left:12px; padding-right:16px; background-color:#F6FAF8;border:1px solid #CFE0DA;color:#2F5960;border-radius: 12px;} \
+                QToolButton[modernToolbarRole="brand"] {min-width:' + str(metrics['brand_width']) + 'px; max-width:' + str(metrics['brand_width']) + 'px; min-height:' + str(metrics['button_height']) + 'px; max-height:' + str(metrics['button_height']) + 'px; font-weight:700; padding-left:6px; padding-right:8px; background-color:#F6FAF8;border:1px solid #CFE0DA;color:#2F5960;border-radius: 12px;} \
                 QToolButton[modernToolbarRole="brand"]:hover {background-color:#EAF3F0;border:1px solid #BFD1CB;color:#234B52;}')
 
     def _apply_renderer_surface_toolbar_policy(self) -> None:
