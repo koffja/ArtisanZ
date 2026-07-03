@@ -279,10 +279,11 @@ def build_snapshot_from_websocket_stream(
     temperature_axis = _temperature_axis(bt + et)
     time_axis = AxisSnapshot(minimum=0.0, maximum=max(60.0, x[-1] + 30.0), label='Time')
     ror_axis = _ror_axis(delta_bt + delta_et)
+    charge_time = _event_time(events, 100)
     event_markers = tuple(
         EventMarkerSnapshot(
             time=event.time_s,
-            label=event.label,
+            label=_main_event_label(event, charge_time),
             event_type=event.event_type,
             color=event.color,
             value=event.value,
@@ -290,7 +291,8 @@ def build_snapshot_from_websocket_stream(
             kind=event.kind,
         )
         for event in events
-    )
+    ) + _turning_point_markers(samples, events)
+    event_markers = tuple(sorted(event_markers, key=lambda event: (event.time, event.event_type)))
     event_values = tuple(
         EventValueSnapshot(
             time=event.time_s,
@@ -487,10 +489,11 @@ def _phase_summaries(
     total = drop - charge
     if total <= 0:
         return ()
+    tp_time = _turning_point_time(samples, charge, dry)
     specs = (
-        ('Drying', charge, dry, '#DDE8E0'),
-        ('Maillard', dry, first_crack, '#E7DEC9'),
-        ('Development', first_crack, drop, '#FFF6A8'),
+        ('Drying', charge, dry, tp_time if tp_time is not None else charge, dry, '#DDE8E0'),
+        ('Maillard', dry, first_crack, dry, first_crack, '#E7DEC9'),
+        ('Development', first_crack, drop, first_crack, drop, '#FFF6A8'),
     )
     return tuple(
         PhaseSummarySnapshot(
@@ -499,11 +502,49 @@ def _phase_summaries(
             label=label,
             duration_text=_format_seconds_as_minsec(end - start),
             percent_text=f'{(end - start) / total * 100.0:.1f}%',
-            delta_text=_sample_delta_text(samples, start, end),
+            delta_text=_sample_delta_text(samples, delta_start, delta_end),
             color=color,
         )
-        for label, start, end, color in specs
+        for label, start, end, delta_start, delta_end, color in specs
     )
+
+
+def _turning_point_markers(
+        samples: tuple[WebSocketTemperatureSample, ...],
+        events: tuple[WebSocketPushEvent, ...]) -> tuple[EventMarkerSnapshot, ...]:
+    charge = _event_time(events, 100)
+    dry = _event_time(events, 101)
+    tp_time = _turning_point_time(samples, charge, dry)
+    if charge is None or tp_time is None:
+        return ()
+    return (
+        EventMarkerSnapshot(
+            time=tp_time,
+            label=f'TP {_format_seconds_as_minsec(tp_time - charge)}',
+            event_type=99,
+            color='#5E6B6E',
+            temperature=_nearest_bt(samples, tp_time),
+            kind='main',
+        ),
+    )
+
+
+def _turning_point_time(
+        samples: tuple[WebSocketTemperatureSample, ...],
+        charge: float | None,
+        dry: float | None) -> float | None:
+    if charge is None or dry is None or dry <= charge:
+        return None
+    candidates = [sample for sample in samples if charge <= sample.time_s <= dry]
+    if not candidates:
+        return None
+    return min(candidates, key=lambda sample: sample.bt).time_s
+
+
+def _main_event_label(event: WebSocketPushEvent, charge_time: float | None) -> str:
+    if event.kind != 'main' or event.event_type == 100 or charge_time is None:
+        return event.label
+    return f'{event.label} {_format_seconds_as_minsec(event.time_s - charge_time)}'
 
 
 def _event_time(events: tuple[WebSocketPushEvent, ...], event_type: int) -> float | None:

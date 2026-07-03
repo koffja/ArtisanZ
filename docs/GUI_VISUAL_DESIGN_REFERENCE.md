@@ -58,9 +58,12 @@ Implementation anchor: `tgraphcanvas.sync_pyqtgraph_static_overlays_from_canvas(
 ## Roast Analysis Overlays
 
 - Main roast events such as CHARGE, DRY, FCs, and DROP must include BT temperature when available.
-- Event labels should remain anchored to meaningful data points where possible; do not reduce them to unlabeled vertical guide lines.
+- Event labels should follow Artisan's original analytical annotation structure: data point marker, leader line, temperature text, and event/time text. Do not reduce main roast events to unlabeled or label-only vertical guide lines.
+- Turning point is a first-class main event when `markTPflag` and a valid TP index exist. The PyQtGraph path must show TP with elapsed time and BT temperature, not only CHARGE/DRY/FCs/DROP.
 - The right-bottom legend is part of the analytical surface. It should include visible ET/BT and RoR curves while skipping projection/background helper curves unless a future mode explicitly exposes them.
-- RoR curves must use sufficient line weight and z-order to stay visible on the right-axis overlay.
+- RoR curves must use sufficient line weight and z-order to stay visible on the right-axis overlay. Saved-profile RoR data should be masked to the same visible segment as the original Matplotlib path and the right axis must include visible RoR values instead of clipping them out.
+- Completed-roast phase summary bars should be visually strong enough to read at a glance. First-phase BT rise uses TP-to-DRY temperature delta when TP is available; do not use CHARGE-to-DRY because that can produce a misleading negative value during the turning-point dip.
+- Top toolbar graph/navigation icons should come from project-owned flat SVG assets before falling back to Matplotlib resources. Avoid heavy legacy MPL bitmap icons in the modern theme.
 
 ## Review Checklist
 

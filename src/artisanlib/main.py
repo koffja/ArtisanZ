@@ -24,7 +24,12 @@ startup_time = libtime.process_time()
 from artisanlib import __version__, __revision__, __build__, __signature__, __release_sponsor_name__
 from artisanlib.charge_manager import ChargeTargetManager
 from artisanlib.charge_dialog import ChargeTempRorDlg
-from artisanlib.gui_theme import lcd_label_stylesheet, lcd_value_stylesheet, modern_application_stylesheet
+from artisanlib.gui_theme import (
+    lcd_label_stylesheet,
+    lcd_value_stylesheet,
+    modern_application_stylesheet,
+    modern_toolbar_icon_path,
+)
 from artisanlib.performance import export_gui_perf_metrics
 from artisanlib.ui_workspaces import (
     WorkspaceMode,
@@ -1059,6 +1064,12 @@ class VMToolbar(NavigationToolbar): # pylint: disable=abstract-method
 
     @override
     def _icon(self, name:str) -> QIcon:
+        modern_icon_path = modern_toolbar_icon_path(name, white_icons=self.white_icons, svg_support=svgsupport)
+        if modern_icon_path is not None:
+            pm = QPixmap(modern_icon_path)
+            if hasattr(pm, 'setDevicePixelRatio'):
+                pm.setDevicePixelRatio(self.devicePixelRatioF() or 1) # pyright:ignore[reportUnknownArgumentType]
+            return QIcon(pm)
         if name.startswith('plus') or self.white_icons:
             basedir = os.path.join(getResourcePath(),'Icons')
         else:

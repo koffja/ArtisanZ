@@ -19,7 +19,12 @@ from PyQt6.QtWidgets import (
 )
 
 from artisanlib import gui_theme
-from artisanlib.gui_theme import ModernTheme, apply_modern_dialog_polish, modern_application_stylesheet
+from artisanlib.gui_theme import (
+    ModernTheme,
+    apply_modern_dialog_polish,
+    modern_application_stylesheet,
+    modern_toolbar_icon_path,
+)
 
 
 @pytest.fixture(scope='session')
@@ -96,6 +101,20 @@ def test_lcd_value_stylesheet_uses_self_contained_surface() -> None:
     assert 'padding: 5px 8px 4px 8px' in stylesheet
     assert 'color: #123456' in stylesheet
     assert 'background-color: #abcdef' in stylesheet
+
+
+def test_modern_toolbar_icon_path_prefers_project_svg_icons() -> None:
+    icon_path = modern_toolbar_icon_path('zoom_to_rect', white_icons=False, svg_support=True)
+
+    assert icon_path is not None
+    assert icon_path.endswith('/Icons/zoom_to_rect.svg')
+
+
+def test_modern_toolbar_icon_path_handles_png_names() -> None:
+    icon_path = modern_toolbar_icon_path('qt4_editor_options.png', white_icons=False, svg_support=True)
+
+    assert icon_path is not None
+    assert icon_path.endswith('/Icons/qt4_editor_options.svg')
 
 
 def test_apply_modern_dialog_polish_sets_runtime_visual_roles(qapp: QApplication) -> None: # noqa: ARG001

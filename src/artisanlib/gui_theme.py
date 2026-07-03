@@ -244,6 +244,22 @@ def _modern_icon_url(file_name: str) -> str:
     return os.path.join(resource_path, 'Icons', file_name).replace('\\', '/')
 
 
+def modern_toolbar_icon_path(name: str, *, white_icons: bool, svg_support: bool) -> str | None:
+    icon_name = name
+    if (white_icons and not icon_name.startswith('plus')) or (not white_icons and icon_name.startswith('plus')):
+        icon_name = 'white_' + icon_name
+    if svg_support:
+        icon_name = icon_name.replace('.png', '.svg')
+        if not icon_name.endswith('.svg'):
+            icon_name = f'{icon_name}.svg'
+    else:
+        icon_name = icon_name.replace('.svg', '.png')
+        if not icon_name.endswith('.png'):
+            icon_name = f'{icon_name}.png'
+    icon_path = _modern_icon_url(icon_name)
+    return icon_path if os.path.exists(icon_path) else None
+
+
 def modern_application_stylesheet(theme: ModernTheme | None = None) -> str:
     t = ModernTheme() if theme is None else theme
     combo_arrow = _modern_icon_url('modern-combo-down.svg')

@@ -18,7 +18,7 @@ from artisanlib.plot_snapshot import (
     TimeRangeSnapshot,
 )
 
-EventItemFactory = Callable[[EventMarkerSnapshot, RoastPlotSnapshot], object | None]
+EventItemFactory = Callable[[EventMarkerSnapshot, RoastPlotSnapshot], object | tuple[object, ...] | None]
 EventValueItemFactory = Callable[[EventValueSnapshot, RoastPlotSnapshot], object | None]
 GuideItemFactory = Callable[[GuideLineSnapshot, RoastPlotSnapshot], object | None]
 PhaseItemFactory = Callable[[PhaseBandSnapshot, RoastPlotSnapshot], object | None]
@@ -161,7 +161,7 @@ class PyQtGraphSnapshotRenderer:
     def _create_item(self, curve: CurveSnapshot) -> object:
         plot = self._plot_for_curve(curve)
         item = plot.plot(curve.x, _pyqtgraph_y_values(curve.y), pen=self._pen_factory(curve), name=curve.name)
-        _call_if_available(item, 'setZValue', 15 if curve.y_axis == 'ror' else 10)
+        _call_if_available(item, 'setZValue', 45 if curve.y_axis == 'ror' else 10)
         return item
 
     def _plot_for_curve(self, curve: CurveSnapshot) -> Any:
@@ -239,12 +239,8 @@ class PyQtGraphSnapshotRenderer:
 
     def _create_event_items(self, event: EventMarkerSnapshot, snapshot: RoastPlotSnapshot) -> list[object]:
         items: list[object] = []
-        line_item = self._event_line_factory(event, snapshot)
-        if line_item is not None:
-            items.append(line_item)
-        label_item = self._event_label_factory(event, snapshot)
-        if label_item is not None:
-            items.append(label_item)
+        items.extend(_as_items(self._event_line_factory(event, snapshot)))
+        items.extend(_as_items(self._event_label_factory(event, snapshot)))
         return items
 
     def _apply_event_values(self, snapshot: RoastPlotSnapshot) -> None:
@@ -326,7 +322,7 @@ def _default_pen_factory(curve: CurveSnapshot) -> object:
         import pyqtgraph as pg  # type: ignore[import-not-found,unused-ignore]
     except ImportError:
         return _pen_for_curve(curve)
-    line_width = max(1.8, curve.line_width) if curve.y_axis == 'ror' else curve.line_width
+    line_width = max(2.4, curve.line_width) if curve.y_axis == 'ror' else curve.line_width
     return pg.mkPen(color=_color_with_alpha(pg, curve.color, curve.opacity), width=line_width, style=_qt_pen_style(curve.line_style))
 
 
@@ -401,11 +397,36 @@ def _as_items(factory_result: object | tuple[object, ...] | None) -> tuple[objec
     return (factory_result,)
 
 
-def _default_event_line_factory(event: EventMarkerSnapshot, _: RoastPlotSnapshot) -> object | None:
+def _default_event_line_factory(
+        event: EventMarkerSnapshot,
+        snapshot: RoastPlotSnapshot) -> object | tuple[object, ...] | None:
     try:
         import pyqtgraph as pg  # type: ignore[import-not-found,unused-ignore]
     except ImportError:
         return None
+    if event.kind == 'main' and event.temperature is not None:
+        temperature_position, label_position = _main_event_annotation_positions(event, snapshot)
+        point = pg.ScatterPlotItem(
+            [event.time],
+            [event.temperature],
+            symbol='o',
+            size=7,
+            pen=pg.mkPen(color=_color_with_alpha(pg, event.color, 0.88), width=1.4),
+            brush=pg.mkBrush(_color_with_alpha(pg, '#FCFBF7', 0.94)),
+        )
+        temperature_leader = pg.PlotDataItem(
+            [event.time, temperature_position[0]],
+            [event.temperature, temperature_position[1]],
+            pen=pg.mkPen(color=_color_with_alpha(pg, event.color, 0.68), width=1.1),
+        )
+        label_leader = pg.PlotDataItem(
+            [event.time, label_position[0]],
+            [event.temperature, label_position[1]],
+            pen=pg.mkPen(color=_color_with_alpha(pg, event.color, 0.55), width=1.0),
+        )
+        for item, z_value in ((temperature_leader, 24), (label_leader, 23), (point, 32)):
+            _call_if_available(item, 'setZValue', z_value)
+        return temperature_leader, label_leader, point
     width = 2 if event.kind == 'main' else 1
     opacity = 0.65 if event.kind == 'main' else 0.45
     item = pg.InfiniteLine(
@@ -434,11 +455,31 @@ def _default_event_value_factory(event_value: EventValueSnapshot, snapshot: Roas
     return item
 
 
-def _default_event_label_factory(event: EventMarkerSnapshot, snapshot: RoastPlotSnapshot) -> object | None:
+def _default_event_label_factory(
+        event: EventMarkerSnapshot,
+        snapshot: RoastPlotSnapshot) -> object | tuple[object, ...] | None:
     try:
         import pyqtgraph as pg  # type: ignore[import-not-found,unused-ignore]
     except ImportError:
         return None
+    if event.kind == 'main' and event.temperature is not None:
+        temperature_position, label_position = _main_event_annotation_positions(event, snapshot)
+        anchor = _main_event_text_anchor(event, snapshot)
+        temperature_label = pg.TextItem(
+            text=f'{event.temperature:.1f}',
+            color='#20272B',
+            anchor=anchor,
+        )
+        temperature_label.setPos(*temperature_position)
+        event_label = pg.TextItem(
+            text=event.label,
+            color='#20272B',
+            anchor=anchor,
+        )
+        event_label.setPos(*label_position)
+        for item in (temperature_label, event_label):
+            _call_if_available(item, 'setZValue', 35)
+        return temperature_label, event_label
     text_color = '#FFFFFF' if event.kind in {'special', 'background'} else event.color
     fill_opacity = 0.78 if event.kind == 'special' else 0.28
     if event.kind == 'background':
@@ -461,6 +502,46 @@ def _event_label_text(event: EventMarkerSnapshot) -> str:
     if event.value is not None and event.kind != 'main':
         return f'{event.label}\n{event.value:.0f}'
     return event.label
+
+
+def _main_event_annotation_positions(
+        event: EventMarkerSnapshot,
+        snapshot: RoastPlotSnapshot) -> tuple[tuple[float, float], tuple[float, float]]:
+    event_temperature = event.temperature
+    if event_temperature is None:
+        y_position = _event_label_y_position(event, snapshot)
+        return (event.time, y_position), (event.time, y_position)
+    x_span = max(1.0, snapshot.time_axis.maximum - snapshot.time_axis.minimum)
+    y_span = max(1.0, snapshot.temperature_axis.maximum - snapshot.temperature_axis.minimum)
+    direction = _main_event_text_direction(event, snapshot)
+    row = _event_label_row(event, snapshot)
+    x_offset = direction * max(10.0, x_span * 0.025)
+    y_offset = y_span * (0.07 + row * 0.025)
+    temperature_y = _clamp(
+        event_temperature + y_offset,
+        snapshot.temperature_axis.minimum + y_span * 0.04,
+        snapshot.temperature_axis.maximum - y_span * 0.035,
+    )
+    label_y = _clamp(
+        event_temperature - (y_offset * 0.72),
+        snapshot.temperature_axis.minimum + y_span * 0.035,
+        snapshot.temperature_axis.maximum - y_span * 0.06,
+    )
+    x = _clamp(
+        event.time + x_offset,
+        snapshot.time_axis.minimum + x_span * 0.015,
+        snapshot.time_axis.maximum - x_span * 0.015,
+    )
+    return (x, temperature_y), (x, label_y)
+
+
+def _main_event_text_anchor(event: EventMarkerSnapshot, snapshot: RoastPlotSnapshot) -> tuple[float, float]:
+    return (0.0, 0.5) if _main_event_text_direction(event, snapshot) > 0 else (1.0, 0.5)
+
+
+def _main_event_text_direction(event: EventMarkerSnapshot, snapshot: RoastPlotSnapshot) -> float:
+    midpoint = (snapshot.time_axis.minimum + snapshot.time_axis.maximum) / 2.0
+    return -1.0 if event.time > midpoint else 1.0
 
 
 def _default_area_item_factory(area: AreaFillSnapshot, _: RoastPlotSnapshot) -> object | None:
@@ -554,7 +635,7 @@ def _default_phase_summary_item_factory(
     bar = pg.PlotDataItem(
         [summary.start, summary.end],
         [y_bar, y_bar],
-        pen=pg.mkPen(color=_color_with_alpha(pg, summary.color, summary.opacity), width=7),
+        pen=pg.mkPen(color=_color_with_alpha(pg, summary.color, min(0.72, summary.opacity + 0.18)), width=14),
     )
     _call_if_available(bar, 'setZValue', 12)
     label = pg.TextItem(

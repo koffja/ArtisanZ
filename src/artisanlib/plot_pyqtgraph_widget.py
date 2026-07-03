@@ -214,6 +214,8 @@ def _create_ror_overlay(temperature_plot: object, pg: Any) -> tuple[PyQtGraphLin
     _call_if_available(scene, 'addItem', view_box)
 
     base_view_box = getattr(temperature_plot, 'getViewBox', lambda: None)()
+    base_z_value = getattr(base_view_box, 'zValue', lambda: -100.0)()
+    _call_if_available(view_box, 'setZValue', base_z_value + 200.0)
 
     def update_views() -> None:
         scene_bounding_rect = getattr(base_view_box, 'sceneBoundingRect', lambda: None)()

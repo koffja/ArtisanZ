@@ -8,7 +8,14 @@ import pytest
 from PyQt6.QtWidgets import QApplication
 
 from artisanlib.plot_pyqtgraph_widget import _grid_display_color, _visible_grid_alpha, create_pyqtgraph_plot_target
-from artisanlib.plot_snapshot import AreaFillSnapshot, AxisSnapshot, CurveSnapshot, PhaseBandSnapshot, RoastPlotSnapshot
+from artisanlib.plot_snapshot import (
+    AreaFillSnapshot,
+    AxisSnapshot,
+    CurveSnapshot,
+    EventMarkerSnapshot,
+    PhaseBandSnapshot,
+    RoastPlotSnapshot,
+)
 
 pg = pytest.importorskip('pyqtgraph')
 _APPLICATION = QApplication.instance() or QApplication([])
@@ -56,6 +63,17 @@ def test_create_pyqtgraph_plot_target_renders_temperature_and_ror_curves() -> No
         target.close()
 
 
+def test_create_pyqtgraph_plot_target_layers_ror_overlay_above_temperature_surface() -> None:
+    target = create_pyqtgraph_plot_target(use_opengl=False, include_ror=True)
+    try:
+        assert target.ror_plot is not None
+        base_view_box = target.temperature_plot.getViewBox()
+
+        assert target.ror_plot.view_box.zValue() > base_view_box.zValue()
+    finally:
+        target.close()
+
+
 def test_create_pyqtgraph_plot_target_can_skip_ror_plot() -> None:
     target = create_pyqtgraph_plot_target(use_opengl=False, include_ror=False)
     try:
@@ -82,6 +100,32 @@ def test_create_pyqtgraph_plot_target_renders_phase_band_overlay() -> None:
         _APPLICATION.processEvents()
 
         assert target.renderer.phase_item_count() == 1
+    finally:
+        target.close()
+
+
+def test_create_pyqtgraph_plot_target_renders_main_event_as_original_annotation_group() -> None:
+    target = create_pyqtgraph_plot_target(use_opengl=False, include_ror=True)
+    try:
+        snapshot = RoastPlotSnapshot(
+            curves=(),
+            time_axis=AxisSnapshot(minimum=-60.0, maximum=720.0, label='Time'),
+            temperature_axis=AxisSnapshot(minimum=70.0, maximum=270.0, label='Temperature'),
+            ror_axis=AxisSnapshot(minimum=-15.0, maximum=25.0, label='RoR'),
+            events=(EventMarkerSnapshot(
+                time=120.0,
+                label='TP 2:00',
+                event_type=99,
+                color='#5E6B6E',
+                temperature=110.0,
+                kind='main',
+            ),),
+        )
+
+        target.renderer.set_snapshot(snapshot)
+        _APPLICATION.processEvents()
+
+        assert target.renderer.event_item_count() == 5
     finally:
         target.close()
 

@@ -136,6 +136,12 @@ class FakeAucTsAw(FakeAucAw):
         return (None, None, None, 2)
 
 
+class FakeCompletedAw:
+    @staticmethod
+    def findTP() -> int:
+        return 2
+
+
 class FakeAucCanvas(FakeCanvas):
     timex = [0.0, 60.0, 120.0, 180.0]
     temp1 = [130.0, 140.0, 155.0, 175.0]
@@ -164,7 +170,11 @@ class FakeCompletedRoastCanvas(FakeOverlayCanvas):
     stemp2 = temp2
     timeindex = [0, 3, 7, 0, 0, 0, 10, 0]
     flagon = False
+    markTPflag = True
+    mode = 'F'
+    delay = 1000
     statisticsflags = [True, True, True, True]
+    aw = FakeCompletedAw()
     palette = {
         **FakeOverlayCanvas.palette,
         'roastphasetext': '#20272B',
@@ -255,7 +265,7 @@ def test_build_roast_plot_snapshot_extracts_main_and_background_event_markers() 
 
     assert snapshot.events[:2] == (
         EventMarkerSnapshot(time=0.0, label='CHARGE', event_type=100, color='#666666', temperature=140.0, kind='main'),
-        EventMarkerSnapshot(time=2.0, label='FCs', event_type=102, color='#666666', temperature=144.0, kind='main'),
+        EventMarkerSnapshot(time=2.0, label='FCs 0:02', event_type=102, color='#666666', temperature=144.0, kind='main'),
     )
     assert EventMarkerSnapshot(
         time=1.0,
@@ -296,7 +306,7 @@ def test_build_roast_plot_snapshot_extracts_completed_phase_summary_and_developm
             label='Drying',
             duration_text='3:00',
             percent_text='30.0%',
-            delta_text='-25.0',
+            delta_text='15.0F',
             color='#DDE8E0',
         ),
         PhaseSummarySnapshot(
@@ -305,7 +315,7 @@ def test_build_roast_plot_snapshot_extracts_completed_phase_summary_and_developm
             label='Maillard',
             duration_text='4:00',
             percent_text='40.0%',
-            delta_text='60.0',
+            delta_text='60.0F',
             color='#E7DEC9',
         ),
         PhaseSummarySnapshot(
@@ -314,10 +324,32 @@ def test_build_roast_plot_snapshot_extracts_completed_phase_summary_and_developm
             label='Development',
             duration_text='3:00',
             percent_text='30.0%',
-            delta_text='27.0',
+            delta_text='27.0F',
             color='#FFF6A8',
         ),
     )
+
+
+def test_build_roast_plot_snapshot_extracts_turning_point_marker() -> None:
+    snapshot = build_roast_plot_snapshot(FakeCompletedRoastCanvas())
+
+    assert EventMarkerSnapshot(
+        time=120.0,
+        label='TP 2:00',
+        event_type=99,
+        color='#666666',
+        temperature=110.0,
+        kind='main',
+    ) in snapshot.events
+
+
+def test_build_roast_plot_snapshot_limits_ror_axis_to_visible_saved_profile_values() -> None:
+    snapshot = build_roast_plot_snapshot(FakeCompletedRoastCanvas())
+    curves = {curve.name: curve for curve in snapshot.curves}
+
+    assert curves['Delta BT'].y == (None, None, None, None, None, 4.6, 5.2, 4.9, None, None, None)
+    assert snapshot.ror_axis is not None
+    assert snapshot.ror_axis.maximum >= 5.2
 
 
 def test_build_roast_plot_snapshot_extracts_guides_when_source_data_exists() -> None:

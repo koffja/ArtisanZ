@@ -53,26 +53,26 @@ def build_roast_plot_snapshot(source: object) -> RoastPlotSnapshot:
     curves = (
         _curve(source, name='BT', y_attr='temp2', color_key='bt', visible_attr='BTcurve'),
         _curve(source, name='ET', y_attr='temp1', color_key='et', visible_attr='ETcurve'),
-        _curve(
+        _delta_curve(
             source,
             name='Delta BT',
             y_attr='delta2',
             color_key='deltabt',
             visible_attr='DeltaBTflag',
-            y_axis='ror'),
-        _curve(
+        ),
+        _delta_curve(
             source,
             name='Delta ET',
             y_attr='delta1',
             color_key='deltaet',
             visible_attr='DeltaETflag',
-            y_axis='ror'),
+        ),
     ) + _background_curves(source) + _projection_curves(source)
     return RoastPlotSnapshot(
         curves=curves,
         time_axis=_time_axis(source),
         temperature_axis=_temperature_axis(source),
-        ror_axis=_ror_axis(source),
+        ror_axis=_ror_axis(source, curves),
         events=events,
         event_values=_event_value_snapshots(events),
         phase_bands=_phase_bands(source),
@@ -120,6 +120,25 @@ def _curve(
         color=_palette_color(source, color_key),
         visible=bool(getattr(source, visible_attr, False)),
         y_axis=y_axis,
+        line_style=_line_style(source, _line_style_attr(name), '-'),
+        line_width=_line_width(source, _line_width_attr(name), 1.0),
+    )
+
+
+def _delta_curve(
+        source: object,
+        *,
+        name: str,
+        y_attr: str,
+        color_key: str,
+        visible_attr: str) -> CurveSnapshot:
+    return CurveSnapshot.from_sequences(
+        name=name,
+        x=_sequence(source, 'timex'),
+        y=_foreground_delta_values(source, _sequence(source, y_attr)),
+        color=_palette_color(source, color_key),
+        visible=bool(getattr(source, visible_attr, False)),
+        y_axis='ror',
         line_style=_line_style(source, _line_style_attr(name), '-'),
         line_width=_line_width(source, _line_width_attr(name), 1.0),
     )
@@ -317,12 +336,15 @@ def _temperature_axis(source: object) -> AxisSnapshot:
     return AxisSnapshot(minimum=minimum, maximum=maximum, label='Temperature')
 
 
-def _ror_axis(source: object) -> AxisSnapshot | None:
+def _ror_axis(source: object, curves: tuple[CurveSnapshot, ...] = ()) -> AxisSnapshot | None:
     axis = getattr(source, 'delta_ax', None)
     if axis is None:
         return None
     minimum, maximum = _axis_limits(axis, 'get_ylim', 0.0, 0.0)
-    return AxisSnapshot(minimum=minimum, maximum=maximum, label='RoR')
+    return _expanded_ror_axis(
+        AxisSnapshot(minimum=minimum, maximum=maximum, label='RoR'),
+        _visible_ror_values(source, curves),
+    )
 
 
 def _axis_limits(axis: object, method_name: str, default_minimum: float, default_maximum: float) -> tuple[float, float]:
@@ -385,13 +407,63 @@ def _main_event_markers(source: object) -> tuple[EventMarkerSnapshot, ...]:
             continue
         markers.append(EventMarkerSnapshot(
             time=float(timex[event_index]),
-            label=label,
+            label=_main_event_label(timex, timeindex, index, label),
             event_type=100 + index,
             color=_palette_color(source, 'markers'),
             temperature=_temperature_at(source, 'temp2', event_index),
             kind='main',
         ))
+    tp_marker = _turning_point_marker(source, timex, timeindex)
+    if tp_marker is not None:
+        markers.append(tp_marker)
+        markers.sort(key=lambda event: (event.time, event.event_type))
     return tuple(markers)
+
+
+def _turning_point_marker(
+        source: object,
+        timex: list[Any],
+        timeindex: list[Any]) -> EventMarkerSnapshot | None:
+    if not bool(getattr(source, 'markTPflag', False)):
+        return None
+    tp_index = _tp_index(source)
+    if tp_index is None or tp_index <= 0 or tp_index >= len(timex):
+        return None
+    label = f'TP {_event_elapsed_label(timex, timeindex, tp_index)}'
+    return EventMarkerSnapshot(
+        time=float(timex[tp_index]),
+        label=label,
+        event_type=99,
+        color=_palette_color(source, 'markers'),
+        temperature=_temperature_at(source, 'temp2', tp_index),
+        kind='main',
+    )
+
+
+def _main_event_label(timex: list[Any], timeindex: list[Any], event_number: int, fallback: str) -> str:
+    if event_number == 0:
+        return fallback
+    if event_number >= len(timeindex):
+        return fallback
+    try:
+        event_index = int(timeindex[event_number])
+    except (TypeError, ValueError):
+        return fallback
+    return f'{fallback} {_event_elapsed_label(timex, timeindex, event_index)}'
+
+
+def _event_elapsed_label(timex: list[Any], timeindex: list[Any], event_index: int) -> str:
+    try:
+        charge_index = int(timeindex[0])
+    except (IndexError, TypeError, ValueError):
+        charge_index = -1
+    charge_time = 0.0
+    if charge_index >= 0 and charge_index < len(timex):
+        charge_time = float(timex[charge_index])
+    try:
+        return _format_seconds_as_minsec(float(timex[event_index]) - charge_time)
+    except (IndexError, TypeError, ValueError):
+        return '0:00'
 
 
 def _foreground_event_markers(source: object) -> tuple[EventMarkerSnapshot, ...]:
@@ -503,8 +575,14 @@ def _phase_summaries(source: object) -> tuple[PhaseSummarySnapshot, ...]:
     total_duration = drop - charge
     if total_duration <= 0:
         return ()
+    tp_index = _tp_index(source)
+    drying_delta_start_index = (
+        tp_index
+        if tp_index is not None and charge_index < tp_index < dry_index
+        else charge_index
+    )
     phase_specs = (
-        ('Drying', charge, dry, charge_index, dry_index, 'roastphase1', '#DDE8E0'),
+        ('Drying', charge, dry, drying_delta_start_index, dry_index, 'roastphase1', '#DDE8E0'),
         ('Maillard', dry, first_crack_start, dry_index, first_crack_index, 'roastphase2', '#E7DEC9'),
         ('Development', first_crack_start, drop, first_crack_index, drop_index, 'roastphase3', '#FFF6A8'),
     )
@@ -566,7 +644,12 @@ def _temperature_delta_text(source: object, start_index: int, end_index: int) ->
     end_temperature = _temperature_at(source, 'temp2', end_index)
     if start_temperature is None or end_temperature is None:
         return ''
-    return f'{end_temperature - start_temperature:.1f}'
+    return f'{end_temperature - start_temperature:.1f}{_temperature_unit_suffix(source)}'
+
+
+def _temperature_unit_suffix(source: object) -> str:
+    mode = str(getattr(source, 'mode', '')).strip()
+    return mode if mode in {'C', 'F'} else ''
 
 
 def _guide_lines(source: object) -> tuple[GuideLineSnapshot, ...]:
@@ -821,6 +904,73 @@ def _background_temperature_values(source: object, values: list[Any]) -> list[fl
     ]
 
 
+def _foreground_delta_values(source: object, values: list[Any]) -> list[float | None]:
+    converted_values = [_temperature_value(value) for value in values]
+    if not converted_values:
+        return []
+    if bool(getattr(source, 'flagstart', False)) or bool(getattr(source, 'foregroundShowFullflag', False)):
+        return converted_values
+    timeindex = _sequence(source, 'timeindex')
+    if len(timeindex) <= 6:
+        return converted_values
+    try:
+        charge_index = int(timeindex[0])
+        drop_index = int(timeindex[6])
+    except (TypeError, ValueError):
+        return converted_values
+    if charge_index < 0:
+        return converted_values
+    if drop_index <= 0 or drop_index >= len(converted_values):
+        drop_index = len(converted_values) - 1
+    delay = _positive_numeric_attr(source, 'delay', 1000.0)
+    skip = max(2, min(20, int(round(5000 / delay))))
+    skip_after_drop = max(2, int(round(skip / 2)))
+    start_index = charge_index + skip
+    end_index = drop_index - skip_after_drop
+    if not (0 <= start_index < end_index <= len(converted_values)):
+        return [None for _ in converted_values]
+    return [
+        value if start_index <= index < end_index else None
+        for index, value in enumerate(converted_values)
+    ]
+
+
+def _visible_ror_values(source: object, curves: tuple[CurveSnapshot, ...]) -> tuple[float, ...]:
+    values: list[float] = []
+    if curves:
+        for curve in curves:
+            if curve.y_axis != 'ror' or not curve.visible:
+                continue
+            values.extend(value for value in curve.y if value is not None and math.isfinite(value))
+    else:
+        for attr_name, visible_attr in (('delta2', 'DeltaBTflag'), ('delta1', 'DeltaETflag')):
+            if not bool(getattr(source, visible_attr, False)):
+                continue
+            values.extend(
+                value
+                for value in _foreground_delta_values(source, _sequence(source, attr_name))
+                if value is not None and math.isfinite(value)
+            )
+    return tuple(values)
+
+
+def _expanded_ror_axis(axis: AxisSnapshot, values: tuple[float, ...]) -> AxisSnapshot:
+    if not values:
+        return axis
+    data_minimum = min(values)
+    data_maximum = max(values)
+    if axis.minimum <= data_minimum and data_maximum <= axis.maximum:
+        return axis
+    axis_span = axis.maximum - axis.minimum
+    data_span = data_maximum - data_minimum
+    padding = max(1.0, abs(axis_span) * 0.05, abs(data_span) * 0.1)
+    return AxisSnapshot(
+        minimum=min(axis.minimum, data_minimum - padding),
+        maximum=max(axis.maximum, data_maximum + padding),
+        label=axis.label,
+    )
+
+
 def _temperature_value(value: Any) -> float | None:
     if value is None:
         return None
@@ -913,6 +1063,13 @@ def _first_numeric_attr(source: object, attr_names: tuple[str, ...]) -> float | 
 
 def _numeric_attr(source: object, attr_name: str) -> float | None:
     return _numeric_value(getattr(source, attr_name, None))
+
+
+def _positive_numeric_attr(source: object, attr_name: str, default: float) -> float:
+    value = _numeric_attr(source, attr_name)
+    if value is None or value <= 0:
+        return default
+    return value
 
 
 def _numeric_value(value: object) -> float | None:
