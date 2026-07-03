@@ -537,8 +537,6 @@ def _background_event_markers(source: object) -> tuple[EventMarkerSnapshot, ...]
 
 
 def _phase_bands(source: object) -> tuple[PhaseBandSnapshot, ...]:
-    if not bool(getattr(source, 'watermarksflag', False)):
-        return ()
     phases = _sequence(source, 'phases')
     if len(phases) < 4:
         return ()

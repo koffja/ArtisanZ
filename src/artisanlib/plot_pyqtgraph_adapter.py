@@ -138,12 +138,32 @@ class PyQtGraphSnapshotRenderer:
                 item = self._create_item(curve)
                 self._items[curve.name] = item
             _call_if_available(item, 'setData', curve.x, _pyqtgraph_y_values(curve.y))
-            _call_if_available(item, 'setPen', self._pen_factory(curve))
+            pen = self._pen_factory(curve)
+            _call_if_available(item, 'setPen', pen)
+            self._apply_shadow_pen(item, pen)
             _call_if_available(item, 'setVisible', curve.visible)
         for name, item in self._items.items():
             if name not in active_names:
                 _call_if_available(item, 'setVisible', False)
         self._apply_legend(snapshot)
+
+    @staticmethod
+    def _apply_shadow_pen(item: object, pen: object) -> None:
+        """Apply a subtle black shadow pen behind each curve for visibility."""
+        try:
+            import pyqtgraph as pg  # type: ignore[import-not-found,unused-ignore]
+            pen_width = 2
+            width_fn = getattr(pen, 'width', None)
+            if callable(width_fn):
+                pen_width = max(2, int(width_fn()))
+            shadow_width = max(pen_width + 2, int(pen_width * 2))
+            shadow_pen = pg.mkPen('#000000', width=shadow_width)
+            color = getattr(pen, 'color', None)
+            if color is not None:
+                color.setAlpha(80)
+            _call_if_available(item, 'setShadowPen', shadow_pen)
+        except Exception:
+            pass
 
     def _apply_legend(self, snapshot: RoastPlotSnapshot) -> None:
         if self._legend_item is None:
@@ -328,6 +348,14 @@ def _default_pen_factory(curve: CurveSnapshot) -> object:
         line_width = max(2.4, curve.line_width)
     else:
         line_width = curve.line_width
+    # BT curve: try gradient pen for temperature-coded coloring
+    if curve.name == 'BT' and curve.y_axis == 'temperature':
+        try:
+            cm = pg.colormap.get('CET-L17')
+            cm.reverse()
+            return cm.getPen(span=(150.0, 250.0), width=int(line_width), orientation='vertical')
+        except Exception:
+            pass
     return pg.mkPen(color=_color_with_alpha(pg, curve.color, curve.opacity), width=line_width, style=_qt_pen_style(curve.line_style))
 
 
