@@ -60,7 +60,7 @@ def apply_modern_dialog_polish(dialog: object) -> None:
 
     root_layout = getattr(dialog, 'layout', lambda: None)()
     if isinstance(root_layout, QLayout):
-        _polish_dialog_layout_tree(root_layout, margin=14, spacing=10)
+        _polish_dialog_layout_tree(root_layout, margin=8, spacing=6)
 
     for combo_box in _find_children(dialog, QComboBox):
         _polish_dialog_combo_box(combo_box)
@@ -76,7 +76,7 @@ def apply_modern_dialog_polish(dialog: object) -> None:
         _refresh_widget_style(group_box)
         group_layout = group_box.layout()
         if isinstance(group_layout, QLayout):
-            _polish_dialog_layout_tree(group_layout, margin=10, spacing=8)
+            _polish_dialog_layout_tree(group_layout, margin=6, spacing=6)
 
     for tab_widget in _find_children(dialog, QTabWidget):
         tab_widget.setProperty('modernDialogTabs', True)
@@ -90,7 +90,7 @@ def apply_modern_dialog_polish(dialog: object) -> None:
             tab_page = tab_widget.widget(tab_index)
             tab_layout = tab_page.layout() if tab_page is not None else None
             if isinstance(tab_layout, QLayout):
-                _polish_dialog_layout_tree(tab_layout, margin=10, spacing=8)
+                _polish_dialog_layout_tree(tab_layout, margin=6, spacing=6)
 
     for scroll_area in _find_children(dialog, QAbstractScrollArea):
         scroll_area.setProperty('modernDialogScrollArea', True)
@@ -124,7 +124,7 @@ def _polish_dialog_layout_tree(layout: Any, *, margin: int, spacing: int) -> Non
         item = layout.itemAt(index)
         child_layout = item.layout() if item is not None else None
         if child_layout is not None:
-            _polish_dialog_layout_tree(child_layout, margin=8, spacing=spacing)
+            _polish_dialog_layout_tree(child_layout, margin=6, spacing=spacing)
 
 
 def _polish_dialog_layout(layout: Any, *, margin: int, spacing: int) -> None:
@@ -182,7 +182,7 @@ def _polish_dialog_combo_box(combo_box: Any) -> None:
         return
     combo_box.setMinimumContentsLength(max(combo_box.minimumContentsLength(), 7))
     combo_box.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
-    combo_box.setMinimumWidth(max(combo_box.minimumWidth(), 104))
+    combo_box.setMinimumWidth(max(combo_box.minimumWidth(), 72))
     combo_box.setSizePolicy(QSizePolicy.Policy.MinimumExpanding, combo_box.sizePolicy().verticalPolicy())
     _refresh_widget_style(combo_box)
 
@@ -190,7 +190,7 @@ def _polish_dialog_combo_box(combo_box: Any) -> None:
 def _polish_dialog_line_edit(line_edit: Any) -> None:
     size_hint = getattr(line_edit, 'minimumSizeHint', lambda: None)()
     hint_width = 0 if size_hint is None else int(size_hint.width())
-    minimum_width = max(110, hint_width)
+    minimum_width = max(72, hint_width)
     line_edit.setMinimumWidth(max(line_edit.minimumWidth(), minimum_width))
     if line_edit.maximumWidth() < line_edit.minimumWidth():
         line_edit.setMaximumWidth(line_edit.minimumWidth() + 8)
@@ -200,7 +200,7 @@ def _polish_dialog_line_edit(line_edit: Any) -> None:
 def _polish_dialog_spin_box(spin_box: Any) -> None:
     size_hint = getattr(spin_box, 'minimumSizeHint', lambda: None)()
     hint_width = 0 if size_hint is None else int(size_hint.width())
-    minimum_width = max(110, hint_width)
+    minimum_width = max(72, hint_width)
     spin_box.setMinimumWidth(max(spin_box.minimumWidth(), minimum_width))
     if spin_box.maximumWidth() < spin_box.minimumWidth():
         spin_box.setMaximumWidth(spin_box.minimumWidth() + 8)
@@ -345,8 +345,8 @@ def modern_application_stylesheet(theme: ModernTheme | None = None) -> str:
             padding-top: 4px;
         }}
         QDialog[modernDialog="true"] QCheckBox {{
-            spacing: 7px;
-            min-height: 24px;
+            spacing: 6px;
+            min-height: 20px;
             color: {t.text};
         }}
         QDialog[modernDialog="true"] QCheckBox::indicator {{
@@ -394,7 +394,7 @@ def modern_application_stylesheet(theme: ModernTheme | None = None) -> str:
             min-height: 23px;
         }}
         QDialog[modernDialog="true"] QComboBox {{
-            padding: 5px 32px 5px 10px;
+            padding: 3px 22px 3px 8px;
             min-width: 72px;
         }}
         QDialog[modernDialog="true"] QComboBox::drop-down {{
@@ -429,7 +429,7 @@ def modern_application_stylesheet(theme: ModernTheme | None = None) -> str:
         QDialog[modernDialog="true"] QDoubleSpinBox,
         QDialog[modernDialog="true"] QTimeEdit,
         QDialog[modernDialog="true"] QDateEdit {{
-            padding-right: 32px;
+            padding-right: 18px;
             min-width: 48px;
         }}
         QDialog[modernDialog="true"] QSpinBox::up-button,
@@ -476,8 +476,8 @@ def modern_application_stylesheet(theme: ModernTheme | None = None) -> str:
             background-color: {t.surface_alt};
             border: 1px solid {t.border};
             border-radius: 6px;
-            padding: 6px 12px;
-            min-height: 24px;
+            padding: 4px 10px;
+            min-height: 22px;
         }}
         QDialog[modernDialog="true"] QPushButton[modernDialogPrimaryButton="true"] {{
             background-color: {t.primary};
@@ -714,8 +714,8 @@ def modern_application_stylesheet(theme: ModernTheme | None = None) -> str:
             background-color: {t.surface};
         }}
         QDialog QPushButton {{
-            min-height: 24px;
-            padding: 5px 12px;
+            min-height: 22px;
+            padding: 4px 10px;
             background-color: {t.surface_alt};
         }}
         QPushButton[mainControlRole="monitor"],
