@@ -757,6 +757,72 @@ import plus.schedule
 #####
 
 
+PYQTGRAPH_LEGACY_TOOLBAR_CALLBACKS: Final[frozenset[str]] = frozenset({
+    'back',
+    'forward',
+    'pan',
+    'zoom',
+})
+
+
+def toolbar_callback_visible_for_surface(callback_name: str, surface: object) -> bool:
+    return not (
+        surface == 'pyqtgraph-plot'
+        and callback_name in PYQTGRAPH_LEGACY_TOOLBAR_CALLBACKS
+    )
+
+
+def apply_toolbar_surface_policy(actions_by_callback: dict[str, object], surface: object) -> None:
+    for callback_name, action in actions_by_callback.items():
+        set_visible = getattr(action, 'setVisible', None)
+        if callable(set_visible):
+            set_visible(toolbar_callback_visible_for_surface(callback_name, surface))
+
+
+def toolbar_actions_by_callback(
+        toolitems: list[tuple[str, ...] | tuple[None, ...]],
+        actions: list[QAction]) -> dict[str, object]:
+    actions_by_callback: dict[str, object] = {}
+    action_iter = iter(actions)
+    for toolitem in toolitems:
+        action = next(action_iter, None)
+        if action is None or len(toolitem) < 4 or toolitem[0] is None:
+            continue
+        callback_name = toolitem[3]
+        if callback_name is not None:
+            actions_by_callback[str(callback_name)] = action
+    return actions_by_callback
+
+
+def renderer_surface_from_qmc(qmc: object) -> object:
+    selection = getattr(qmc, 'plot_renderer_selection', None)
+    plugin = getattr(selection, 'plugin', None)
+    return getattr(plugin, 'surface', None)
+
+
+def reset_pyqtgraph_toolbar_target(qmc: object) -> bool:
+    if renderer_surface_from_qmc(qmc) != 'pyqtgraph-plot':
+        return False
+    target = getattr(qmc, 'plot_pyqtgraph_target', None)
+    if target is None:
+        return False
+    sync_view = getattr(qmc, 'sync_pyqtgraph_view_from_canvas', None)
+    if callable(sync_view):
+        sync_view()
+        return True
+    renderer = getattr(target, 'renderer', None)
+    reset_view = getattr(renderer, 'reset_view', None)
+    last_view_state = getattr(renderer, '_last_view_state', None)
+    if callable(reset_view) and last_view_state is not None:
+        reset_view(last_view_state)
+        return True
+    fit_view = getattr(target, 'fit_view', None)
+    if callable(fit_view):
+        fit_view()
+        return True
+    return False
+
+
 class VMToolbar(NavigationToolbar): # pylint: disable=abstract-method
     def __init__(self, plotCanvas:tgraphcanvas, parent:QWidget, white_icons:bool = False) -> None:
 
@@ -849,6 +915,8 @@ class VMToolbar(NavigationToolbar): # pylint: disable=abstract-method
                     QToolButton[modernToolbarRole="brand"] {min-width:96px; min-height:34px; font-weight:700; padding-left:9px; padding-right:12px; background-color:#F6FAF8;border:1px solid #D9E3DF;color:#2F5960;} \
                     QToolButton[modernToolbarRole="brand"]:hover {background-color:#EAF3F0;border:1px solid #BFD1CB;color:#234B52;}')
 
+        self._actions_by_callback = toolbar_actions_by_callback(self.toolitems, self.actions())
+        self._apply_renderer_surface_toolbar_policy()
         self.aw.updatePlusStatus(self)
 
         self.update_view_org = self._update_view # type: ignore[has-type] # Cannot determine type of "_update_view"
@@ -874,6 +942,16 @@ class VMToolbar(NavigationToolbar): # pylint: disable=abstract-method
 #######################################################################################
 #####   temporary hack for windows till better solution found about toolbar icon problem with py2exe and svg
 #######################################################################################
+
+    def _apply_renderer_surface_toolbar_policy(self) -> None:
+        surface = renderer_surface_from_qmc(self.qmc)
+        apply_toolbar_surface_policy(self._actions_by_callback, surface)
+        if surface == 'pyqtgraph-plot':
+            home_action = self._actions_by_callback.get('home')
+            if home_action is not None:
+                set_tooltip = getattr(home_action, 'setToolTip', None)
+                if callable(set_tooltip):
+                    set_tooltip(QApplication.translate('Tooltip', 'Reset PyQtGraph view'))
 
     def add_toolbar_lines_configuration(self) -> None:
         if len(self.actions()) > 0 and self.edit_curve_parameters_action is None: # pyright:ignore[reportUnknownArgumentType]
@@ -1072,7 +1150,13 @@ class VMToolbar(NavigationToolbar): # pylint: disable=abstract-method
                 self.qmc.ai.set_visible(True)
         except Exception as e:  # pylint: disable=broad-except
             _log.error(e)
-        super().home(*args)
+        try:
+            pyqtgraph_home = reset_pyqtgraph_toolbar_target(self.qmc)
+        except Exception as e:  # pylint: disable=broad-except
+            _log.error(e)
+            pyqtgraph_home = False
+        if not pyqtgraph_home:
+            super().home(*args)
 
         # toggle zoom_follow if recording
         if self.qmc.flagstart:

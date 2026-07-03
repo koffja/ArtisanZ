@@ -320,7 +320,19 @@ Important observations from the code review:
 
 **Evidence:** Focused toolbar/theme/cursor tests produced `29 passed`; `py_compile`, targeted `ruff check`, and `git diff --check` passed. Offscreen main-window screenshot smoke wrote `/tmp/artisanz-toolbar-redesign.png` from a saved profile and visually confirmed the Cotrix entry, no empty subscription gap, no separator block, and a loaded PyQtGraph profile view.
 
-**Remaining Gate:** The current toolbar still keeps Home/Back/Forward/Pan/Zoom for Matplotlib compatibility and the existing Lines action for curve style configuration. A follow-up PyQtGraph-native toolbar pass should decide whether to replace those Matplotlib navigation actions with PyQtGraph-specific reset/fit/interaction controls.
+**Follow-up Closed:** Phase 1.25 applies a renderer-surface policy so Matplotlib keeps its original navigation actions, while the default PyQtGraph surface hides legacy Back/Forward/Pan/Zoom controls that do not act on the visible graph.
+
+## Phase 1.25: PyQtGraph-Native Toolbar Policy
+
+**Goal:** Stop exposing Matplotlib-only navigation controls on the default PyQtGraph main graph, and make the remaining Home control operate on the visible PyQtGraph surface.
+
+**Closed:** 2026-07-03 with `toolbar_callback_visible_for_surface()`, `apply_toolbar_surface_policy()`, and `reset_pyqtgraph_toolbar_target()`. In PyQtGraph mode the toolbar now keeps Cotrix, Home, Lines, and cursor/status telemetry while hiding Back/Forward/Pan/Zoom. Home routes through `sync_pyqtgraph_view_from_canvas()` so the visible PyQtGraph plot resets to the current configured roast view without falling back to Matplotlib navigation. Matplotlib keeps the original controls for compatibility.
+
+**Tracking Plan:** `docs/superpowers/plans/2026-07-03-gui-modernization-phase-1-25-pyqtgraph-toolbar-policy.md`
+
+**Evidence:** Focused policy tests produced `4 passed`; related toolbar/canvas/theme tests produced `29 passed`; `py_compile`, targeted `ruff check`, and `git diff --check` passed. Offscreen saved-profile screenshot smoke wrote `/tmp/artisanz-toolbar-policy.png` and visually confirmed the PyQtGraph toolbar has no old Back/Forward/Pan/Zoom cluster.
+
+**Remaining Gate:** The Lines action still opens the Matplotlib curve-style editor path. A future curve-style pass should replace it with a renderer-neutral style panel or PyQtGraph-aware editor before removing Matplotlib as the primary compatibility surface.
 
 ## Phase 2: Plot Renderer Boundary and PyQtGraph POC
 

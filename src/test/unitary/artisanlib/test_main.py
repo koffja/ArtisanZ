@@ -3392,6 +3392,70 @@ def test_update_plus_status_uses_cotrix_brand_and_hides_empty_subscription(
     assert toolbar.actions()[1].visible is False
 
 
+def test_toolbar_callback_visibility_hides_legacy_matplotlib_nav_for_pyqtgraph() -> None:
+    from artisanlib import main
+
+    assert main.toolbar_callback_visible_for_surface('plus', 'pyqtgraph-plot') is True
+    assert main.toolbar_callback_visible_for_surface('home', 'pyqtgraph-plot') is True
+    assert main.toolbar_callback_visible_for_surface('back', 'pyqtgraph-plot') is False
+    assert main.toolbar_callback_visible_for_surface('forward', 'pyqtgraph-plot') is False
+    assert main.toolbar_callback_visible_for_surface('pan', 'pyqtgraph-plot') is False
+    assert main.toolbar_callback_visible_for_surface('zoom', 'pyqtgraph-plot') is False
+    assert main.toolbar_callback_visible_for_surface('pan', 'matplotlib-axis') is True
+
+
+def test_apply_toolbar_surface_policy_hides_only_unsupported_pyqtgraph_actions() -> None:
+    from artisanlib import main
+
+    actions = {
+        callback: FakeToolbarAction()
+        for callback in ('plus', 'subscription', 'home', 'back', 'forward', 'pan', 'zoom')
+    }
+
+    main.apply_toolbar_surface_policy(actions, 'pyqtgraph-plot')
+
+    assert actions['plus'].visible is True
+    assert actions['subscription'].visible is True
+    assert actions['home'].visible is True
+    assert actions['back'].visible is False
+    assert actions['forward'].visible is False
+    assert actions['pan'].visible is False
+    assert actions['zoom'].visible is False
+
+
+def test_reset_pyqtgraph_toolbar_target_syncs_current_graph_view() -> None:
+    from artisanlib import main
+
+    class FakePyQtGraphQMC:
+        def __init__(self) -> None:
+            self.plot_renderer_selection = SimpleNamespace(
+                plugin=SimpleNamespace(surface='pyqtgraph-plot'),
+            )
+            self.plot_pyqtgraph_target = object()
+            self.sync_count = 0
+
+        def sync_pyqtgraph_view_from_canvas(self) -> None:
+            self.sync_count += 1
+
+    qmc = FakePyQtGraphQMC()
+
+    assert main.reset_pyqtgraph_toolbar_target(qmc) is True
+    assert qmc.sync_count == 1
+
+
+def test_reset_pyqtgraph_toolbar_target_ignores_matplotlib_surface() -> None:
+    from artisanlib import main
+
+    qmc = SimpleNamespace(
+        plot_renderer_selection=SimpleNamespace(plugin=SimpleNamespace(surface='matplotlib-axis')),
+        plot_pyqtgraph_target=object(),
+        sync_pyqtgraph_view_from_canvas=Mock(),
+    )
+
+    assert main.reset_pyqtgraph_toolbar_target(qmc) is False
+    qmc.sync_pyqtgraph_view_from_canvas.assert_not_called()
+
+
 class TestRecentRoastUtilities:
     """Test recent roast utility static methods."""
 
