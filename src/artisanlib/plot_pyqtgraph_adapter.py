@@ -157,10 +157,7 @@ class PyQtGraphSnapshotRenderer:
             if callable(width_fn):
                 pen_width = max(2, int(width_fn()))
             shadow_width = max(pen_width + 2, int(pen_width * 2))
-            shadow_pen = pg.mkPen('#000000', width=shadow_width)
-            color = getattr(pen, 'color', None)
-            if color is not None:
-                color.setAlpha(80)
+            shadow_pen = pg.mkPen(0, 0, 0, 80, width=shadow_width)
             _call_if_available(item, 'setShadowPen', shadow_pen)
         except Exception:
             pass
@@ -351,9 +348,12 @@ def _default_pen_factory(curve: CurveSnapshot) -> object:
     # BT curve: try gradient pen for temperature-coded coloring
     if curve.name == 'BT' and curve.y_axis == 'temperature':
         try:
-            cm = pg.colormap.get('CET-L17')
-            cm.reverse()
-            return cm.getPen(span=(150.0, 250.0), width=int(line_width), orientation='vertical')
+            cached = globals().get('_cached_bt_gradient_cm')
+            if cached is None:
+                cached = pg.colormap.get('CET-L17')
+                cached.reverse()
+                globals()['_cached_bt_gradient_cm'] = cached
+            return cached.getPen(span=(150.0, 250.0), width=int(line_width), orientation='vertical')
         except Exception:
             pass
     return pg.mkPen(color=_color_with_alpha(pg, curve.color, curve.opacity), width=line_width, style=_qt_pen_style(curve.line_style))
