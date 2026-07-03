@@ -96,14 +96,19 @@ if os.environ.get('APPVEYOR'):
     PYQT = os.environ.get('PYQT')
     QT_TRANSL = os.environ.get('QT_TRANSL')
 else:
-    msg =f'artisan-win.spec is intended only to run on Appveyor CI.'
-    logging.error(msg)
-    sys.exit('Fatal Error')
+    ARTISAN_SRC = os.getcwd()
+    PYTHON = os.path.dirname(sys.executable)
+    PYQT = '6'
+    import PyQt6
+    _pyqt_dir = os.path.dirname(PyQt6.__file__)
+    QT_TRANSL = os.path.join(_pyqt_dir, 'Qt6', 'translations')
+    if not os.path.isdir(QT_TRANSL):
+        QT_TRANSL = os.path.join(_pyqt_dir, 'Qt', 'translations')
 
 NAME = 'artisan'
 TARGET = 'dist\\' + NAME + '\\'
 PYTHON_PACKAGES = PYTHON + r'\Lib\site-packages'
-PYQT_QT = PYTHON_PACKAGES + r'\PyQt' + PYQT + r'\Qt'
+PYQT_QT = PYTHON_PACKAGES + r'\PyQt' + PYQT + r'\Qt' + PYQT  # PyQt6\Qt6 (was PyQt6\Qt — missing version suffix)
 PYQT_QT_BIN = PYQT_QT + r'\bin'
 PYQT_QT_TRANSLATIONS = QT_TRANSL
 YOCTO_BIN = PYTHON_PACKAGES + r'\yoctopuce\cdll'
@@ -137,7 +142,17 @@ hiddenimports_list=['charset_normalizer.md__mypyc', # part of requests 2.28.2 # 
                             'PyQt6.QtQuickWidgets',
                             'PyQt6.QtQml',
                             'importlib_resources',
-                            'winrt.windows.foundation.collections'
+                            'winrt.windows.foundation.collections',
+                            'pyqtgraph',
+                            'pyqtgraph.graphicsItems.PlotItem.PlotItem',
+                            'pyqtgraph.graphicsItems.ViewBox.ViewBox',
+                            'PyOpenGL',
+                            'OpenGL',
+                            'artisanlib.gui_theme',
+                            'artisanlib.plot_pyqtgraph_adapter',
+                            'artisanlib.plot_pyqtgraph_widget',
+                            'artisanlib.plot_snapshot_extractor',
+                            'artisanlib.sample_processing'
                             ]
 
 datas = collect_data_files('bleak', subdir=r'backends\winrt')
@@ -150,9 +165,28 @@ a = Analysis(['artisan.py'],
              binaries=binaries,
              datas=datas, # + copy_metadata('tzdata')
              hookspath=[],
-             runtime_hooks=[r'pyinstaller_hooks\rthooks\pyi_rth_mplconfig.py'], # overwrites default MPL runtime hook which keeps loading font cache from (new) temp directory
+             runtime_hooks=[r'pyinstaller_hooks\rthooks\pyi_rth_mplconfig.py'],
              additional_hooks_dir=[],
-             excludes=['pkg_resources'],
+             hooksconfig={
+                'matplotlib': {
+                    'backends': ['QtAgg', 'svg', 'pdf'],
+                },
+             },
+             excludes=[
+                'pkg_resources',
+                'tkinter',
+                'mypy',
+                'PyQt5',
+                'PyQt6.Multimedia',
+                'PyQt6.Network',
+                'PyQt6.PrintSupport',
+                'PyQt6.QtRemoteObjects',
+                'PyQt6.QtSensors',
+                'PyQt6.QtSerialPort',
+                'PyQt6.QtSpatialAudio',
+                'PyQt6.QtTest',
+                'PyQt6.QtTextToSpeech',
+             ],
              hiddenimports=hiddenimports_list,
              win_no_prefer_redirects=False,
              win_private_assemblies=False,

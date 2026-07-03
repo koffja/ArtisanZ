@@ -127,12 +127,22 @@ BINARIES.extend([(os.path.join(get_package_paths('Phidget22')[1], '.libs/libphid
 a = Analysis(['artisan.py'],
              binaries=BINARIES,
              datas=DATA_FILES,
-             hiddenimports=[
-                 'babel.numbers', # should not be needed as it got fixed in pyinstaller 6.11
-                 'PyQt6.QtQuick',
-                 'PyQt6.QtQuickWidgets',
-                 'PyQt6.QtQml',
-             ],
+              hiddenimports=[
+                  'babel.numbers', # should not be needed as it got fixed in pyinstaller 6.11
+                  'PyQt6.QtQuick',
+                  'PyQt6.QtQuickWidgets',
+                  'PyQt6.QtQml',
+                  'pyqtgraph',
+                  'pyqtgraph.graphicsItems.PlotItem.PlotItem',
+                  'pyqtgraph.graphicsItems.ViewBox.ViewBox',
+                  'PyOpenGL',
+                  'OpenGL',
+                  'artisanlib.gui_theme',
+                  'artisanlib.plot_pyqtgraph_adapter',
+                  'artisanlib.plot_pyqtgraph_widget',
+                  'artisanlib.plot_snapshot_extractor',
+                  'artisanlib.sample_processing',
+              ],
              hooksconfig={
                 'matplotlib': {
                 'backends': ['QtAgg', 'svg', 'pdf'] # 'auto',  # auto-detect; the default behavior (QtAgg
@@ -167,7 +177,7 @@ exe = EXE(pyz,
             console=False,
             disable_windowed_traceback=False,
             argv_emulation=False, # False for GUI apps
-            target_arch='x86_64', #'arm64', #'universal2',
+            target_arch='arm64', #'x86_64', #'universal2',
             codesign_identity=None,
             entitlements_file=None
             )
@@ -187,7 +197,7 @@ with open('Info.plist', 'rb') as infile:
                     'CFBundleVersion': 'Artisan ' + VERSION,
                     'LSMinimumSystemVersion': minimumSystemVersion,
                     'LSMultipleInstancesProhibited': False,
-                    'LSArchitecturePriority': ['x86_64'],
+                    'LSArchitecturePriority': ['arm64'],
                     'NSHumanReadableCopyright': LICENSE,
                     'NSHighResolutionCapable': True,
 #                    'UIDesignRequiresCompatibility': True, # run in compatibility mode, keeping the existing look and metrics of pre v26 macOS releases

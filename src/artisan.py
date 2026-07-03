@@ -11,6 +11,9 @@ warnings.simplefilter('ignore', DeprecationWarning)
 # limit the number of numpy threads to 1 to limit the total number of threads taking into account a potential performance reduction on array operations using blas,
 # which should not be significant
 os.environ['OMP_NUM_THREADS'] = '1'
+os.environ['OPENBLAS_NUM_THREADS'] = '1'  # covers numpy wheels built against OpenBLAS (default on macOS/Linux PyPI)
+os.environ['MKL_NUM_THREADS'] = '1'       # covers numpy wheels built against Intel MKL (common on Windows + conda)
+os.environ['NUMEXPR_NUM_THREADS'] = '1'   # covers numexpr (used by some pandas operations)
 
 # deactivate defusedexml in OPENPYXL as it might not be installed or bundled
 os.environ['OPENPYXL_DEFUSEDXML'] = 'False'
