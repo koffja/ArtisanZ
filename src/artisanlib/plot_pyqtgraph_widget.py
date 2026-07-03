@@ -196,6 +196,25 @@ def _connect_cursor_tracking(target: PyQtGraphPlotTarget) -> None:
     if not callable(connect):
         return
 
+    pg = target._pyqtgraph
+    crosshair_vline = None
+    crosshair_hline = None
+
+    def _ensure_crosshair() -> tuple[Any, Any]:
+        nonlocal crosshair_vline, crosshair_hline
+        if crosshair_vline is None:
+            from PyQt6.QtCore import Qt
+            dash = Qt.PenStyle.DashLine
+            crosshair_vline = pg.InfiniteLine(
+                angle=90, pen=pg.mkPen('#8EA9B4', width=1, style=dash),
+            )
+            crosshair_hline = pg.InfiniteLine(
+                angle=0, pen=pg.mkPen('#8EA9B4', width=1, style=dash),
+            )
+            target.temperature_plot.addItem(crosshair_vline, ignoreBounds=True)
+            target.temperature_plot.addItem(crosshair_hline, ignoreBounds=True)
+        return crosshair_vline, crosshair_hline
+
     def on_mouse_moved(scene_pos: object) -> None:
         if not _plot_scene_contains(target.temperature_plot, scene_pos):
             return
@@ -206,6 +225,12 @@ def _connect_cursor_tracking(target: PyQtGraphPlotTarget) -> None:
         point = map_scene_to_view(scene_pos)
         ror_value = _mapped_ror_value(target.ror_plot, scene_pos)
         target.emit_cursor_position(float(point.x()), float(point.y()), ror_value)
+        vline, hline = _ensure_crosshair()
+        try:
+            vline.setValue(float(point.x()))
+            hline.setValue(float(point.y()))
+        except Exception:
+            pass
 
     target._cursor_mouse_move_handler = on_mouse_moved
     connect(on_mouse_moved)

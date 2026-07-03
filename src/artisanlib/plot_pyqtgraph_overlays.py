@@ -292,6 +292,64 @@ class EventMarkerOverlay:
             self._remove(code)
 
 
+
+
+# ---------------------------------------------------------------------------
+# Task 2: BT curve gradient coloring (ColorMap.getPen)
+# ---------------------------------------------------------------------------
+
+def create_gradient_pen(
+    pg: Any,
+    *,
+    temp_min: float = 150.0,
+    temp_max: float = 250.0,
+    width: int = 2,
+    cmap_name: str = 'CET-L17',
+) -> Any:
+    """Create a QPen whose colour varies along the Y-axis by temperature.
+
+    Falls back to a solid pen if the colour map cannot be loaded.
+    """
+    try:
+        cm = pg.colormap.get(cmap_name)
+        cm.reverse()
+        return cm.getPen(span=(temp_min, temp_max), width=width, orientation='vertical')
+    except Exception:
+        _log.debug('create_gradient_pen: fallback to solid pen', exc_info=True)
+        return pg.mkPen('#4E7180', width=width)
+
+
+def apply_gradient_to_curves(
+    plot: Any,
+    pg: Any,
+    *,
+    temp_min: float = 150.0,
+    temp_max: float = 250.0,
+    cmap_name: str = 'CET-L17',
+) -> int:
+    """Apply gradient pens to all PlotDataItem children of *plot*.
+
+    Returns the number of curves enhanced.
+    """
+    gradient_pen = create_gradient_pen(
+        pg, temp_min=temp_min, temp_max=temp_max, width=2, cmap_name=cmap_name,
+    )
+    count = 0
+    try:
+        data_items = _safe_list_data_items(plot)
+    except Exception:
+        return 0
+    for item in data_items:
+        try:
+            opts = getattr(item, 'opts', None)
+            if isinstance(opts, dict) and opts.get('pen') is not None:
+                item.setPen(gradient_pen)
+                count += 1
+        except Exception:
+            _log.debug('apply_gradient_to_curves: skipped item', exc_info=True)
+    return count
+
+
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
