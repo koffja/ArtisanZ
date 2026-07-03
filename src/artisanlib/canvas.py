@@ -444,7 +444,7 @@ class tgraphcanvas(QObject):
         'patheffects', 'graphstyle', 'graphfont', 'buttonvisibility', 'buttonactions', 'buttonactionstrings', 'extrabuttonactions', 'extrabuttonactionstrings',
         'xextrabuttonactions', 'xextrabuttonactionstrings', 'charge_manager', 'charge_target_annotation', 'chargeTimerFlag', 'autoChargeFlag', 'autoDropFlag', 'autoChargeMode', 'autoDropMode', 'autoChargeIdx', 'autoDropIdx', 'markTPflag',
         'autoDRYflag', 'autoFCsFlag', 'autoCHARGEenabled', 'autoDRYenabled', 'autoFCsenabled', 'autoDROPenabled', 'projectionconstant',
-        'projectionmode', 'transMappingMode', 'weight', 'roasted_defects_weight', 'volume', 'density', 'roasted_defects_mode', 'density_roasted', 'volumeCalcUnit', 'volumeCalcWeightInStr',
+        'projectionmode', 'transMappingMode', 'weight', 'end_weight_est', 'roasted_defects_weight', 'volume', 'density', 'roasted_defects_mode', 'density_roasted', 'volumeCalcUnit', 'volumeCalcWeightInStr',
         'volumeCalcWeightOutStr', 'container_names', 'container_weights', 'specialevents', 'etypes', 'etypesdefault',
         'alt_etypesdefault', 'default_etypes_set', 'specialeventstype',
         'specialeventsStrings', 'specialeventsvalue', 'eventsGraphflag', 'clampEvents', 'renderEventsDescr', 'eventslabelschars', 'eventsshowflag',
@@ -511,7 +511,7 @@ class tgraphcanvas(QObject):
         'segmentpickflag', 'segmentdeltathreshold', 'segmentsamplesthreshold', 'stats_summary_rect', 'title_text', 'title_artist', 'title_width',
         'background_title_width', 'xlabel_text', 'xlabel_artist', 'xlabel_width', 'mathdictionary_base',
         'ambient_pressure_sampled', 'ambient_humidity_sampled', 'ambientTemp_sampled', 'backgroundmovespeed', 'chargeTimerPeriod', 'flavors_default_value',
-        'fmt_data_ON', 'l_subtitle', 'projectDeltaFlag', 'btbreak_params','bbpCache', 'glow',
+        'fmt_data_ON', 'l_subtitle', 'projectDeltaFlag', 'btbreak_params','bbpCache', 'bbpPrevRoast', 'glow',
         'custom_event_dlg_default_type', 'custom_event_dlg_default_type', 'foreground_event_ind', 'foreground_event_pick_position', 'foreground_event_last_picked_ind',
         'foreground_event_last_picked_pos', 'background_event_ind', 'background_event_pos', 'background_event_pick_position',
         'background_event_last_picked_ind', 'background_event_last_picked_pos', 'event_selected',
@@ -764,7 +764,7 @@ class tgraphcanvas(QObject):
         #show phases LCDs during roasts
         self.phasesLCDflag:bool = True
         self.phasesLCDmode:int = 1 # one of 0: time, 1: percentage, 2: temp mode
-        self.phasesLCDmode_l:list[int] = [1,1,1] # stores last phases LCD mode per app state (OFF/ON/RECORDING)
+        self.phasesLCDmode_l:list[int] = [1,1,1] # stores last phases LCD mode per roast phase (Drying, Mailard, Finishing)
         self.phasesLCDmode_all:list[bool] = [False,False,True]
 
 
@@ -1887,6 +1887,7 @@ class tgraphcanvas(QObject):
 
         #[0]weight in, [1]weight out, [2]units (string)
         self.weight:tuple[float,float,str] = (0, 0, weight_units[1])
+        self.end_weight_est:int = 0 # 1: weight out in self.weight[1] is an estimate an not measured or manuel set; 0: otherwise
 
         self.roasted_defects_weight:float = 0.0 # weight of defects sorted from roasted weight in unit self.weight[2] (should always be positive and less than self.weight[1])
 
@@ -1903,7 +1904,7 @@ class tgraphcanvas(QObject):
 
 
         if platform.system() == 'Darwin':
-            # try to "guess" the users preferred temperature unit
+            # try to "guess" the users preferred weight unit
             try:
                 if not QSettings().value('AppleMetricUnits'):
                     self.weight = (0, 0, weight_units[2])
@@ -2557,6 +2558,7 @@ class tgraphcanvas(QObject):
 
         # Cache for BBP calculations
         self.bbpCache: BbpCache = {}
+        self.bbpPrevRoast: BbpCache = {}
 
         #EnergyUse
         # Energy conversion canstants
@@ -4273,7 +4275,7 @@ class tgraphcanvas(QObject):
                         self.ax.autoscale(enable=True, axis='y', tight=False)
                         self.fig.canvas.draw_idle()
 
-                if not self.wheelflag and event.inaxes is None and event.button == 1 and event.dblclick and event.x > event.y:
+                if not self.wheelflag and event.inaxes is None and event.button == 1 and event.x > event.y:
                     fig = self.ax.get_figure()
                     if fig is None:
                         return
@@ -4284,14 +4286,19 @@ class tgraphcanvas(QObject):
                                 QDesktopServices.openUrl(QUrl(__release_sponsor_url__, QUrl.ParsingMode.TolerantMode))
                                 return
                             if self.backgroundprofile is not None:
-                                # toggle background if right top corner above canvas where the subtitle is clicked
-                                self.background = not self.background
-                                self.aw.autoAdjustAxis(background=self.background and (not len(self.timex) > 3))
-                                if self.statssummary and self.autotimex:
-                                    self.redraw(recomputeAllDeltas=True)
-                                else:
-                                    self.redraw_keep_view(recomputeAllDeltas=True)
-                                return
+                                modifiers = QApplication.keyboardModifiers()
+                                if self.background and modifiers == Qt.KeyboardModifier.AltModifier:
+                                    self.aw.togglePlaybackEvents()
+                                    return
+                                if event.dblclick:
+                                    # toggle background if right top corner above canvas where the subtitle is clicked
+                                    self.background = not self.background
+                                    self.aw.autoAdjustAxis(background=self.background and (not len(self.timex) > 3))
+                                    if self.statssummary and self.autotimex:
+                                        self.redraw(recomputeAllDeltas=True)
+                                    else:
+                                        self.redraw_keep_view(recomputeAllDeltas=True)
+                                    return
 
 
                 event_xdata = event.xdata
@@ -4569,10 +4576,10 @@ class tgraphcanvas(QObject):
             _log.exception(e)
 
     # note that partial values might be given here
-    def updateLargeScaleLCDs(self, weight:str|None = None, total:str|None = None) -> None:
+    def updateLargeScaleLCDs(self, weight1:str|None = None, weight2:str|None = None) -> None:
         try:
             if self.aw.largeScaleLCDs_dialog is not None:
-                self.aw.largeScaleLCDs_dialog.updateValues([weight],[total])
+                self.aw.largeScaleLCDs_dialog.updateValues([weight1],[weight2])
         except Exception as e: # pylint: disable=broad-except
             _log.exception(e)
 
@@ -5376,7 +5383,7 @@ class tgraphcanvas(QObject):
                     # update BBP values
                     if post_update_decisions.update_bbp_metrics: # only during recording
                         try:
-                            self.aw.calcBBPMetrics(checkCache=True)
+                            self.cacheforBbp(copyPrevRoast=True)
                         except Exception as e: # pylint: disable=broad-except
                             _log.exception(e)
 
@@ -8574,6 +8581,8 @@ class tgraphcanvas(QObject):
             self.aw.recording_version = str(__version__)
             self.aw.recording_revision = str(__revision__)
             self.aw.recording_build = str(__build__)
+
+            self.end_weight_est = 0
 
             # if we are in KeepON mode, the reset triggered by ON should respect the roastpropertiesflag ("Delete Properties on Reset")
             if self.roastpropertiesflag and (self.flagKeepON or not keepProperties):
@@ -13756,8 +13765,8 @@ class tgraphcanvas(QObject):
                 self.extraNoneTempHint1.append(not bool(self.aw.ws.channel_modes[8]))
                 self.extraNoneTempHint2.append(not bool(self.aw.ws.channel_modes[9]))
             elif d == 150: # +MODBUS 910
-                self.extraNoneTempHint1.append(not bool(self.aw.s7.mode[8]))
-                self.extraNoneTempHint2.append(not bool(self.aw.s7.mode[9]))
+                self.extraNoneTempHint1.append(self.aw.modbus.inputModes[8] == '')
+                self.extraNoneTempHint2.append(self.aw.modbus.inputModes[9] == '')
             elif d == 151: # +S7 1112
                 self.extraNoneTempHint1.append(not bool(self.aw.s7.mode[10]))
                 self.extraNoneTempHint2.append(not bool(self.aw.s7.mode[11]))
@@ -17202,20 +17211,25 @@ class tgraphcanvas(QObject):
             _, _, exc_tb = sys.exc_info()
             self.adderror((QApplication.translate('Error Message','Exception:') + ' writestatistics() {0}').format(str(ex)),getattr(exc_tb, 'tb_lineno', '?'))
 
-    def cacheforBbp(self) -> None:
+    def cacheforBbp(self, copyPrevRoast:bool=False) -> None:
         try:
-            # mode
-            self.bbpCache['mode'] = self.mode
-            # drop temps
-            self.bbpCache['drop_bt'] = self.temp2[self.timeindex[6]]
-            self.bbpCache['drop_et'] = self.temp1[self.timeindex[6]]
-            # ending time epoch in mSec
-            self.bbpCache['end_roastepoch_msec'] = QDateTime.currentDateTime().toMSecsSinceEpoch()
-            # get the special events values at OFF and time of previous change relative to end
-            self.bbpCache['end_events'] = self.get_specialevents_at_timeindex(len(self.timex)-1)
-            # get the special events values at DROP and time of previous change relative to end
-            self.bbpCache['drop_events'] = self.get_specialevents_at_timeindex(self.timeindex[6])
-            self.bbpCache['drop_to_end'] = self.timex[-1] - self.timex[self.timeindex[6]]
+            if copyPrevRoast:
+                # copy the previous roast cache for use by this roast's bbp metric calculations
+                self.bbpPrevRoast = self.bbpCache.copy()
+            else:
+                # update the cache with current roast data ready to be used by the subsequent roast
+                # mode
+                self.bbpCache['mode'] = self.mode
+                # drop temps
+                self.bbpCache['drop_bt'] = self.temp2[self.timeindex[6]]
+                self.bbpCache['drop_et'] = self.temp1[self.timeindex[6]]
+                # ending time epoch in mSec
+                self.bbpCache['end_roastepoch_msec'] = QDateTime.currentDateTime().toMSecsSinceEpoch()
+                # get the special events values at OFF and time of previous change relative to end
+                self.bbpCache['end_events'] = self.get_specialevents_at_timeindex(len(self.timex)-1)
+                # get the special events values at DROP and time of previous change relative to end
+                self.bbpCache['drop_events'] = self.get_specialevents_at_timeindex(self.timeindex[6])
+                self.bbpCache['drop_to_end'] = self.timex[-1] - self.timex[self.timeindex[6]]
         except Exception: # pylint: disable=broad-except
             self.bbpCache = {}
 
