@@ -3456,6 +3456,20 @@ def test_reset_pyqtgraph_toolbar_target_ignores_matplotlib_surface() -> None:
     qmc.sync_pyqtgraph_view_from_canvas.assert_not_called()
 
 
+def test_roast_toolbar_visual_metrics_prevent_brand_clipping() -> None:
+    from artisanlib import main
+
+    metrics = main.roast_toolbar_visual_metrics()
+
+    assert metrics['toolbar_height'] >= (
+        metrics['button_height'] + metrics['toolbar_vertical_padding'] * 2
+    )
+    assert metrics['brand_width'] >= 140
+    assert metrics['button_width'] >= metrics['button_height']
+    assert metrics['icon_size'] >= 30
+    assert metrics['label_height'] >= metrics['button_height'] - 2
+
+
 class TestRecentRoastUtilities:
     """Test recent roast utility static methods."""
 

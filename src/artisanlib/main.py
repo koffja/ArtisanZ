@@ -764,6 +764,20 @@ PYQTGRAPH_LEGACY_TOOLBAR_CALLBACKS: Final[frozenset[str]] = frozenset({
     'zoom',
 })
 
+ROAST_TOOLBAR_VISUAL_METRICS: Final[dict[str, int]] = {
+    'toolbar_height': 58,
+    'toolbar_vertical_padding': 6,
+    'button_height': 44,
+    'button_width': 48,
+    'brand_width': 148,
+    'icon_size': 30,
+    'label_height': 44,
+}
+
+
+def roast_toolbar_visual_metrics() -> dict[str, int]:
+    return dict(ROAST_TOOLBAR_VISUAL_METRICS)
+
 
 def toolbar_callback_visible_for_surface(callback_name: str, surface: object) -> bool:
     return not (
@@ -849,11 +863,14 @@ class VMToolbar(NavigationToolbar): # pylint: disable=abstract-method
         self._last_event:mplLocationevent|None = None
 
         NavigationToolbar.__init__(self, plotCanvas, parent) # type:ignore[no-untyped-call]
+        metrics = roast_toolbar_visual_metrics()
         self.setObjectName('roastNavigationToolbar')
         self.setMovable(False)
         self.setFloatable(False)
-        self.setIconSize(QSize(30, 30))
-        self.setContentsMargins(6, 4, 6, 4)
+        self.setIconSize(QSize(metrics['icon_size'], metrics['icon_size']))
+        self.setMinimumHeight(metrics['toolbar_height'])
+        self.setMaximumHeight(metrics['toolbar_height'])
+        self.setContentsMargins(10, metrics['toolbar_vertical_padding'], 10, metrics['toolbar_vertical_padding'])
 
         # lets make the font of the coordinates QLabel a little larger
         f = self.locLabel.font()
@@ -868,11 +885,13 @@ class VMToolbar(NavigationToolbar): # pylint: disable=abstract-method
 ##        f.setWeight(QFont.Bold)
 ##        f.setBold(True)
         self.locLabel.setFont(f)
-        self.locLabel.setMinimumHeight(30)
+        self.locLabel.setMinimumHeight(metrics['label_height'])
+        self.locLabel.setMaximumHeight(metrics['label_height'])
         self.locLabel.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight)
-        self.locLabel.setContentsMargins(8, 0, 8, 0)
+        self.locLabel.setContentsMargins(10, 0, 10, 0)
         self.locLabel.setStyleSheet(
-            'QLabel { color:#006EA0; padding:0 6px; margin:0; font-weight:600; }',
+            'QLabel { color:#5B7479; background-color:#F8FBF8; border:1px solid #E1E9E5; '
+            'border-radius:12px; padding:0 14px; margin:0; font-weight:600; }',
         )
 
 # WORK:
@@ -880,42 +899,10 @@ class VMToolbar(NavigationToolbar): # pylint: disable=abstract-method
 # add green flag menu on matplotlib v2.0 and later
         self.edit_curve_parameters_action = None
 
-        # adjust for dark or light canvas and set hover/selection style
-        for i, a in enumerate(self.actions()):
-            if self.qmc.palette['canvas'] == 'None':
-                canvas_color = QColor('#ECECEC')
-            else:
-                canvas_color = QColor(self.qmc.palette['canvas'])
-            if canvas_color.name() == '#000000': # on black we start with (1,1,1) for lighter
-                canvas_color = QColor('#222222')
-
-            if self.white_icons:
-                selected_canvas_color = canvas_color.lighter(250)
-                border_color = '#ffffff'
-            else:
-                selected_canvas_color = canvas_color.darker(120)
-                border_color = '#000000'
-            button = self.widgetForAction(a)
-            if button is None:
-                continue
-            button.setProperty('modernToolbarButton', True)
-            button.setMinimumHeight(36)
-            button.setMinimumWidth(42)
-            if i == 0:
-                button.setProperty('modernToolbarRole', 'brand')
-                set_tool_button_style = getattr(button, 'setToolButtonStyle', None)
-                if callable(set_tool_button_style):
-                    set_tool_button_style(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
-                button.setMinimumWidth(104)
-            button.setStyleSheet(' \
-                    QToolButton {min-width:34px; min-height:34px; border:1px solid transparent; margin: 1px; padding: 5px 8px; background-color: transparent;border-radius: 8px;color:#485251;} \
-                    QToolButton:hover {min-width:34px; min-height:34px; border:1px solid #D5DDDA; margin: 1px; padding: 5px 8px; background-color:#EEF3F1;border-radius: 8px;color:#2F4F55;} \
-                    QToolButton:checked {min-width:34px; min-height:34px; border:1px solid transparent; margin: 1px; padding: 5px 8px; background-color:' + selected_canvas_color.name() + ';border-radius: 8px;color:' + border_color + ';} \
-                    QToolButton:checked:hover {min-width:34px; min-height:34px; border:1px solid #BFCAC6; margin: 1px; padding: 5px 8px; background-color:' + selected_canvas_color.name() + ';border-radius: 8px;color:' + border_color + ';} \
-                    QToolButton[modernToolbarRole="brand"] {min-width:96px; min-height:34px; font-weight:700; padding-left:9px; padding-right:12px; background-color:#F6FAF8;border:1px solid #D9E3DF;color:#2F5960;} \
-                    QToolButton[modernToolbarRole="brand"]:hover {background-color:#EAF3F0;border:1px solid #BFD1CB;color:#234B52;}')
-
         self._actions_by_callback = toolbar_actions_by_callback(self.toolitems, self.actions())
+        for callback_name, action in self._actions_by_callback.items():
+            role = 'brand' if callback_name == 'plus' else 'compact'
+            self._style_toolbar_action_button(action, role=role)
         self._apply_renderer_surface_toolbar_policy()
         self.aw.updatePlusStatus(self)
 
@@ -943,6 +930,52 @@ class VMToolbar(NavigationToolbar): # pylint: disable=abstract-method
 #####   temporary hack for windows till better solution found about toolbar icon problem with py2exe and svg
 #######################################################################################
 
+    def _toolbar_selected_colors(self) -> tuple[str, str]:
+        if self.qmc.palette['canvas'] == 'None':
+            canvas_color = QColor('#ECECEC')
+        else:
+            canvas_color = QColor(self.qmc.palette['canvas'])
+        if canvas_color.name() == '#000000': # on black we start with (1,1,1) for lighter
+            canvas_color = QColor('#222222')
+        if self.white_icons:
+            return canvas_color.lighter(250).name(), '#ffffff'
+        return canvas_color.darker(120).name(), '#000000'
+
+    def _style_toolbar_action_button(self, action: object, *, role: str) -> None:
+        metrics = roast_toolbar_visual_metrics()
+        button = self.widgetForAction(action) # type:ignore[arg-type]
+        if button is None:
+            return
+        button.setProperty('modernToolbarButton', True)
+        button.setProperty('modernToolbarRole', role)
+        set_tool_button_style = getattr(button, 'setToolButtonStyle', None)
+        if callable(set_tool_button_style):
+            set_tool_button_style(
+                Qt.ToolButtonStyle.ToolButtonTextBesideIcon
+                if role == 'brand'
+                else Qt.ToolButtonStyle.ToolButtonIconOnly,
+            )
+        set_icon_size = getattr(button, 'setIconSize', None)
+        if callable(set_icon_size):
+            set_icon_size(QSize(metrics['icon_size'], metrics['icon_size']))
+        target_width = metrics['brand_width'] if role == 'brand' else metrics['button_width']
+        set_fixed_size = getattr(button, 'setFixedSize', None)
+        if callable(set_fixed_size):
+            set_fixed_size(target_width, metrics['button_height'])
+        else:
+            button.setMinimumHeight(metrics['button_height'])
+            button.setMaximumHeight(metrics['button_height'])
+            button.setMinimumWidth(target_width)
+            button.setMaximumWidth(target_width)
+        selected_canvas_color, border_color = self._toolbar_selected_colors()
+        button.setStyleSheet(' \
+                QToolButton {min-width:' + str(metrics['button_width']) + 'px; max-width:' + str(metrics['button_width']) + 'px; min-height:' + str(metrics['button_height']) + 'px; max-height:' + str(metrics['button_height']) + 'px; border:1px solid transparent; margin:0; padding:0; background-color: transparent;border-radius: 12px;color:#485251;} \
+                QToolButton:hover {border:1px solid #D5DDDA; background-color:#EEF3F1;color:#2F4F55;} \
+                QToolButton:checked {border:1px solid transparent; background-color:' + selected_canvas_color + ';color:' + border_color + ';} \
+                QToolButton:checked:hover {border:1px solid #BFCAC6; background-color:' + selected_canvas_color + ';color:' + border_color + ';} \
+                QToolButton[modernToolbarRole="brand"] {min-width:' + str(metrics['brand_width']) + 'px; max-width:' + str(metrics['brand_width']) + 'px; min-height:' + str(metrics['button_height']) + 'px; max-height:' + str(metrics['button_height']) + 'px; font-weight:700; padding-left:12px; padding-right:16px; background-color:#F6FAF8;border:1px solid #CFE0DA;color:#2F5960;border-radius: 12px;} \
+                QToolButton[modernToolbarRole="brand"]:hover {background-color:#EAF3F0;border:1px solid #BFD1CB;color:#234B52;}')
+
     def _apply_renderer_surface_toolbar_policy(self) -> None:
         surface = renderer_surface_from_qmc(self.qmc)
         apply_toolbar_surface_policy(self._actions_by_callback, surface)
@@ -960,6 +993,7 @@ class VMToolbar(NavigationToolbar): # pylint: disable=abstract-method
             self.edit_curve_parameters_action.triggered.connect(self.my_edit_parameters)
             self.edit_curve_parameters_action.setToolTip(QApplication.translate('Tooltip', 'Line styles'))
             self.insertAction(self.actions()[-1], self.edit_curve_parameters_action)
+            self._style_toolbar_action_button(self.edit_curve_parameters_action, role='compact')
 
     def remove_toolbar_lines_configuration(self) -> None:
         if len(self.actions()) > 0 and self.edit_curve_parameters_action is not None: # pyright:ignore[reportUnknownArgumentType]

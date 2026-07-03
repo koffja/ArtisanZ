@@ -55,6 +55,16 @@ Implementation anchor: `tgraphcanvas.sync_pyqtgraph_static_overlays_from_canvas(
 - Long metric titles should wrap within a fixed-width telemetry column rather than widening the column into the graph.
 - Numeric value surfaces should align to their container and keep enough padding for segmented-digit fonts.
 
+## Roast Toolbar
+
+- The main roast toolbar is a monitoring/control strip, not a generic desktop icon shelf. Controls must share one vertical baseline.
+- Cotrix branding uses a compact pill. It must never clip at the top or bottom, and its width must leave room for the icon and label.
+- Icon-only toolbar buttons should be square, centered, and at least as tall as the icon plus padding.
+- Project-owned SVG icons should fill the 32x32 viewBox with deliberate stroke weight. Avoid old Matplotlib or Qt editor icons that look thin, tiny, or off-center.
+- PyQtGraph mode should only expose controls that act on the visible PyQtGraph graph. Matplotlib-only controls stay hidden on that surface.
+
+Implementation anchor: `artisanlib.main.roast_toolbar_visual_metrics()` and `VMToolbar._style_toolbar_action_button()`.
+
 ## Roast Analysis Overlays
 
 - Main roast events such as CHARGE, DRY, FCs, and DROP must include BT temperature when available.

@@ -567,8 +567,10 @@ def modern_application_stylesheet(theme: ModernTheme | None = None) -> str:
             background-color: #F7F9F6;
             border: 0;
             border-bottom: 1px solid #DDE5E1;
-            spacing: 6px;
-            padding: 6px 8px;
+            min-height: 58px;
+            max-height: 58px;
+            spacing: 10px;
+            padding: 6px 10px;
         }}
         QToolBar#roastNavigationToolbar::separator {{
             background-color: #D1DBD7;

@@ -1,5 +1,6 @@
 import sys
 from collections.abc import Generator
+from pathlib import Path
 
 import pytest
 
@@ -118,6 +119,21 @@ def test_modern_toolbar_icon_path_handles_png_names() -> None:
 
     assert icon_path is not None
     assert icon_path.endswith('/Icons/qt4_editor_options.svg')
+
+
+def test_lines_toolbar_icons_are_full_size_modern_assets() -> None:
+    icon_path = modern_toolbar_icon_path('qt4_editor_options.png', white_icons=False, svg_support=True)
+    white_icon_path = modern_toolbar_icon_path('qt4_editor_options.png', white_icons=True, svg_support=True)
+
+    assert icon_path is not None
+    assert white_icon_path is not None
+    icon_svg = Path(icon_path).read_text(encoding='utf-8')
+    white_icon_svg = Path(white_icon_path).read_text(encoding='utf-8')
+
+    assert 'viewBox="0 0 32 32"' in icon_svg
+    assert 'stroke-width="3.4"' in icon_svg
+    assert 'viewBox="0 0 32 32"' in white_icon_svg
+    assert 'stroke-width="3.4"' in white_icon_svg
 
 
 def test_modern_toolbar_icon_path_uses_cotrix_brand_icon() -> None:

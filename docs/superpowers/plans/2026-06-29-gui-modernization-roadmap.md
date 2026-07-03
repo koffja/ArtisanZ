@@ -332,6 +332,18 @@ Important observations from the code review:
 
 **Evidence:** Focused policy tests produced `4 passed`; related toolbar/canvas/theme tests produced `29 passed`; `py_compile`, targeted `ruff check`, and `git diff --check` passed. Offscreen saved-profile screenshot smoke wrote `/tmp/artisanz-toolbar-policy.png` and visually confirmed the PyQtGraph toolbar has no old Back/Forward/Pan/Zoom cluster.
 
+**Follow-up Closed:** Phase 1.26 fixes the remaining toolbar fit regression where the Cotrix pill could clip vertically and the Lines icon looked undersized.
+
+## Phase 1.26: Toolbar Visual Fit Pass
+
+**Goal:** Make the reduced PyQtGraph toolbar look intentional rather than clipped or assembled from mismatched legacy widgets.
+
+**Closed:** 2026-07-03 with explicit toolbar visual metrics, fixed-height Cotrix/Home/Lines buttons, a matched readout label height, and a rebuilt Lines SVG pair with a centered 32x32 viewBox and stronger stroke weight. The toolbar container now reserves the same height in runtime code and global theme QSS.
+
+**Tracking Plan:** `docs/superpowers/plans/2026-07-03-gui-modernization-phase-1-26-toolbar-visual-fit.md`
+
+**Evidence:** Focused toolbar/theme tests produced `18 passed`; `py_compile`, targeted `ruff check`, and `git diff --check` passed. Offscreen saved-profile screenshot smoke wrote `/tmp/artisanz-toolbar-polish.png` and visually confirmed the Cotrix pill is no longer clipped and the Lines icon is heavier and centered.
+
 **Remaining Gate:** The Lines action still opens the Matplotlib curve-style editor path. A future curve-style pass should replace it with a renderer-neutral style panel or PyQtGraph-aware editor before removing Matplotlib as the primary compatibility surface.
 
 ## Phase 2: Plot Renderer Boundary and PyQtGraph POC
