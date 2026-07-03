@@ -6,11 +6,19 @@ import math
 from typing import Any
 
 from artisanlib.plot_pyqtgraph_adapter import PyQtGraphSnapshotRenderer
+from artisanlib.plot_pyqtgraph_overlays import (
+    apply_shadow_pens,
+    PhaseBandOverlay,
+    EventMarkerOverlay,
+    RORFillOverlay,
+)
 
 CursorPositionCallback = Callable[[float, float, float | None], None]
 
 
 @dataclass(slots=True)
+
+
 class PyQtGraphPlotTarget:
     widget: object
     temperature_plot: object
@@ -24,11 +32,22 @@ class PyQtGraphPlotTarget:
     _pyqtgraph: Any
     _cursor_callback: CursorPositionCallback | None = None
     _cursor_mouse_move_handler: object | None = None
+    phase_bands: object | None = None
+    event_markers: object | None = None
+    ror_fill: object | None = None
 
     def close(self) -> None:
         close_widget = getattr(self.widget, 'close', None)
         if callable(close_widget):
             close_widget()
+        for overlay in (self.phase_bands, self.event_markers, self.ror_fill):
+            if overlay is not None:
+                clear = getattr(overlay, 'clear', None) or getattr(overlay, 'detach', None)
+                if callable(clear):
+                    try:
+                        clear()
+                    except Exception:
+                        pass
         self._pyqtgraph.setConfigOptions(useOpenGL=self._previous_opengl)
 
     def configure_axes(
@@ -79,6 +98,18 @@ class PyQtGraphPlotTarget:
         if self._cursor_callback is not None:
             self._cursor_callback(float(time), float(temperature), None if ror is None else float(ror))
 
+    def enhance_curves(self) -> int:
+        """Apply shadow pens to all temperature curves. Returns count enhanced."""
+        return apply_shadow_pens(self.temperature_plot, self._pyqtgraph)
+
+    def init_overlays(self) -> None:
+        """Create overlay managers. Call once after the widget is fully set up."""
+        self.phase_bands = PhaseBandOverlay(self.temperature_plot, self._pyqtgraph)
+        self.event_markers = EventMarkerOverlay(self.temperature_plot, self._pyqtgraph)
+        ror_vb = getattr(self.ror_plot, 'view_box', None) if self.ror_plot is not None else None
+        if ror_vb is not None:
+            self.ror_fill = RORFillOverlay(ror_vb, self._pyqtgraph)
+
 
 def create_pyqtgraph_plot_target(
         *,
@@ -122,6 +153,7 @@ def create_pyqtgraph_plot_target(
         _pyqtgraph=pg,
     )
     _connect_cursor_tracking(target)
+    target.init_overlays()
     return target
 
 
