@@ -17,7 +17,7 @@ _OVERLAY_ET_COLOR = (193, 138, 107)   # DeltaET palette
 _OVERLAY_ALPHA = 70                    # ~27% opacity
 _OVERLAY_WIDTH = 1
 _OVERLAY_Z = 5                         # behind main curves (z=10)
-_MAX_OVERLAYS = 10
+_MAX_OVERLAYS = 15
 
 
 class ComparisonOverlay:
@@ -36,6 +36,12 @@ class ComparisonOverlay:
         if len(self._curves) >= _MAX_OVERLAYS:
             _log.warning('ComparisonOverlay: max %d overlays reached', _MAX_OVERLAYS)
             return False
+        # Deduplicate: skip if already loaded
+        filepath_abs = os.path.abspath(filepath)
+        for entry in self._curves:
+            if entry.get('filepath') == filepath_abs:
+                _log.info('ComparisonOverlay: already loaded %s, skipping', filepath)
+                return False
         if not os.path.isfile(filepath):
             _log.warning('ComparisonOverlay: file not found: %s', filepath)
             return False
@@ -53,12 +59,16 @@ class ComparisonOverlay:
             _log.warning('ComparisonOverlay: no BT data in %s', filepath)
             return False
 
-        # Normalize time to start at 0
+        # Normalize time to start at 0, using min length to avoid misalignment
         try:
-            t0 = float(time_data[0]) if time_data else 0.0
-            time_norm = [float(t) - t0 for t in time_data]
-            bt_y = [float(v) for v in temp2[:len(time_norm)]]
-            et_y = [float(v) for v in temp1[:len(time_norm)]] if temp1 else []
+            n = min(len(time_data), len(temp2), len(temp1) if temp1 else len(time_data))
+            if n == 0:
+                _log.warning('ComparisonOverlay: empty data in %s', filepath)
+                return False
+            t0 = float(time_data[0])
+            time_norm = [float(time_data[i]) - t0 for i in range(n)]
+            bt_y = [float(temp2[i]) for i in range(n)]
+            et_y = [float(temp1[i]) for i in range(n)] if temp1 and len(temp1) >= n else []
         except (TypeError, ValueError, IndexError):
             _log.warning('ComparisonOverlay: data conversion failed for %s', filepath)
             return False
@@ -76,7 +86,7 @@ class ComparisonOverlay:
             self._plot.addItem(et_item)
 
         label = os.path.basename(filepath)
-        self._curves.append({'bt': bt_item, 'et': et_item, 'label': label})
+        self._curves.append({'bt': bt_item, 'et': et_item, 'label': label, 'filepath': filepath_abs})
         _log.info('ComparisonOverlay: added %s (BT=%d pts)', label, len(bt_y))
         return True
 
