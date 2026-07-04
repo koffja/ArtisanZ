@@ -145,9 +145,9 @@ class RORFillOverlay:
 # ---------------------------------------------------------------------------
 
 _PHASE_COLORS: dict[str, tuple[int, int, int, int]] = {
-    'drying':      (255, 220, 100, 35),
-    'maillard':    (255, 150, 80, 35),
-    'development': (255, 80, 80, 35),
+    'drying':      (0xF5, 0xF5, 0xF0, 60),  # #F5F5F0 Morandi off-white
+    'maillard':    (0xF5, 0xF0, 0xE1, 60),  # #F5F0E1 Morandi light ivory
+    'development': (0xF4, 0xF2, 0xEC, 60),  # #F4F2EC Morandi light cream
 }
 
 

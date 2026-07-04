@@ -717,13 +717,13 @@ def _default_phase_summary_item_factory(
         return None
     y_top = snapshot.temperature_axis.maximum
     span = max(1.0, snapshot.temperature_axis.maximum - snapshot.temperature_axis.minimum)
-    y_bar = y_top - span * 0.07
-    y_text = y_top - span * 0.045
+    y_bar = y_top - span * 0.10
+    y_text = y_top - span * 0.035
     x_mid = (summary.start + summary.end) / 2.0
     bar = pg.PlotDataItem(
         [summary.start, summary.end],
         [y_bar, y_bar],
-        pen=pg.mkPen(color=_color_with_alpha(pg, summary.color, min(0.72, summary.opacity + 0.18)), width=14),
+        pen=pg.mkPen(color=_color_with_alpha(pg, summary.color, max(0.55, min(0.78, summary.opacity + 0.40))), width=14),
     )
     _call_if_available(bar, 'setZValue', 12)
     if _settings_bool(('phaseSummaryLabels', 'phase_summary_labels'), True):
@@ -742,7 +742,7 @@ def _default_phase_summary_item_factory(
         color='#20272B',
         anchor=(0.5, 0.5),
     )
-    delta.setPos(x_mid, y_top - span * 0.105)
+    delta.setPos(x_mid, y_top - span * 0.135)
     _call_if_available(delta, 'setZValue', 34)
     return bar, label, delta
 
