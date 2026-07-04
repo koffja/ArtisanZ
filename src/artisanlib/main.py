@@ -4701,6 +4701,10 @@ class ApplicationWindow(QMainWindow):
         clear_compare_action = QAction(QApplication.translate('Label', 'Clear Comparison Curves'), self)
         clear_compare_action.triggered.connect(self.clearComparisonCurves)
         roast_menu.addAction(clear_compare_action)
+        self._distribution_action = QAction(QApplication.translate('Label', 'Toggle Distribution'), self)
+        self._distribution_action.setCheckable(True)
+        self._distribution_action.triggered.connect(self.toggleComparisonDistribution)
+        roast_menu.addAction(self._distribution_action)
         if policy.show_full_menus:
             roast_menu.addSeparator()
             roast_menu.addAction(self.switchAction)
@@ -28569,7 +28573,30 @@ class ApplicationWindow(QMainWindow):
             overlay = getattr(target, 'comparison_overlay', None)
             if overlay is not None and overlay.count > 0:
                 overlay.clear()
+                if hasattr(self, '_distribution_action'):
+                    self._distribution_action.setChecked(False)
                 self.sendmessage(QApplication.translate('Message', 'Comparison curves cleared'))
+        except Exception as e:
+            _log.exception(e)
+
+    def toggleComparisonDistribution(self, checked: bool) -> None:
+        """Toggle the BoxplotItem distribution overlay for comparison roasts."""
+        try:
+            target = getattr(self.qmc, 'plot_pyqtgraph_target', None)
+            if target is None:
+                return
+            overlay = getattr(target, 'comparison_overlay', None)
+            if overlay is None:
+                return
+            if checked:
+                if overlay.show_distribution():
+                    self.sendmessage(QApplication.translate('Message', 'Distribution shown'))
+                else:
+                    self.sendmessage(QApplication.translate('Message', 'Need at least 2 comparison roasts'))
+                    self._distribution_action.setChecked(False)
+            else:
+                overlay.hide_distribution()
+                self.sendmessage(QApplication.translate('Message', 'Distribution hidden'))
         except Exception as e:
             _log.exception(e)
 

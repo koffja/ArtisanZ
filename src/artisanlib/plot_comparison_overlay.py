@@ -27,6 +27,7 @@ class ComparisonOverlay:
         self._plot = temperature_plot
         self._pg = pg
         self._curves: list[dict[str, Any]] = []
+        self._distribution_item: Any | None = None
 
     def add_from_file(self, filepath: str) -> bool:
         """Load a .alog file and add its BT/ET curves as overlay.
@@ -91,7 +92,8 @@ class ComparisonOverlay:
         return True
 
     def clear(self) -> None:
-        """Remove all overlay curves."""
+        """Remove all overlay curves and distribution."""
+        self.hide_distribution()
         for entry in self._curves:
             for key in ('bt', 'et'):
                 item = entry.get(key)
@@ -109,6 +111,99 @@ class ComparisonOverlay:
                 item = entry.get(key)
                 if item is not None:
                     _call_if_available(item, 'setVisible', visible)
+
+    def show_distribution(self) -> bool:
+        """Compute and display a BoxplotItem distribution from loaded roasts.
+
+        Requires at least 2 loaded roasts. Returns True on success.
+        """
+        self.hide_distribution()
+        if self.count < 2:
+            _log.info('ComparisonOverlay: need >= 2 roasts for distribution')
+            return False
+        try:
+            import numpy as np
+        except ImportError:
+            return False
+
+        # Collect BT data arrays from overlay curves
+        all_bt: list[tuple[list[float], list[float]]] = []
+        max_time = 0.0
+        for entry in self._curves:
+            bt_item = entry.get('bt')
+            if bt_item is None:
+                continue
+            x_data, y_data = self._extract_data(bt_item)
+            if not x_data or not y_data:
+                continue
+            all_bt.append((x_data, y_data))
+            max_time = max(max_time, max(x_data))
+
+        if len(all_bt) < 2:
+            return False
+
+        # Common time points: every 30 seconds from 0 to max_time
+        step = 30.0
+        time_points = list(range(0, int(max_time) + int(step), int(step)))
+        if len(time_points) < 3:
+            return False
+
+        # Interpolate each roast's BT to common time points
+        y_values: list[np.ndarray] = []
+        for t in time_points:
+            values: list[float] = []
+            for x_data, y_data in all_bt:
+                try:
+                    v = float(np.interp(float(t), x_data, y_data))
+                    values.append(v)
+                except Exception:
+                    pass
+            if len(values) >= 2:
+                y_values.append(np.array(values))
+            else:
+                y_values.append(np.array([]))
+
+        # Filter out empty entries
+        valid_x = [time_points[i] for i in range(len(y_values)) if len(y_values[i]) >= 2]
+        valid_y = [y_values[i] for i in range(len(y_values)) if len(y_values[i]) >= 2]
+        if len(valid_x) < 3:
+            return False
+
+        try:
+            bp = self._pg.BoxplotItem(
+                x=valid_x,
+                y=valid_y,
+                pen=self._pg.mkPen(100, 120, 130, 60, width=0.5),
+                brush=self._pg.mkBrush(144, 161, 168, 25),
+            )
+            _call_if_available(bp, 'setZValue', 3)
+            self._plot.addItem(bp)
+            self._distribution_item = bp
+            _log.info('ComparisonOverlay: distribution shown (%d boxes from %d roasts)', len(valid_x), len(all_bt))
+            return True
+        except Exception:
+            _log.warning('ComparisonOverlay: BoxplotItem creation failed', exc_info=True)
+            return False
+
+    def hide_distribution(self) -> None:
+        """Remove the distribution BoxplotItem if present."""
+        if self._distribution_item is not None:
+            try:
+                self._plot.removeItem(self._distribution_item)
+            except Exception:
+                pass
+            self._distribution_item = None
+
+    @staticmethod
+    def _extract_data(item: Any) -> tuple[list[float], list[float]]:
+        """Extract x/y data arrays from a PlotDataItem."""
+        try:
+            result = item.getData()
+            if result and len(result) >= 2:
+                return list(result[0]), list(result[1])
+        except Exception:
+            pass
+        return [], []
 
     @property
     def count(self) -> int:
