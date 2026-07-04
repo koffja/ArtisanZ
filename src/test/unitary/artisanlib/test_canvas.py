@@ -1782,3 +1782,14 @@ class TestFindTextGap:
         # Assert
         assert isinstance(ystep_down, int)
         assert isinstance(ystep_up, int)
+
+
+def test_draw_rorflick_annotation_handles_fresh_canvas_slot():
+    """Smoke test: draw_rorflick_annotation works on a fresh canvas without a manager."""
+    from unittest.mock import Mock
+    from artisanlib.canvas import tgraphcanvas
+    canvas = Mock()
+    canvas.rorflick_manager = None
+    canvas.rorflick_artists = []
+    canvas._rorflick_last_len = 0
+    tgraphcanvas.draw_rorflick_annotation(canvas)

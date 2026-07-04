@@ -45,6 +45,7 @@ from typing import override, Final, Literal, Any, cast, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from artisanlib.charge_manager import ChargeTargetManager
+    from artisanlib.rorflick_manager import RoRFlickManager
     from artisanlib.comm import serialport # pylint: disable=unused-import
     from artisanlib.atypes import ProfileData, BTU # pylint: disable=unused-import
     from artisanlib.main import ApplicationWindow # pylint: disable=unused-import
@@ -442,7 +443,7 @@ class tgraphcanvas(QObject):
         'swapdeltalcds', 'PIDbuttonflag', 'Controlbuttonflag', 'deltaETfilter', 'deltaBTfilter', 'curvefilter', 'deltaETspan', 'deltaBTspan',
         'deltaETsamples', 'deltaBTsamples', 'profile_sampling_interval', 'background_profile_sampling_interval', 'profile_meter', 'optimalSmoothing', 'polyfitRoRcalc',
         'patheffects', 'graphstyle', 'graphfont', 'buttonvisibility', 'buttonactions', 'buttonactionstrings', 'extrabuttonactions', 'extrabuttonactionstrings',
-        'xextrabuttonactions', 'xextrabuttonactionstrings', 'charge_manager', 'charge_target_annotation', 'chargeTimerFlag', 'autoChargeFlag', 'autoDropFlag', 'autoChargeMode', 'autoDropMode', 'autoChargeIdx', 'autoDropIdx', 'markTPflag',
+        'xextrabuttonactions', 'xextrabuttonactionstrings', 'charge_manager', 'charge_target_annotation', 'rorflick_artists', '_rorflick_last_len', 'chargeTimerFlag', 'autoChargeFlag', 'autoDropFlag', 'autoChargeMode', 'autoDropMode', 'autoChargeIdx', 'autoDropIdx', 'markTPflag',
         'autoDRYflag', 'autoFCsFlag', 'autoCHARGEenabled', 'autoDRYenabled', 'autoFCsenabled', 'autoDROPenabled', 'projectionconstant',
         'projectionmode', 'transMappingMode', 'weight', 'end_weight_est', 'roasted_defects_weight', 'volume', 'density', 'roasted_defects_mode', 'density_roasted', 'volumeCalcUnit', 'volumeCalcWeightInStr',
         'volumeCalcWeightOutStr', 'container_names', 'container_weights', 'specialevents', 'etypes', 'etypesdefault',
@@ -542,6 +543,9 @@ class tgraphcanvas(QObject):
         self.enable_selected_plot_widget(parent)
         self.charge_manager: ChargeTargetManager | None = None
         self.charge_target_annotation: Annotation | None = None
+        self.rorflick_manager: RoRFlickManager | None = None
+        self.rorflick_artists: list = []       # tracks ALL matplotlib artists (annotations + axvspans) for cleanup
+        self._rorflick_last_len: int = 0       # tracks delta2 length to detect live vs replay mode
 
         #default palette of colors
         self.locale_str:str = locale
@@ -6293,6 +6297,10 @@ class tgraphcanvas(QObject):
                                         # CHARGE TARGET REALTIME UPDATE
                                         try:
                                             self.draw_charge_target_annotation()
+                                            try:
+                                                self.draw_rorflick_annotation()
+                                            except Exception:
+                                                pass
                                             if self.charge_target_annotation:
                                                 self.ax.draw_artist(self.charge_target_annotation)
                                         except Exception:
@@ -12140,6 +12148,10 @@ class tgraphcanvas(QObject):
 
                 # CHARGE TARGET ANNOTATION
                 self.draw_charge_target_annotation()
+                try:
+                    self.draw_rorflick_annotation()
+                except Exception:
+                    pass
 
             except Exception as ex: # pylint: disable=broad-except
                 _log.exception(ex)
@@ -19168,6 +19180,120 @@ class tgraphcanvas(QObject):
                             })
                     except Exception:
                         pass
+
+    def draw_rorflick_annotation(self) -> None:
+        """Detect and annotate RoR flick/crash events on the canvas.
+
+        Live mode (recording): processes one new sample per call via process_sample.
+        Replay mode (loaded roast): re-runs full batch via process_roast when delta2
+        length jumps or shrinks (indicating a profile load).
+        """
+        if not self.rorflick_manager or not self.rorflick_manager.enabled:
+            return
+
+        # Clear ALL previous artists (annotations + axvspans) to prevent accumulation
+        if self.rorflick_artists:
+            for artist in self.rorflick_artists:
+                try:
+                    artist.remove()
+                except Exception:
+                    pass
+            self.rorflick_artists = []
+
+        if not self.delta2:
+            return
+
+        current_len = len(self.delta2)
+
+        # Mode detection: live if delta2 grew by exactly 1 sample, else replay
+        if current_len == self._rorflick_last_len + 1:
+            # --- Live mode: process one new sample ---
+            try:
+                short_avg = self._charge_window_average_delta(9.0)
+                long_avg = self._charge_window_average_delta(30.0)
+            except Exception:
+                return
+            if short_avg is None or long_avg is None:
+                return
+            sample_idx = current_len - 1
+            in_dev = self.timeindex[2] > -1
+            self.rorflick_manager.process_sample(sample_idx, short_avg, long_avg, in_dev)
+        else:
+            # --- Replay mode: re-run full batch over entire delta2 ---
+            # Determine sample rate from canvas config (fallback to 1.0 Hz)
+            try:
+                sample_rate_hz = 1.0 / max(0.1, getattr(self, 'samplinginterval', 1.0))
+            except Exception:
+                sample_rate_hz = 1.0
+            self.rorflick_manager.process_roast(
+                self.delta2,
+                fcs_idx=self.timeindex[2],
+                sample_rate_hz=sample_rate_hz,
+            )
+
+        self._rorflick_last_len = current_len
+
+        if not self.rorflick_manager.should_show_annotations():
+            return
+
+        severity_colors = {
+            'soft': '#FFCC00',
+            'moderate': '#FF8800',
+            'hard': '#CC0000',
+        }
+        severity_alpha = {'soft': 0.20, 'moderate': 0.30, 'hard': 0.40}
+
+        for event in self.rorflick_manager.events:
+            if (event.start_idx >= len(self.timex)
+                    or event.end_idx >= len(self.timex)
+                    or event.peak_idx >= len(self.timex)
+                    or event.peak_idx >= len(self.delta2)):
+                continue
+
+            color = severity_colors.get(event.severity, '#FFCC00')
+            alpha = severity_alpha.get(event.severity, 0.20)
+
+            # Highlight band from start to end — TRACK the artist for cleanup
+            try:
+                span = self.ax.axvspan(
+                    self.timex[event.start_idx],
+                    self.timex[event.end_idx],
+                    facecolor=color,
+                    alpha=alpha,
+                    clip_on=True,
+                    zorder=1,
+                )
+                self.rorflick_artists.append(span)
+            except Exception:
+                pass
+
+            # Peak annotation — TRACK the artist for cleanup
+            try:
+                label_lines = [f'{event.event_type.upper()}', f'+{event.peak_magnitude:.1f}°/min']
+                if event.in_development:
+                    label_lines.append('(DEV)')
+                ann = self.ax.annotate(
+                    '\n'.join(label_lines),
+                    xy=(self.timex[event.peak_idx], self.delta2[event.peak_idx]),
+                    xytext=(self.timex[event.peak_idx], self.delta2[event.peak_idx] + 5),
+                    fontsize=8,
+                    color='#333333',
+                    ha='center',
+                    bbox={
+                        'boxstyle': 'round,pad=0.3',
+                        'facecolor': color,
+                        'edgecolor': '#666666',
+                        'alpha': 0.85,
+                    },
+                    arrowprops={
+                        'arrowstyle': '->',
+                        'color': '#666666',
+                        'lw': 0.8,
+                    },
+                )
+                self.rorflick_artists.append(ann)
+            except Exception:
+                pass
     #redraws designer
     def redrawdesigner(self, force:bool=False) -> None: #if force is set the bitblit cache is ignored and a full redraw is triggered
         from scipy.interpolate import UnivariateSpline
