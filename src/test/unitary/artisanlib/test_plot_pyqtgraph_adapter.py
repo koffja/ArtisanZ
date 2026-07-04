@@ -641,9 +641,9 @@ def test_event_label_anchor_protects_axis_edges() -> None:
 
 
 def test_phase_band_opacity_has_visible_floor_on_light_canvas() -> None:
-    assert _visible_phase_band_opacity(0.05) == 0.24
-    assert _visible_phase_band_opacity(0.22) == pytest.approx(0.33)
-    assert _visible_phase_band_opacity(0.8) == 0.38
+    assert _visible_phase_band_opacity(0.05) == 0.10
+    assert _visible_phase_band_opacity(0.22) == 0.22
+    assert _visible_phase_band_opacity(0.8) == 0.22
 
 
 def test_charge_target_annotation_factory_charged_state_returns_single_text_item() -> None:
@@ -737,3 +737,57 @@ def test_event_markers_are_optional_when_pyqtgraph_is_not_installed(monkeypatch:
 
     assert temperature_plot.added_items == []
     assert renderer.event_item_count() == 0
+
+
+def test_visible_phase_band_opacity_uses_lower_cap() -> None:
+    assert _visible_phase_band_opacity(0.30) == 0.22
+    assert _visible_phase_band_opacity(0.05) == 0.10
+    assert abs(_visible_phase_band_opacity(0.15) - 0.18) < 0.01
+    assert _visible_phase_band_opacity(0.22) == 0.22
+
+
+def test_bt_gradient_disabled_by_default_returns_solid_pen(qapp=None) -> None:
+    from artisanlib.plot_pyqtgraph_adapter import (
+        _default_pen_factory,
+        set_bt_gradient_enabled,
+        _BT_GRADIENT_ENABLED_DEFAULT,
+    )
+    set_bt_gradient_enabled(False)
+    curve = CurveSnapshot(
+        name='BT',
+        x=(0.0,),
+        y=(200.0,),
+        color='#4f5f66',
+        line_width=2.0,
+    )
+    pen = _default_pen_factory(curve)
+    assert hasattr(pen, 'color'), f'expected solid pen, got {type(pen).__name__}'
+    set_bt_gradient_enabled(_BT_GRADIENT_ENABLED_DEFAULT)
+
+
+def test_phase_summary_includes_phase_label_in_text(qapp=None) -> None:
+    from PyQt6.QtWidgets import QApplication
+    from artisanlib.plot_pyqtgraph_adapter import _default_phase_summary_item_factory
+
+    _app = QApplication.instance() or QApplication([])
+    summary = PhaseSummarySnapshot(
+        start=100.0,
+        end=300.0,
+        label='Drying',
+        duration_text='3:20',
+        percent_text='45.5%',
+        delta_text='+52',
+        color='#F5F5F0',
+        opacity=0.18,
+    )
+    snapshot = RoastPlotSnapshot(
+        curves=(),
+        time_axis=TimeRangeSnapshot(start=0.0, end=600.0, color='#000000'),
+        temperature_axis=AxisSnapshot(minimum=0.0, maximum=250.0, label=''),
+    )
+    items = _default_phase_summary_item_factory(summary, snapshot)
+    assert items is not None
+    item_tuple = items if isinstance(items, tuple) else (items,)
+    label_item = item_tuple[1]
+    text = label_item.toPlainText() if hasattr(label_item, 'toPlainText') else label_item.text
+    assert 'Drying' in text, f'phase label missing from text: {text!r}'

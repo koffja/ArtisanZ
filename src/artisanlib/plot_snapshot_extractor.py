@@ -194,9 +194,9 @@ def _background_curves(source: object) -> tuple[CurveSnapshot, ...]:
             color=_color_attr(source, 'backgrounddeltabtcolor', 'backgrounddeltabt'),
             visible=bool(getattr(source, 'DeltaBTBflag', False)),
             y_axis='ror',
-            line_style=_line_style(source, 'BTBdeltalinestyle', '-'),
+            line_style=_line_style(source, 'BTBdeltalinestyle', '--'),
             line_width=_line_width(source, 'BTBdeltalinewidth', 1.0),
-            opacity=_opacity(source, 'backgroundalpha', 0.45)),
+            opacity=_opacity(source, 'backgroundalpha', 0.35)),
         _curve_from_xy(
             source,
             name='Background Delta ET',
@@ -205,9 +205,9 @@ def _background_curves(source: object) -> tuple[CurveSnapshot, ...]:
             color=_color_attr(source, 'backgrounddeltaetcolor', 'backgrounddeltaet'),
             visible=bool(getattr(source, 'DeltaETBflag', False)),
             y_axis='ror',
-            line_style=_line_style(source, 'ETBdeltalinestyle', '-'),
+            line_style=_line_style(source, 'ETBdeltalinestyle', '--'),
             line_width=_line_width(source, 'ETBdeltalinewidth', 1.0),
-            opacity=_opacity(source, 'backgroundalpha', 0.45)),
+            opacity=_opacity(source, 'backgroundalpha', 0.35)),
     ) if curve is not None)
 
 
@@ -231,9 +231,9 @@ def _background_curve(
         y=y_values,
         color=_color_attr(source, color_attr, color_key),
         visible=bool(getattr(source, visible_attr, False)),
-        line_style=_line_style(source, line_style_attr, '-'),
+        line_style=_line_style(source, line_style_attr, '--'),
         line_width=_line_width(source, line_width_attr, 1.0),
-        opacity=_opacity(source, 'backgroundalpha', 0.45),
+        opacity=_opacity(source, 'backgroundalpha', 0.35),
     )
 
 
@@ -609,9 +609,9 @@ def _phase_summaries(source: object) -> tuple[PhaseSummarySnapshot, ...]:
         else charge_index
     )
     phase_specs = (
-        ('Drying', charge, dry, drying_delta_start_index, dry_index, 'roastphase1', '#DDE8E0'),
-        ('Maillard', dry, first_crack_start, dry_index, first_crack_index, 'roastphase2', '#E7DEC9'),
-        ('Development', first_crack_start, drop, first_crack_index, drop_index, 'roastphase3', '#FFF6A8'),
+        ('Drying', charge, dry, drying_delta_start_index, dry_index, 'roastphase1', '#F5F5F0'),
+        ('Maillard', dry, first_crack_start, dry_index, first_crack_index, 'roastphase2', '#F5F0E1'),
+        ('Development', first_crack_start, drop, first_crack_index, drop_index, 'roastphase3', '#F4F2EC'),
     )
     summaries: list[PhaseSummarySnapshot] = []
     for label, start, end, start_index, end_index, color_key, default_color in phase_specs:
@@ -1041,7 +1041,7 @@ def _phase_band_color(source: object, color_key: str, index: int) -> str:
     default_gray_colors = {'#e5e5e5', '#b2b2b2', '#d3d3d3'}
     if color.lower() not in default_gray_colors:
         return color
-    return ('#DDE8E0', '#E7DEC9', '#D9E4EA')[index]
+    return ('#F5F5F0', '#F5F0E1', '#F4F2EC')[index]
 
 
 def _background_available(source: object) -> bool:

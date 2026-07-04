@@ -35,6 +35,15 @@ ChargeTargetAnnotationItemFactory = Callable[
 CurvePenFactory = Callable[[CurveSnapshot], object]
 
 
+_BT_GRADIENT_ENABLED_DEFAULT = False
+_bt_gradient_enabled: bool = _BT_GRADIENT_ENABLED_DEFAULT
+
+
+def set_bt_gradient_enabled(enabled: bool) -> None:
+    global _bt_gradient_enabled
+    _bt_gradient_enabled = bool(enabled)
+
+
 class PyQtGraphSnapshotRenderer:
     def __init__(
             self,
@@ -375,7 +384,7 @@ def _default_pen_factory(curve: CurveSnapshot) -> object:
     else:
         line_width = curve.line_width
     # BT curve: try gradient pen for temperature-coded coloring
-    if curve.name == 'BT' and curve.y_axis == 'temperature':
+    if curve.name == 'BT' and curve.y_axis == 'temperature' and _bt_gradient_enabled:
         try:
             cached = globals().get('_cached_bt_gradient_cm')
             if cached is None:
@@ -692,7 +701,7 @@ def _default_phase_summary_item_factory(
     y_top = snapshot.temperature_axis.maximum
     span = max(1.0, snapshot.temperature_axis.maximum - snapshot.temperature_axis.minimum)
     y_bar = y_top - span * 0.07
-    y_text = y_top - span * 0.035
+    y_text = y_top - span * 0.045
     x_mid = (summary.start + summary.end) / 2.0
     bar = pg.PlotDataItem(
         [summary.start, summary.end],
@@ -701,7 +710,7 @@ def _default_phase_summary_item_factory(
     )
     _call_if_available(bar, 'setZValue', 12)
     label = pg.TextItem(
-        text=f'{summary.duration_text}  {summary.percent_text}',
+        text=f'{summary.label}\n{summary.duration_text}  {summary.percent_text}',
         color='#20272B',
         anchor=(0.5, 0.5),
     )
@@ -835,7 +844,7 @@ def _default_charge_target_annotation_factory(
 
 
 def _visible_phase_band_opacity(opacity: float) -> float:
-    return min(0.38, max(0.24, float(opacity) * 1.5))
+    return min(0.22, max(0.10, float(opacity) * 1.2))
 
 
 def _event_label_y_position(event: EventMarkerSnapshot, snapshot: RoastPlotSnapshot) -> float:

@@ -238,9 +238,9 @@ def test_build_roast_plot_snapshot_extracts_overlay_curves_and_phase_bands() -> 
     assert curves['BT projection'].y == (144.0, 190.0)
     assert curves['Delta BT projection'].y_axis == 'ror'
     assert snapshot.phase_bands == (
-        PhaseBandSnapshot(minimum=100.0, maximum=150.0, color='#A0A0A0', opacity=0.22),
-        PhaseBandSnapshot(minimum=150.0, maximum=190.0, color='#B0B0B0', opacity=0.22),
-        PhaseBandSnapshot(minimum=190.0, maximum=230.0, color='#C0C0C0', opacity=0.22),
+        PhaseBandSnapshot(minimum=100.0, maximum=150.0, color='#A0A0A0', opacity=0.3),
+        PhaseBandSnapshot(minimum=150.0, maximum=190.0, color='#B0B0B0', opacity=0.3),
+        PhaseBandSnapshot(minimum=190.0, maximum=230.0, color='#C0C0C0', opacity=0.3),
     )
 
 
@@ -696,3 +696,47 @@ def test_charge_target_annotations_reuses_precomputed_axes():
     # x_limit/y_limit_top should come from axes, not from timex/temp2
     assert snap.x_limit == 999.0
     assert snap.y_limit_top == 888.0
+
+
+def test_phase_band_gray_fallback_uses_light_morandi_colors():
+    from artisanlib.plot_snapshot_extractor import _phase_band_color
+    class FakeSource:
+        palette = {'rect1': '#e5e5e5', 'rect2': '#b2b2b2', 'rect3': '#d3d3d3'}
+    s = FakeSource()
+    assert _phase_band_color(s, 'rect1', 0) == '#F5F5F0'
+    assert _phase_band_color(s, 'rect2', 1) == '#F5F0E1'
+    assert _phase_band_color(s, 'rect3', 2) == '#F4F2EC'
+
+
+def test_background_curves_default_to_dashed_and_lower_alpha():
+    from artisanlib.plot_snapshot_extractor import _background_curves
+    class FakeSource:
+        backgroundBTflag = True
+        backgroundETflag = True
+        DeltaBTBflag = True
+        DeltaETBflag = True
+        backgroundbt = '#B29E84'
+        backgroundet = '#8493A0'
+        backgrounddeltabt = '#B29E84'
+        backgrounddeltaet = '#8493A0'
+        timex = (0.0, 100.0, 200.0)
+        timeB = (0.0, 100.0, 200.0)
+        timeindexB = (0, 0, 0, 0, 0, 0, 2)
+        flagon = True
+        temp2B = (150.0, 180.0, 200.0)
+        temp1B = (180.0, 210.0, 230.0)
+        stemp2B = (150.0, 180.0, 200.0)
+        stemp1B = (180.0, 210.0, 230.0)
+        delta2B = (30.0, 20.0, 15.0)
+        delta1B = (40.0, 30.0, 20.0)
+        BTbacklinewidth = 1.5
+        ETbacklinewidth = 1.5
+        BTBdeltalinewidth = 1.0
+        ETBdeltalinewidth = 1.0
+        backgroundShowFullflag = True
+        palette = {}
+    curves = _background_curves(FakeSource())
+    assert len(curves) == 4
+    for curve in curves:
+        assert curve.line_style == '--', f'background curve {curve.name} should be dashed, got {curve.line_style}'
+        assert curve.opacity <= 0.35, f'background curve {curve.name} alpha should be <= 0.35, got {curve.opacity}'
