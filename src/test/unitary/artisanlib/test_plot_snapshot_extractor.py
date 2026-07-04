@@ -184,7 +184,7 @@ class FakeCompletedRoastCanvas(FakeOverlayCanvas):
         'roastphasetext': '#20272B',
         'roastphase1': '#DDE8E0',
         'roastphase2': '#E7DEC9',
-        'roastphase3': '#FFF6A8',
+        'roastphase3': '#F4F2EC',
     }
 
 
@@ -238,9 +238,9 @@ def test_build_roast_plot_snapshot_extracts_overlay_curves_and_phase_bands() -> 
     assert curves['BT projection'].y == (144.0, 190.0)
     assert curves['Delta BT projection'].y_axis == 'ror'
     assert snapshot.phase_bands == (
-        PhaseBandSnapshot(minimum=100.0, maximum=150.0, color='#A0A0A0', opacity=0.3),
-        PhaseBandSnapshot(minimum=150.0, maximum=190.0, color='#B0B0B0', opacity=0.3),
-        PhaseBandSnapshot(minimum=190.0, maximum=230.0, color='#C0C0C0', opacity=0.3),
+        PhaseBandSnapshot(minimum=100.0, maximum=150.0, color='#F5F5F0', opacity=0.3),
+        PhaseBandSnapshot(minimum=150.0, maximum=190.0, color='#F5F0E1', opacity=0.3),
+        PhaseBandSnapshot(minimum=190.0, maximum=230.0, color='#F4F2EC', opacity=0.3),
     )
 
 
@@ -322,7 +322,7 @@ def test_build_roast_plot_snapshot_extracts_completed_phase_summary_and_developm
         TimeRangeSnapshot(
             start=420.0,
             end=600.0,
-            color='#FFF6A8',
+            color='#F4F2EC',
             opacity=0.28,
             label='Development',
             kind='development',
@@ -354,7 +354,7 @@ def test_build_roast_plot_snapshot_extracts_completed_phase_summary_and_developm
             duration_text='3:00',
             percent_text='30.0%',
             delta_text='27.0F',
-            color='#FFF6A8',
+            color='#F4F2EC',
         ),
     )
 

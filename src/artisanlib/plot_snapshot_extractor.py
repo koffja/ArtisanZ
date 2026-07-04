@@ -614,7 +614,7 @@ def _time_ranges(source: object) -> tuple[TimeRangeSnapshot, ...]:
         TimeRangeSnapshot(
             start=first_crack_start,
             end=drop,
-            color=_palette_color_with_default(source, 'roastphase3', '#FFF6A8'),
+            color='#F4F2EC',  # Morandi light cream (was #FFF6A8 yellow)
             opacity=0.28,
             label='Development',
             kind='development',
@@ -1069,10 +1069,8 @@ def _event_color(source: object, event_type: int) -> str:
 
 
 def _phase_band_color(source: object, color_key: str, index: int) -> str:
-    color = _palette_color(source, color_key)
-    default_gray_colors = {'#e5e5e5', '#b2b2b2', '#d3d3d3'}
-    if color.lower() not in default_gray_colors:
-        return color
+    # Force Morandi light palette for phase bands — ignore saved palette overrides
+    # from .aset/QSettings to maintain the ArtisanZ visual design language.
     return ('#F5F5F0', '#F5F0E1', '#F4F2EC')[index]
 
 

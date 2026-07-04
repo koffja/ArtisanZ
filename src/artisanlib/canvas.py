@@ -10367,13 +10367,13 @@ class tgraphcanvas(QObject):
                     #draw water marks for dry phase region, mid phase region, and finish phase region
                     if self.watermarksflag:
                         rect1 = patches.Rectangle((0,self.phases[0]), width=1, height=(self.phases[1]-self.phases[0]),
-                                                  transform=trans, color=self.palette['rect1'],alpha=0.15,
+                                                  transform=trans, color='#F5F5F0',alpha=0.15,  # Morandi forced
                                                   path_effects=[])
                         rect2 = patches.Rectangle((0,self.phases[1]), width=1, height=(self.phases[2]-self.phases[1]),
-                                                  transform=trans, color=self.palette['rect2'],alpha=0.15,
+                                                  transform=trans, color='#F5F0E1',alpha=0.15,  # Morandi forced
                                                   path_effects=[])
                         rect3 = patches.Rectangle((0,self.phases[2]), width=1, height=(self.phases[3] - self.phases[2]),
-                                                  transform=trans, color=self.palette['rect3'],alpha=0.15,
+                                                  transform=trans, color='#F4F2EC',alpha=0.15,  # Morandi forced
                                                   path_effects=[])
                         self.ax.add_patch(rect1)
                         self.ax.add_patch(rect2)
