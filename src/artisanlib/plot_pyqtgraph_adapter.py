@@ -717,6 +717,14 @@ def _default_phase_summary_item_factory(
     return bar, label, delta
 
 
+_CHARGE_CARD_X_MARGIN_RATIO = 0.02
+_CHARGE_CARD_Y_MARGIN_RATIO = 0.05
+_CHARGE_CALLOUT_OFFSET_RATIO = 0.12
+_CHARGE_CALLOUT_RIGHT_THRESHOLD = 0.70
+_CHARGE_CALLOUT_TOP_THRESHOLD = 0.80
+_CHARGE_TEXT_Z = 36
+_CHARGE_CONNECTOR_Z = 21
+
 _CHARGE_BG_COLOR_HEX = {
     'red': '#FFEDED',
     'blue': '#E6E6FF',
@@ -759,8 +767,8 @@ def _default_charge_target_annotation_factory(
         # Charged state: static top-left card, no arrow.
         x_span = max(1.0, snapshot.time_axis.maximum - snapshot.time_axis.minimum)
         y_span = max(1.0, snapshot.temperature_axis.maximum - snapshot.temperature_axis.minimum)
-        x_pos = snapshot.time_axis.minimum + x_span * 0.02
-        y_pos = snapshot.temperature_axis.maximum - y_span * 0.05
+        x_pos = snapshot.time_axis.minimum + x_span * _CHARGE_CARD_X_MARGIN_RATIO
+        y_pos = snapshot.temperature_axis.maximum - y_span * _CHARGE_CARD_Y_MARGIN_RATIO
         target_ror_str = _format_charge_ror(annotation.target_ror)
         charged_ror_str = _format_charge_ror(annotation.charged_ror)
         target_rwt_str = _format_charge_rwt(annotation.target_rwt)
@@ -778,28 +786,28 @@ def _default_charge_target_annotation_factory(
             border=pg.mkPen(color='#DDDDDD', width=1),
         )
         item.setPos(x_pos, y_pos)
-        _call_if_available(item, 'setZValue', 36)
+        _call_if_available(item, 'setZValue', _CHARGE_TEXT_Z)
         return (item,)
 
     # Active state: dynamic arrow callout.
     x_span = max(1.0, annotation.x_limit - snapshot.time_axis.minimum)
     y_span = max(1.0, annotation.y_limit_top - snapshot.temperature_axis.minimum)
-    offset_x = x_span * 0.12
-    offset_y = y_span * 0.12
-    halign_left = annotation.anchor_time < annotation.x_limit * 0.7
+    offset_x = x_span * _CHARGE_CALLOUT_OFFSET_RATIO
+    offset_y = y_span * _CHARGE_CALLOUT_OFFSET_RATIO
+    halign_left = annotation.anchor_time < annotation.x_limit * _CHARGE_CALLOUT_RIGHT_THRESHOLD
     if not halign_left:
         offset_x = -offset_x
-    if annotation.anchor_temp > annotation.y_limit_top * 0.8:
+    if annotation.anchor_temp > annotation.y_limit_top * _CHARGE_CALLOUT_TOP_THRESHOLD:
         offset_y = -offset_y
     text_x = annotation.anchor_time + offset_x
     text_y = annotation.anchor_temp + offset_y
     text_x = max(
-        snapshot.time_axis.minimum + x_span * 0.02,
-        min(text_x, snapshot.time_axis.maximum - x_span * 0.02),
+        snapshot.time_axis.minimum + x_span * _CHARGE_CARD_X_MARGIN_RATIO,
+        min(text_x, snapshot.time_axis.maximum - x_span * _CHARGE_CARD_X_MARGIN_RATIO),
     )
     text_y = max(
-        snapshot.temperature_axis.minimum + y_span * 0.05,
-        min(text_y, snapshot.temperature_axis.maximum - y_span * 0.05),
+        snapshot.temperature_axis.minimum + y_span * _CHARGE_CARD_Y_MARGIN_RATIO,
+        min(text_y, snapshot.temperature_axis.maximum - y_span * _CHARGE_CARD_Y_MARGIN_RATIO),
     )
     anchor = (0.0, 0.5) if halign_left else (1.0, 0.5)
     prediction_str = _format_charge_prediction_seconds(annotation.prediction_seconds)
@@ -816,13 +824,13 @@ def _default_charge_target_annotation_factory(
         border=pg.mkPen(color='#AAAAAA', width=1),
     )
     text_item.setPos(text_x, text_y)
-    _call_if_available(text_item, 'setZValue', 36)
+    _call_if_available(text_item, 'setZValue', _CHARGE_TEXT_Z)
     connector = pg.PlotDataItem(
         [annotation.anchor_time, text_x],
         [annotation.anchor_temp, text_y],
         pen=pg.mkPen(color='#666666', width=1, style=QtCore.Qt.PenStyle.DashLine),
     )
-    _call_if_available(connector, 'setZValue', 21)
+    _call_if_available(connector, 'setZValue', _CHARGE_CONNECTOR_Z)
     return text_item, connector
 
 

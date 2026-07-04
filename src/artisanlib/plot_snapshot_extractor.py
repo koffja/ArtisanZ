@@ -74,10 +74,12 @@ def build_roast_plot_snapshot(source: object) -> RoastPlotSnapshot:
             visible_attr='DeltaETflag',
         ),
     ) + _background_curves(source) + _projection_curves(source)
+    time_axis = _time_axis(source)
+    temperature_axis = _temperature_axis(source)
     return RoastPlotSnapshot(
         curves=curves,
-        time_axis=_time_axis(source),
-        temperature_axis=_temperature_axis(source),
+        time_axis=time_axis,
+        temperature_axis=temperature_axis,
         ror_axis=_ror_axis(source, curves),
         events=events,
         event_values=_event_value_snapshots(events),
@@ -85,7 +87,11 @@ def build_roast_plot_snapshot(source: object) -> RoastPlotSnapshot:
         time_ranges=_time_ranges(source),
         phase_summaries=_phase_summaries(source),
         guides=_guide_lines(source),
-        charge_target_annotations=_charge_target_annotations(source),
+        charge_target_annotations=_charge_target_annotations(
+            source,
+            time_axis=time_axis,
+            temperature_axis=temperature_axis,
+        ),
         areas=_area_fills(source),
     )
 
@@ -108,7 +114,11 @@ def build_roast_plot_static_overlay_snapshot(
         time_ranges=_time_ranges(source),
         phase_summaries=_phase_summaries(source),
         guides=_guide_lines(source),
-        charge_target_annotations=_charge_target_annotations(source),
+        charge_target_annotations=_charge_target_annotations(
+            source,
+            time_axis=time_axis,
+            temperature_axis=temperature_axis,
+        ),
         areas=_area_fills(source),
     )
 
@@ -856,7 +866,12 @@ def _charge_target_guide(source: object) -> GuideLineSnapshot | None:
 _VALID_READINESS_COLORS: frozenset[str] = frozenset({'red', 'blue', 'green', 'gray'})
 
 
-def _charge_target_annotations(source: object) -> tuple[ChargeTargetAnnotationSnapshot, ...]:
+def _charge_target_annotations(
+        source: object,
+        *,
+        time_axis: AxisSnapshot | None = None,
+        temperature_axis: AxisSnapshot | None = None,
+) -> tuple[ChargeTargetAnnotationSnapshot, ...]:
     """Extract a single charge-target annotation snapshot, or empty tuple when disabled.
 
     Mirrors the visual states of canvas.draw_charge_target_annotation:
@@ -878,18 +893,28 @@ def _charge_target_annotations(source: object) -> tuple[ChargeTargetAnnotationSn
     timex = _sequence(source, 'timex')
     temp2 = _sequence(source, 'temp2')
     delta2 = _sequence(source, 'delta2')
-    current_time = float(timex[-1]) if timex else 0.0
-    current_temp = float(temp2[-1]) if temp2 else 0.0
-    current_ror = _numeric_value(delta2[-1] if delta2 else None)
+    current_time = _finite_numeric_value(timex[-1], 0.0) if timex else 0.0
+    current_temp = _finite_numeric_value(temp2[-1], 0.0) if temp2 else 0.0
+    current_ror = _finite_numeric_value(delta2[-1] if delta2 else None, 0.0)
 
-    x_limit = float(timex[-1] * 1.05) if timex else 600.0
-    y_limit_top = float(max(temp2) * 1.05) if temp2 else 250.0
+    if time_axis is not None and time_axis.maximum > time_axis.minimum:
+        x_limit = float(time_axis.maximum)
+    elif timex:
+        x_limit = _finite_numeric_value(timex[-1], 0.0) * 1.05
+    else:
+        x_limit = 600.0
+    if temperature_axis is not None and temperature_axis.maximum > temperature_axis.minimum:
+        y_limit_top = float(temperature_axis.maximum)
+    elif temp2:
+        y_limit_top = _finite_numeric_value(max(temp2), 0.0) * 1.05
+    else:
+        y_limit_top = 250.0
 
     calculate_rwt = getattr(manager, 'calculate_rwt', lambda _ror: 0.0)
-    target_rwt = float(calculate_rwt(target_ror) or 0.0)
+    target_rwt = _safe_charge_rwt(calculate_rwt, target_ror)
 
     if is_charged:
-        current_rwt = float(calculate_rwt(charged_ror) or 0.0)
+        current_rwt = _safe_charge_rwt(calculate_rwt, charged_ror)
         return (ChargeTargetAnnotationSnapshot(
             enabled=True,
             is_charged=True,
@@ -911,7 +936,7 @@ def _charge_target_annotations(source: object) -> tuple[ChargeTargetAnnotationSn
 
     # Active state: call evaluate_readiness
     evaluate = getattr(manager, 'evaluate_readiness', None)
-    if evaluate is None or current_ror is None:
+    if evaluate is None:
         return (ChargeTargetAnnotationSnapshot(
             enabled=True,
             is_charged=False,
@@ -931,11 +956,31 @@ def _charge_target_annotations(source: object) -> tuple[ChargeTargetAnnotationSn
             y_limit_top=y_limit_top,
         ),)
 
-    readiness = evaluate(
-        current_temp=current_temp,
-        current_ror=current_ror,
-    )
-    current_rwt = float(calculate_rwt(current_ror) or 0.0)
+    try:
+        readiness = evaluate(
+            current_temp=current_temp,
+            current_ror=current_ror,
+        )
+    except (ArithmeticError, TypeError, ValueError, AttributeError):
+        return (ChargeTargetAnnotationSnapshot(
+            enabled=True,
+            is_charged=False,
+            target_temp=target_temp,
+            target_ror=target_ror,
+            charged_temp=charged_temp,
+            charged_ror=charged_ror,
+            title='等待数据',
+            reason='升温数据不足',
+            prediction_seconds=None,
+            color='gray',
+            current_rwt=0.0,
+            target_rwt=target_rwt,
+            anchor_time=current_time,
+            anchor_temp=current_temp,
+            x_limit=x_limit,
+            y_limit_top=y_limit_top,
+        ),)
+    current_rwt = _safe_charge_rwt(calculate_rwt, current_ror)
     color_value = readiness.color if readiness.color in _VALID_READINESS_COLORS else 'gray'
     return (ChargeTargetAnnotationSnapshot(
         enabled=True,
@@ -1202,6 +1247,25 @@ def _numeric_value(value: object) -> float | None:
     if math.isnan(number):
         return None
     return number
+
+
+def _finite_numeric_value(value: object, default: float = 0.0) -> float:
+    """Like _numeric_value but also rejects Inf and returns a default."""
+    number = _numeric_value(value)
+    if number is None or not math.isfinite(number):
+        return default
+    return number
+
+
+def _safe_charge_rwt(calculate_rwt: object, ror: float | None) -> float:
+    """Call calculate_rwt defensively; return 0.0 on any failure or non-finite result."""
+    if not callable(calculate_rwt):
+        return 0.0
+    try:
+        value = float(calculate_rwt(ror) or 0.0)
+    except (ArithmeticError, TypeError, ValueError):
+        return 0.0
+    return value if math.isfinite(value) else 0.0
 
 
 def _integer_attr(source: object, attr_name: str, default: int) -> int:

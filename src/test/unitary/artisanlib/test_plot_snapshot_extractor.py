@@ -591,3 +591,108 @@ def test_charge_target_annotations_charged_state_returns_snapshot():
     assert snap.charged_ror == 17.2
     assert snap.target_temp == 200.0
     assert snap.target_ror == 18.0
+
+
+def test_charge_target_annotations_falls_back_when_evaluate_raises():
+    """If evaluate_readiness raises, extractor returns a waiting-state fallback snapshot."""
+    from artisanlib.plot_snapshot_extractor import _charge_target_annotations
+    class FakeManager:
+        enabled = True
+        active = True
+        target_temp = 200.0
+        target_ror = 18.0
+        charged_temp = 0.0
+        charged_ror = 0.0
+        @staticmethod
+        def calculate_rwt(ror):
+            return 600.0 / ror if ror and ror > 0 else 0.0
+        def evaluate_readiness(self, **kwargs):
+            raise ValueError('bad manager state')
+    class FakeSource:
+        charge_manager = FakeManager()
+        timex = (10.0,)
+        temp2 = (190.0,)
+        delta2 = (18.0,)
+    result = _charge_target_annotations(FakeSource())
+    assert len(result) == 1
+    assert result[0].color == 'gray'
+    assert result[0].title == '等待数据'
+
+
+def test_charge_target_annotations_handles_inf_and_nan_inputs():
+    """Inf/NaN in canvas data must not crash the extractor or produce non-finite snapshot fields."""
+    from artisanlib.plot_snapshot_extractor import _charge_target_annotations
+    class FakeManager:
+        enabled = True
+        active = True
+        target_temp = 200.0
+        target_ror = 18.0
+        charged_temp = 0.0
+        charged_ror = 0.0
+        @staticmethod
+        def calculate_rwt(ror):
+            return 600.0 / ror if ror and ror > 0 else 0.0
+        def evaluate_readiness(self, **kwargs):
+            from artisanlib.charge_manager import ChargeReadiness
+            return ChargeReadiness(
+                status='waiting',
+                title='等待升温',
+                reason='距离目标还远',
+                color='gray',
+                prediction_seconds=None,
+                current_rwt=33.3,
+                target_rwt=33.3,
+            )
+    class FakeSource:
+        charge_manager = FakeManager()
+        timex = (float('inf'),)
+        temp2 = (float('nan'), float('inf'))
+        delta2 = (float('inf'),)
+    result = _charge_target_annotations(FakeSource())
+    assert len(result) == 1
+    snap = result[0]
+    import math
+    assert math.isfinite(snap.anchor_time), f'anchor_time must be finite, got {snap.anchor_time}'
+    assert math.isfinite(snap.anchor_temp), f'anchor_temp must be finite, got {snap.anchor_temp}'
+    assert math.isfinite(snap.x_limit), f'x_limit must be finite, got {snap.x_limit}'
+    assert math.isfinite(snap.y_limit_top), f'y_limit_top must be finite, got {snap.y_limit_top}'
+
+
+def test_charge_target_annotations_reuses_precomputed_axes():
+    """When axes are provided, extractor must use them instead of scanning temp2/timex."""
+    from artisanlib.plot_snapshot_extractor import _charge_target_annotations
+    from artisanlib.plot_snapshot import AxisSnapshot
+    class FakeManager:
+        enabled = True
+        active = True
+        target_temp = 200.0
+        target_ror = 18.0
+        charged_temp = 0.0
+        charged_ror = 0.0
+        @staticmethod
+        def calculate_rwt(ror):
+            return 600.0 / ror if ror and ror > 0 else 0.0
+        def evaluate_readiness(self, **kwargs):
+            from artisanlib.charge_manager import ChargeReadiness
+            return ChargeReadiness(
+                status='waiting',
+                title='等待升温',
+                reason='距离目标还远',
+                color='gray',
+                prediction_seconds=None,
+                current_rwt=33.3,
+                target_rwt=33.3,
+            )
+    class FakeSource:
+        charge_manager = FakeManager()
+        timex = (0.0, 100.0)
+        temp2 = (25.0, 100.0)
+        delta2 = (0.0, 30.0)
+    time_axis = AxisSnapshot(minimum=0.0, maximum=999.0, label='')
+    temperature_axis = AxisSnapshot(minimum=0.0, maximum=888.0, label='')
+    result = _charge_target_annotations(FakeSource(), time_axis=time_axis, temperature_axis=temperature_axis)
+    assert len(result) == 1
+    snap = result[0]
+    # x_limit/y_limit_top should come from axes, not from timex/temp2
+    assert snap.x_limit == 999.0
+    assert snap.y_limit_top == 888.0
