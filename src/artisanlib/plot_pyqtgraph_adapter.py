@@ -35,7 +35,7 @@ ChargeTargetAnnotationItemFactory = Callable[
 CurvePenFactory = Callable[[CurveSnapshot], object]
 
 
-_BT_GRADIENT_ENABLED_DEFAULT = False
+_BT_GRADIENT_ENABLED_DEFAULT = True
 _bt_gradient_enabled: bool = _BT_GRADIENT_ENABLED_DEFAULT
 
 
@@ -403,12 +403,19 @@ def _default_pen_factory(curve: CurveSnapshot) -> object:
         ('btGradient_enabled', 'bt_gradient_enabled'), _bt_gradient_enabled)
     if curve.name == 'BT' and curve.y_axis == 'temperature' and bt_gradient_enabled:
         try:
-            cached = globals().get('_cached_bt_gradient_cm')
+            cached = globals().get('_cached_bt_morandi_cm')
             if cached is None:
-                cached = pg.colormap.get('CET-L17')
-                cached.reverse()
-                globals()['_cached_bt_gradient_cm'] = cached
-            return cached.getPen(span=(150.0, 250.0), width=int(line_width), orientation='vertical')
+                # Custom Morandi temperature gradient: cool sage → warm amber → soft rose
+                pos = [0.0, 0.33, 0.66, 1.0]
+                colors = [
+                    (0xA8, 0xC0, 0xC8),  # #A8C0C8 pale slate blue (cool)
+                    (0xB8, 0xD0, 0xB8),  # #B8D0B8 pale sage green
+                    (0xD0, 0xC0, 0xA4),  # #D0C0A4 pale warm amber
+                    (0xC8, 0xA4, 0xA8),  # #C8A4A8 pale dusty rose (hot)
+                ]
+                cached = pg.ColorMap(pos, colors)
+                globals()['_cached_bt_morandi_cm'] = cached
+            return cached.getPen(span=(100.0, 250.0), width=int(line_width), orientation='vertical')
         except Exception:
             pass
     return pg.mkPen(color=_color_with_alpha(pg, curve.color, curve.opacity), width=line_width, style=_qt_pen_style(curve.line_style))
