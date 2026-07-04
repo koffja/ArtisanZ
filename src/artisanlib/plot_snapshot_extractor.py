@@ -4,9 +4,11 @@ import math
 from typing import Any
 
 try:
+    from PyQt6.QtCore import QSettings
     from PyQt6.QtWidgets import QApplication
 except ImportError:  # pragma: no cover - PyQt6 is a runtime dependency in normal builds
     QApplication = None  # type: ignore[assignment]
+    QSettings = None  # type: ignore[assignment]
 
 from artisanlib.plot_snapshot import (
     AreaFillSnapshot,
@@ -52,6 +54,34 @@ _MAIN_EVENTS = (
     (6, 'DROP'),
     (7, 'COOL'),
 )
+
+
+def _settings_value(keys: tuple[str, ...], default: object) -> object:
+    if QSettings is None:
+        return default
+    settings = QSettings()
+    for key in keys:
+        if settings.contains(key):
+            return settings.value(key)
+    return default
+
+
+def _settings_float(keys: tuple[str, ...], default: float) -> float:
+    try:
+        return float(_settings_value(keys, default))
+    except (TypeError, ValueError):
+        return default
+
+
+def _settings_bool(keys: tuple[str, ...], default: bool) -> bool:
+    value = _settings_value(keys, default)
+    if isinstance(value, str):
+        return value.lower() in {'1', 'true', 'yes'}
+    return bool(value)
+
+
+def _background_line_style() -> str:
+    return str(_settings_value(('backgroundLineStyle', 'background_line_style'), '--'))
 
 
 def build_roast_plot_snapshot(source: object) -> RoastPlotSnapshot:
@@ -165,6 +195,7 @@ def _delta_curve(
 def _background_curves(source: object) -> tuple[CurveSnapshot, ...]:
     if not _background_available(source):
         return ()
+    background_line_style = _background_line_style()
     return tuple(curve for curve in (
         _background_curve(
             source,
@@ -174,7 +205,7 @@ def _background_curves(source: object) -> tuple[CurveSnapshot, ...]:
             color_attr='backgroundbtcolor',
             color_key='backgroundbt',
             visible_attr='backgroundBTcurve',
-            line_style_attr='BTbacklinestyle',
+            line_style=background_line_style,
             line_width_attr='BTbacklinewidth'),
         _background_curve(
             source,
@@ -184,7 +215,7 @@ def _background_curves(source: object) -> tuple[CurveSnapshot, ...]:
             color_attr='backgroundmetcolor',
             color_key='backgroundet',
             visible_attr='backgroundETcurve',
-            line_style_attr='ETbacklinestyle',
+            line_style=background_line_style,
             line_width_attr='ETbacklinewidth'),
         _curve_from_xy(
             source,
@@ -194,7 +225,7 @@ def _background_curves(source: object) -> tuple[CurveSnapshot, ...]:
             color=_color_attr(source, 'backgrounddeltabtcolor', 'backgrounddeltabt'),
             visible=bool(getattr(source, 'DeltaBTBflag', False)),
             y_axis='ror',
-            line_style=_line_style(source, 'BTBdeltalinestyle', '--'),
+            line_style=background_line_style,
             line_width=_line_width(source, 'BTBdeltalinewidth', 1.0),
             opacity=_opacity(source, 'backgroundalpha', 0.35)),
         _curve_from_xy(
@@ -205,7 +236,7 @@ def _background_curves(source: object) -> tuple[CurveSnapshot, ...]:
             color=_color_attr(source, 'backgrounddeltaetcolor', 'backgrounddeltaet'),
             visible=bool(getattr(source, 'DeltaETBflag', False)),
             y_axis='ror',
-            line_style=_line_style(source, 'ETBdeltalinestyle', '--'),
+            line_style=background_line_style,
             line_width=_line_width(source, 'ETBdeltalinewidth', 1.0),
             opacity=_opacity(source, 'backgroundalpha', 0.35)),
     ) if curve is not None)
@@ -220,7 +251,7 @@ def _background_curve(
         color_attr: str,
         color_key: str,
         visible_attr: str,
-        line_style_attr: str,
+        line_style: str,
         line_width_attr: str) -> CurveSnapshot | None:
     y_source = y_attr if bool(getattr(source, 'flagon', False)) else smoothed_y_attr
     y_values = _background_temperature_values(source, _sequence(source, y_source))
@@ -231,7 +262,7 @@ def _background_curve(
         y=y_values,
         color=_color_attr(source, color_attr, color_key),
         visible=bool(getattr(source, visible_attr, False)),
-        line_style=_line_style(source, line_style_attr, '--'),
+        line_style=line_style,
         line_width=_line_width(source, line_width_attr, 1.0),
         opacity=_opacity(source, 'backgroundalpha', 0.35),
     )
@@ -554,6 +585,7 @@ def _phase_bands(source: object) -> tuple[PhaseBandSnapshot, ...]:
     if len(phases) < 4:
         return ()
     bands: list[PhaseBandSnapshot] = []
+    opacity = _settings_float(('phaseBandOpacity', 'phase_band_opacity'), 0.30)
     for index, color_key in enumerate(('rect1', 'rect2', 'rect3')):
         try:
             minimum = float(phases[index])
@@ -566,7 +598,7 @@ def _phase_bands(source: object) -> tuple[PhaseBandSnapshot, ...]:
             minimum=minimum,
             maximum=maximum,
             color=_phase_band_color(source, color_key, index),
-            opacity=0.30,
+            opacity=opacity,
         ))
     return tuple(bands)
 

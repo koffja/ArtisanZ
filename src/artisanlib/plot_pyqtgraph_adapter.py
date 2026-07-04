@@ -44,6 +44,21 @@ def set_bt_gradient_enabled(enabled: bool) -> None:
     _bt_gradient_enabled = bool(enabled)
 
 
+def _settings_value(keys: tuple[str, ...], default: object) -> object:
+    settings = QtCore.QSettings()
+    for key in keys:
+        if settings.contains(key):
+            return settings.value(key)
+    return default
+
+
+def _settings_bool(keys: tuple[str, ...], default: bool) -> bool:
+    value = _settings_value(keys, default)
+    if isinstance(value, str):
+        return value.lower() in {'1', 'true', 'yes'}
+    return bool(value)
+
+
 class PyQtGraphSnapshotRenderer:
     def __init__(
             self,
@@ -384,7 +399,9 @@ def _default_pen_factory(curve: CurveSnapshot) -> object:
     else:
         line_width = curve.line_width
     # BT curve: try gradient pen for temperature-coded coloring
-    if curve.name == 'BT' and curve.y_axis == 'temperature' and _bt_gradient_enabled:
+    bt_gradient_enabled = _settings_bool(
+        ('btGradient_enabled', 'bt_gradient_enabled'), _bt_gradient_enabled)
+    if curve.name == 'BT' and curve.y_axis == 'temperature' and bt_gradient_enabled:
         try:
             cached = globals().get('_cached_bt_gradient_cm')
             if cached is None:
@@ -709,8 +726,12 @@ def _default_phase_summary_item_factory(
         pen=pg.mkPen(color=_color_with_alpha(pg, summary.color, min(0.72, summary.opacity + 0.18)), width=14),
     )
     _call_if_available(bar, 'setZValue', 12)
+    if _settings_bool(('phaseSummaryLabels', 'phase_summary_labels'), True):
+        label_text = f'{summary.label}\n{summary.duration_text}  {summary.percent_text}'
+    else:
+        label_text = f'{summary.duration_text}  {summary.percent_text}'
     label = pg.TextItem(
-        text=f'{summary.label}\n{summary.duration_text}  {summary.percent_text}',
+        text=label_text,
         color='#20272B',
         anchor=(0.5, 0.5),
     )

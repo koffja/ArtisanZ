@@ -23,7 +23,7 @@ import sys
 import platform
 import numpy
 import logging
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from typing import override, Final, TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -32,7 +32,8 @@ if TYPE_CHECKING:
     from PyQt6.QtGui import QCloseEvent # pylint: disable=unused-import
 
 from artisanlib.util import (deltaLabelBigPrefix, deltaLabelPrefix, deltaLabelUTF8,
-                             stringtoseconds, stringfromseconds, toFloat, float2float)
+                             stringtoseconds, stringfromseconds, toFloat, float2float,
+                             rgba_colorname2argb_colorname, argb_colorname2rgba_colorname)
 from artisanlib.dialogs import ArtisanDialog
 from artisanlib.widgets import MyQDoubleSpinBox
 from help import symbolic_help # pyright:ignore [attr-defined] # pylint: disable=no-name-in-module
@@ -43,10 +44,29 @@ from PyQt6.QtGui import (QColor, QIntValidator, QRegularExpressionValidator, QPi
 from PyQt6.QtWidgets import (QApplication, QWidget, QCheckBox, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
                              QPushButton, QSpinBox, QTabWidget, QComboBox, QDialogButtonBox, QGridLayout,
                              QGroupBox, QLayout, QMessageBox, QRadioButton, QStyleFactory, QHeaderView,
-                             QTableWidget, QTableWidgetItem, QFrame, QButtonGroup)
+                             QTableWidget, QTableWidgetItem, QFrame, QButtonGroup, QFormLayout, QSlider)
+
+from artisanlib.plot_pyqtgraph_adapter import set_bt_gradient_enabled
 
 
 _log: Final[logging.Logger] = logging.getLogger(__name__)
+
+_PHASE_STYLE_DEFAULTS: Final[dict[str, object]] = {
+    'rect1': '#F5F5F0',
+    'rect2': '#F5F0E1',
+    'rect3': '#F4F2EC',
+    'phaseBandOpacity': 0.18,
+    'btGradient_enabled': False,
+    'backgroundalpha': 0.35,
+    'backgroundLineStyle': '--',
+    'phaseSummaryLabels': True,
+}
+
+_BACKGROUND_STYLE_VALUES: Final[tuple[tuple[str, str], ...]] = (
+    ('Solid', '-'),
+    ('Dashed', '--'),
+    ('Dotted', ':'),
+)
 
 ########################################################################################
 #####################  PLOTTER DATA DLG  ###############################################
@@ -330,6 +350,14 @@ class CurvesDlg(ArtisanDialog):
         self.org_foregroundShowFullflag = self.aw.qmc.foregroundShowFullflag
         self.org_LCDdecimalplaces = self.aw.qmc.LCDdecimalplaces
         self.org_percent_decimals = self.aw.percent_decimals
+        self.org_phase_palette = {
+            key: self.aw.qmc.palette.get(key, str(_PHASE_STYLE_DEFAULTS[key]))
+            for key in ('rect1', 'rect2', 'rect3')
+        }
+        self.org_backgroundalpha = self.aw.qmc.backgroundalpha
+        self.org_bt_gradient_enabled = CurvesDlg._settings_bool(
+            QSettings(), ('btGradient_enabled', 'bt_gradient_enabled'), False)
+        self._load_phase_style_settings()
 
         #delta ET
         self.DeltaET = QCheckBox()
@@ -1442,6 +1470,7 @@ class CurvesDlg(ArtisanDialog):
         tab5Layout.setContentsMargins(5,5,5,0)
         C5Widget.setContentsMargins(0,0,0,0)
         self.TabWidget.addTab(C5Widget,QApplication.translate('Tab','UI'))
+        self._add_phase_style_tab()
         buttonsLayout = QHBoxLayout()
         buttonsLayout.addStretch()
         buttonsLayout.addWidget(self.dialogbuttons)
@@ -1484,6 +1513,193 @@ class CurvesDlg(ArtisanDialog):
     @pyqtSlot()
     def setActiveTab(self) -> None:
         self.TabWidget.setCurrentIndex(self.activeTab)
+
+    def _add_phase_style_tab(self) -> None:
+        settings = QSettings()
+        self.palette = self.aw.qmc.palette
+
+        tab = QWidget()
+        group = QGroupBox(QApplication.translate('Curves', 'Phase & Style'))
+        form = QFormLayout()
+
+        self.rect1ColorButton = CurvesDlg._phase_color_button(
+            self, str(self.palette.get('rect1', _PHASE_STYLE_DEFAULTS['rect1'])))
+        self.rect1ColorButton.setObjectName('rect1ColorButton')
+        self.rect2ColorButton = CurvesDlg._phase_color_button(
+            self, str(self.palette.get('rect2', _PHASE_STYLE_DEFAULTS['rect2'])))
+        self.rect2ColorButton.setObjectName('rect2ColorButton')
+        self.rect3ColorButton = CurvesDlg._phase_color_button(
+            self, str(self.palette.get('rect3', _PHASE_STYLE_DEFAULTS['rect3'])))
+        self.rect3ColorButton.setObjectName('rect3ColorButton')
+        for key, button in (
+                ('rect1', self.rect1ColorButton),
+                ('rect2', self.rect2ColorButton),
+                ('rect3', self.rect3ColorButton)):
+            button.clicked.connect(
+                lambda _=False, k=key, b=button: CurvesDlg._select_phase_color(self, k, b))
+
+        self.phaseBandOpacitySlider = QSlider(Qt.Orientation.Horizontal)
+        self.phaseBandOpacitySlider.setObjectName('phaseBandOpacitySlider')
+        self.phaseBandOpacitySlider.setRange(10, 50)
+        self.phaseBandOpacitySlider.setValue(int(round(
+            CurvesDlg._settings_float(settings, ('phaseBandOpacity', 'phase_band_opacity'), 0.18) * 100)))
+
+        self.btGradientCheckBox = QCheckBox(QApplication.translate('Curves', 'BT temperature gradient'))
+        self.btGradientCheckBox.setObjectName('btGradientCheckBox')
+        self.btGradientCheckBox.setChecked(
+            CurvesDlg._settings_bool(settings, ('btGradient_enabled', 'bt_gradient_enabled'), False))
+        self.btGradientCheckBox.toggled.connect(set_bt_gradient_enabled)
+
+        self.bgAlphaSlider = QSlider(Qt.Orientation.Horizontal)
+        self.bgAlphaSlider.setObjectName('bgAlphaSlider')
+        self.bgAlphaSlider.setRange(20, 80)
+        self.bgAlphaSlider.setValue(int(round(getattr(
+            self.aw.qmc,
+            'backgroundalpha',
+            CurvesDlg._settings_float(settings, ('BackgroundAlpha', 'backgroundalpha'), 0.35)) * 100)))
+        self.bgAlphaSlider.valueChanged.connect(CurvesDlg._change_background_alpha(self))
+
+        self.bgStyleComboBox = QComboBox()
+        self.bgStyleComboBox.setObjectName('bgStyleComboBox')
+        for label, value in _BACKGROUND_STYLE_VALUES:
+            self.bgStyleComboBox.addItem(QApplication.translate('Curves', label), value)
+        style = str(CurvesDlg._settings_value(
+            settings, ('backgroundLineStyle', 'background_line_style'), '--'))
+        style_index = self.bgStyleComboBox.findData(style)
+        self.bgStyleComboBox.setCurrentIndex(max(0, style_index))
+
+        self.phaseLabelsCheckBox = QCheckBox(
+            QApplication.translate('Curves', 'Show phase names on progress bars'))
+        self.phaseLabelsCheckBox.setObjectName('phaseLabelsCheckBox')
+        self.phaseLabelsCheckBox.setChecked(
+            CurvesDlg._settings_bool(settings, ('phaseSummaryLabels', 'phase_summary_labels'), True))
+
+        self.restoreDefaultsButton = QPushButton(QApplication.translate('Curves', 'Restore Defaults'))
+        self.restoreDefaultsButton.setObjectName('restoreDefaultsButton')
+        self.restoreDefaultsButton.clicked.connect(
+            lambda _=False: CurvesDlg._restore_phase_style_defaults(self))
+
+        form.addRow(QApplication.translate('Curves', 'Drying'), self.rect1ColorButton)
+        form.addRow(QApplication.translate('Curves', 'Maillard'), self.rect2ColorButton)
+        form.addRow(QApplication.translate('Curves', 'Development'), self.rect3ColorButton)
+        form.addRow(QApplication.translate('Curves', 'Phase band opacity'), self.phaseBandOpacitySlider)
+        form.addRow(QApplication.translate('Curves', 'BT gradient'), self.btGradientCheckBox)
+        form.addRow(QApplication.translate('Curves', 'Background alpha'), self.bgAlphaSlider)
+        form.addRow(QApplication.translate('Curves', 'Background style'), self.bgStyleComboBox)
+        form.addRow(QApplication.translate('Curves', 'Phase labels'), self.phaseLabelsCheckBox)
+        form.addRow('', self.restoreDefaultsButton)
+        group.setLayout(form)
+
+        layout = QVBoxLayout()
+        layout.addWidget(group)
+        layout.addStretch()
+        layout.setContentsMargins(5, 5, 5, 0)
+        tab.setLayout(layout)
+        self.TabWidget.addTab(tab, QApplication.translate('Curves', 'Phase & Style'))
+
+    def _load_phase_style_settings(self) -> None:
+        settings = QSettings()
+        for key in ('rect1', 'rect2', 'rect3'):
+            self.aw.qmc.palette[key] = str(settings.value(
+                key, self.aw.qmc.palette.get(key, _PHASE_STYLE_DEFAULTS[key])))
+        self.aw.qmc.backgroundalpha = CurvesDlg._settings_float(
+            settings, ('BackgroundAlpha', 'backgroundalpha'), 0.35)
+        set_bt_gradient_enabled(
+            CurvesDlg._settings_bool(settings, ('btGradient_enabled', 'bt_gradient_enabled'), False))
+
+    @staticmethod
+    def _settings_value(settings: QSettings, keys: tuple[str, ...], default: object) -> object:
+        for key in keys:
+            if settings.contains(key):
+                return settings.value(key)
+        return default
+
+    @staticmethod
+    def _settings_float(settings: QSettings, keys: tuple[str, ...], default: float) -> float:
+        try:
+            return float(CurvesDlg._settings_value(settings, keys, default))
+        except (TypeError, ValueError):
+            return default
+
+    @staticmethod
+    def _settings_bool(settings: QSettings, keys: tuple[str, ...], default: bool) -> bool:
+        value = CurvesDlg._settings_value(settings, keys, default)
+        if isinstance(value, str):
+            return value.lower() in {'1', 'true', 'yes'}
+        return bool(value)
+
+    @staticmethod
+    def _phase_color_button(dialog_like: object, color: str) -> QPushButton:
+        button = QPushButton(color)
+        button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        CurvesDlg._update_phase_color_button(dialog_like, button, color)
+        return button
+
+    @staticmethod
+    def _update_phase_color_button(dialog_like: object, button: QPushButton, color: str) -> None:
+        label_color = '#000000'
+        if hasattr(dialog_like, 'aw') and hasattr(dialog_like.aw, 'labelBorW'):
+            label_color = dialog_like.aw.labelBorW(color)
+        button.setText(color)
+        button.setStyleSheet(
+            'QPushButton { background-color: '
+            + rgba_colorname2argb_colorname(color)
+            + '; color: '
+            + label_color
+            + '; }')
+
+    @staticmethod
+    def _select_phase_color(dialog_like: object, key: str, button: QPushButton) -> None:
+        color = str(getattr(dialog_like.aw.qmc, 'palette', {}).get(key, button.text()))
+        colorf = dialog_like.aw.colordialog(
+            QColor(rgba_colorname2argb_colorname(color)), alphasupport=True, parent=dialog_like)
+        if colorf.isValid():
+            new_color = argb_colorname2rgba_colorname(colorf.name(QColor.NameFormat.HexArgb))
+            dialog_like.aw.qmc.palette[key] = new_color
+            CurvesDlg._update_phase_color_button(dialog_like, button, new_color)
+
+    @staticmethod
+    def _change_background_alpha(dialog_like: object) -> Callable[[int], None]:
+        def _change(value: int) -> None:
+            dialog_like.aw.qmc.backgroundalpha = value / 100.0
+        return _change
+
+    @staticmethod
+    def _restore_phase_style_defaults(dialog_like: object) -> None:
+        for key, button in (
+                ('rect1', dialog_like.rect1ColorButton),
+                ('rect2', dialog_like.rect2ColorButton),
+                ('rect3', dialog_like.rect3ColorButton)):
+            color = str(_PHASE_STYLE_DEFAULTS[key])
+            dialog_like.aw.qmc.palette[key] = color
+            CurvesDlg._update_phase_color_button(dialog_like, button, color)
+        dialog_like.phaseBandOpacitySlider.setValue(18)
+        dialog_like.btGradientCheckBox.setChecked(False)
+        dialog_like.bgAlphaSlider.setValue(35)
+        index = dialog_like.bgStyleComboBox.findData('--')
+        dialog_like.bgStyleComboBox.setCurrentIndex(max(0, index))
+        dialog_like.phaseLabelsCheckBox.setChecked(True)
+
+    def _save_phase_style_settings(self, settings: QSettings) -> None:
+        for key in ('rect1', 'rect2', 'rect3'):
+            settings.setValue(key, self.aw.qmc.palette[key])
+        opacity = self.phaseBandOpacitySlider.value() / 100.0
+        settings.setValue('phaseBandOpacity', opacity)
+        settings.setValue('phase_band_opacity', opacity)
+        gradient_enabled = self.btGradientCheckBox.isChecked()
+        settings.setValue('btGradient_enabled', gradient_enabled)
+        settings.setValue('bt_gradient_enabled', gradient_enabled)
+        background_alpha = self.bgAlphaSlider.value() / 100.0
+        self.aw.qmc.backgroundalpha = background_alpha
+        settings.setValue('BackgroundAlpha', background_alpha)
+        settings.setValue('backgroundalpha', background_alpha)
+        style = self.bgStyleComboBox.currentData() or '--'
+        settings.setValue('backgroundLineStyle', style)
+        settings.setValue('background_line_style', style)
+        labels_enabled = self.phaseLabelsCheckBox.isChecked()
+        settings.setValue('phaseSummaryLabels', labels_enabled)
+        settings.setValue('phase_summary_labels', labels_enabled)
+        set_bt_gradient_enabled(gradient_enabled)
 
     @pyqtSlot(bool)
     def fittoBackground(self, _:bool = False) -> None:
@@ -2599,6 +2815,10 @@ class CurvesDlg(ArtisanDialog):
         self.aw.qmc.foregroundShowFullflag = self.org_foregroundShowFullflag
         self.aw.qmc.LCDdecimalplaces = self.org_LCDdecimalplaces
         self.aw.percent_decimals = self.org_percent_decimals
+        for key, color in self.org_phase_palette.items():
+            self.aw.qmc.palette[key] = color
+        self.aw.qmc.backgroundalpha = self.org_backgroundalpha
+        set_bt_gradient_enabled(self.org_bt_gradient_enabled)
 
         self.aw.setFonts(False)
         self.aw.qmc.resetlinecountcaches()
@@ -2621,6 +2841,7 @@ class CurvesDlg(ArtisanDialog):
         #save window position (only; not size!)
         settings = QSettings()
         settings.setValue('CurvesPosition',self.frameGeometry().topLeft())
+        self._save_phase_style_settings(settings)
         self.aw.CurveDlg_activeTab = self.TabWidget.currentIndex()
 
         self.aw.qmc.DeltaETfunction = str(self.DeltaETfunctionedit.text())
