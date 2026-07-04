@@ -4693,6 +4693,14 @@ class ApplicationWindow(QMainWindow):
         charge_target_action = QAction(QApplication.translate('Menu', '投豆目标...'), self)
         charge_target_action.triggered.connect(self.showChargeTargetDialog)
         roast_menu.addAction(charge_target_action)
+
+        # Historical roast comparison overlay (pyqtgraph only)
+        compare_action = QAction(QApplication.translate('Label', 'Compare Roasts...'), self)
+        compare_action.triggered.connect(self.showComparisonFileDialog)
+        roast_menu.addAction(compare_action)
+        clear_compare_action = QAction(QApplication.translate('Label', 'Clear Comparison Curves'), self)
+        clear_compare_action.triggered.connect(self.clearComparisonCurves)
+        roast_menu.addAction(clear_compare_action)
         if policy.show_full_menus:
             roast_menu.addSeparator()
             roast_menu.addAction(self.switchAction)
@@ -14126,6 +14134,14 @@ class ApplicationWindow(QMainWindow):
             if self.qmc.clearBgbeforeprofileload:
                 self.deleteBackground()
             res = self.qmc.reset(redraw=False,soundOn=False)
+            # Clear comparison overlay curves when loading a new profile
+            try:
+                _target = getattr(self.qmc, 'plot_pyqtgraph_target', None)
+                _overlay = getattr(_target, 'comparison_overlay', None) if _target else None
+                if _overlay is not None and _overlay.count > 0:
+                    _overlay.clear()
+            except Exception:
+                pass
             obj_dict = deserialize(filename)
             self.plusAddPath(obj_dict, filename)
 
@@ -26769,6 +26785,14 @@ class ApplicationWindow(QMainWindow):
             if len(filename) == 0:
                 return
             res = self.qmc.reset(redraw=False,soundOn=False)
+            # Clear comparison overlay curves when loading a new profile
+            try:
+                _target = getattr(self.qmc, 'plot_pyqtgraph_target', None)
+                _overlay = getattr(_target, 'comparison_overlay', None) if _target else None
+                if _overlay is not None and _overlay.count > 0:
+                    _overlay.clear()
+            except Exception:
+                pass
             if res:
                 obj:ProfileData = extractor(filename,
                                         self.qmc.etypesdefault,
@@ -28506,6 +28530,48 @@ class ApplicationWindow(QMainWindow):
             self.simulatorAction.setChecked(bool(self.simulator))
 
 
+
+    def showComparisonFileDialog(self) -> None:
+        """Open a file dialog to select historical roast files for curve overlay comparison."""
+        try:
+            target = getattr(self.qmc, 'plot_pyqtgraph_target', None)
+            if target is None:
+                self.sendmessage(QApplication.translate('Message', 'Comparison overlay requires the PyQtGraph renderer'))
+                return
+            overlay = getattr(target, 'comparison_overlay', None)
+            if overlay is None:
+                return
+            from PyQt6.QtWidgets import QFileDialog
+            files, _ = QFileDialog.getOpenFileNames(
+                self,
+                QApplication.translate('Label', 'Select roast profiles to compare'),
+                '',
+                QApplication.translate('Label', 'Artisan profiles (*.alog)'),
+            )
+            if not files:
+                return
+            added = 0
+            for filepath in files:
+                if overlay.add_from_file(filepath):
+                    added += 1
+            if added > 0:
+                self.sendmessage(QApplication.translate('Message', f'Loaded {added} comparison roast(s)'))
+                self.qmc.redraw(recomputeAllDeltas=False)
+        except Exception as e:
+            _log.exception(e)
+
+    def clearComparisonCurves(self) -> None:
+        """Remove all historical comparison overlay curves."""
+        try:
+            target = getattr(self.qmc, 'plot_pyqtgraph_target', None)
+            if target is None:
+                return
+            overlay = getattr(target, 'comparison_overlay', None)
+            if overlay is not None and overlay.count > 0:
+                overlay.clear()
+                self.sendmessage(QApplication.translate('Message', 'Comparison curves cleared'))
+        except Exception as e:
+            _log.exception(e)
 
     @pyqtSlot()
     @pyqtSlot(bool)

@@ -12,6 +12,7 @@ from artisanlib.plot_pyqtgraph_overlays import (
     EventMarkerOverlay,
     RORFillOverlay,
 )
+from artisanlib.plot_comparison_overlay import ComparisonOverlay
 
 CursorPositionCallback = Callable[[float, float, float | None], None]
 
@@ -35,12 +36,13 @@ class PyQtGraphPlotTarget:
     phase_bands: object | None = None
     event_markers: object | None = None
     ror_fill: object | None = None
+    comparison_overlay: object | None = None
 
     def close(self) -> None:
         close_widget = getattr(self.widget, 'close', None)
         if callable(close_widget):
             close_widget()
-        for overlay in (self.phase_bands, self.event_markers, self.ror_fill):
+        for overlay in (self.phase_bands, self.event_markers, self.ror_fill, self.comparison_overlay):
             if overlay is not None:
                 clear = getattr(overlay, 'clear', None) or getattr(overlay, 'detach', None)
                 if callable(clear):
@@ -109,6 +111,7 @@ class PyQtGraphPlotTarget:
         ror_vb = getattr(self.ror_plot, 'view_box', None) if self.ror_plot is not None else None
         if ror_vb is not None:
             self.ror_fill = RORFillOverlay(ror_vb, self._pyqtgraph)
+        self.comparison_overlay = ComparisonOverlay(self.temperature_plot, self._pyqtgraph)
 
 
 def create_pyqtgraph_plot_target(
