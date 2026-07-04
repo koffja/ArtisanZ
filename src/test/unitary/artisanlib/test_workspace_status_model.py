@@ -3,7 +3,7 @@ from __future__ import annotations
 import importlib
 from pathlib import Path
 
-from PyQt6.QtCore import QUrl
+from PyQt6.QtCore import QObject, QUrl
 from PyQt6.QtQml import QQmlComponent, QQmlEngine
 from PyQt6.QtWidgets import QApplication
 
@@ -171,7 +171,7 @@ def test_workspace_status_panel_qml_accepts_python_model() -> None:
         assert item is not None, [error.toString() for error in component.errors()]
         assert item.setProperty('workspaceModel', model)
         assert item.property('implicitWidth') == 320
-        assert item.property('implicitHeight') == 176
+        assert item.property('implicitHeight') == 220
     finally:
         if item is not None:
             item.deleteLater()
@@ -192,9 +192,9 @@ def test_workspace_status_widget_factory_loads_qml_with_python_model() -> None:
         assert root_object is not None
         assert root_object.property('workspaceModel') is model
         assert widget.sizeHint().width() == 320
-        assert widget.sizeHint().height() == 176
+        assert widget.sizeHint().height() == 220
         assert widget.minimumWidth() == 320
-        assert widget.minimumHeight() == 176
+        assert widget.minimumHeight() == 220
     finally:
         widget.deleteLater()
 
@@ -231,3 +231,49 @@ def test_qtquick_pyinstaller_hidden_imports_reference_real_pyqt_modules() -> Non
             assert module_name in spec_text
         for module_name in phantom_imports:
             assert module_name not in spec_text
+
+
+def test_workspace_status_panel_has_five_mode_buttons() -> None:
+    """The QML panel must expose one clickable button per WorkspaceMode."""
+    _app = QApplication.instance() or QApplication([])
+    engine = QQmlEngine()
+    component = QQmlComponent(engine)
+    component.setData(WORKSPACE_STATUS_PANEL_QML.encode('utf-8'), QUrl())
+    assert component.status() == QQmlComponent.Status.Ready, [
+        error.toString() for error in component.errors()
+    ]
+    item = component.create()
+    assert item is not None, [error.toString() for error in component.errors()]
+    try:
+        mode_repeater = item.findChild(QObject, 'modeRepeater')
+        assert mode_repeater is not None, "QML Repeater 'modeRepeater' not found"
+        count = mode_repeater.property('count')
+        assert count == 5, f"expected Repeater.count == 5, got {count}"
+        buttons: list[QObject] = []
+        for i in range(int(count)):
+            btn = mode_repeater.itemAt(i)
+            if btn is not None:
+                buttons.append(btn)
+        mode_values = {btn.objectName().removeprefix('modeButton_') for btn in buttons}
+        assert mode_values == {'roast_control', 'qc_analysis', 'device_setup', 'production', 'expert'}, (
+            f"expected 5 mode buttons, found {sorted(mode_values)}"
+        )
+    finally:
+        item.deleteLater()
+
+
+def test_workspace_status_set_mode_value_round_trip() -> None:
+    """Clicking a mode button must update modeValue and emit workspaceChanged."""
+    _app = QApplication.instance() or QApplication([])
+    from artisanlib.workspace_status_model import WorkspaceStatusModel
+    model = WorkspaceStatusModel()
+    assert model.modeValue == 'roast_control'
+    emitted = []
+    model.workspaceChanged.connect(lambda: emitted.append(model.modeValue))
+    model.setWorkspaceModeValue('qc_analysis')
+    assert model.modeValue == 'qc_analysis'
+    assert emitted == ['qc_analysis'], f"expected one emission, got {emitted}"
+    model.setWorkspaceModeValue('not_a_real_mode')
+    assert model.modeValue == 'qc_analysis'
+    assert emitted == ['qc_analysis']
+

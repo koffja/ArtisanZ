@@ -28,7 +28,7 @@ Item {
     id: root
     property var workspaceModel
     implicitWidth: 320
-    implicitHeight: 176
+    implicitHeight: 220
     readonly property color accentColor: !root.workspaceModel
         ? "#0087b3"
         : root.workspaceModel.modeValue === "qc_analysis"
@@ -164,9 +164,64 @@ Item {
     }
 
     Row {
+        id: workspaceSwitcher
         anchors.left: title.left
         anchors.right: title.right
         anchors.top: actionHint.bottom
+        anchors.topMargin: 9
+        spacing: 6
+
+        Repeater {
+            id: modeRepeater
+            objectName: "modeRepeater"
+            model: [
+                { mode: "roast_control", label: qsTr("Roast") },
+                { mode: "qc_analysis",   label: qsTr("QC") },
+                { mode: "device_setup",  label: qsTr("Device") },
+                { mode: "production",    label: qsTr("Prod") },
+                { mode: "expert",        label: qsTr("Expert") }
+            ]
+            delegate: Rectangle {
+                objectName: "modeButton_" + modelData.mode
+                width: (parent.width - 4 * 6) / 5
+                height: 26
+                radius: 4
+                color: root.workspaceModel && root.workspaceModel.modeValue === modelData.mode
+                    ? root.accentColor
+                    : "#f4f5f1"
+                border.color: root.workspaceModel && root.workspaceModel.modeValue === modelData.mode
+                    ? root.accentColor
+                    : "#d5e0e3"
+                border.width: 1
+
+                Text {
+                    anchors.centerIn: parent
+                    text: modelData.label
+                    color: root.workspaceModel && root.workspaceModel.modeValue === modelData.mode
+                        ? "#fbfcfa"
+                        : "#526265"
+                    font.pixelSize: 11
+                    font.weight: Font.DemiBold
+                    elide: Text.ElideRight
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: {
+                        if (root.workspaceModel) {
+                            root.workspaceModel.setWorkspaceModeValue(modelData.mode)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Row {
+        anchors.left: title.left
+        anchors.right: title.right
+        anchors.top: workspaceSwitcher.bottom
         anchors.topMargin: 9
         spacing: 6
 
@@ -295,7 +350,9 @@ class WorkspaceStatusModel(QObject):
 
 
 def qml_data_url(qml_source: str) -> QUrl:
-    return QUrl(f"data:text/plain;charset=utf-8,{quote(qml_source)}")
+    # safe='' keeps QUrl from interpreting characters like '/' in JS expressions
+    # (e.g. (a - b) / 5) as URL path separators.
+    return QUrl(f"data:text/plain;charset=utf-8,{quote(qml_source, safe='')}")
 
 
 def create_workspace_status_widget(
