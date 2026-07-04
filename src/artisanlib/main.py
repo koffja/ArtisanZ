@@ -24,6 +24,8 @@ startup_time = libtime.process_time()
 from artisanlib import __version__, __revision__, __build__, __signature__, __release_sponsor_name__
 from artisanlib.charge_manager import ChargeTargetManager
 from artisanlib.charge_dialog import ChargeTempRorDlg
+from artisanlib.rorflick_manager import RoRFlickManager
+from artisanlib.rorflick_dialog import RoRFlickDlg
 from artisanlib.gui_theme import (
     lcd_label_stylesheet,
     lcd_value_stylesheet,
@@ -1970,6 +1972,10 @@ class ApplicationWindow(QMainWindow):
         # Charge Target Manager
         self.charge_manager: ChargeTargetManager = ChargeTargetManager()
         self.qmc.charge_manager = self.charge_manager
+
+        # RoR Flick/Crash Detector Manager
+        self.rorflick_manager: RoRFlickManager = RoRFlickManager()
+        self.qmc.rorflick_manager = self.rorflick_manager
 
         self.qmc.graph_widget().setMinimumHeight(150)
         #self.qmc.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground)
@@ -4693,6 +4699,9 @@ class ApplicationWindow(QMainWindow):
         charge_target_action = QAction(QApplication.translate('Menu', '投豆目标...'), self)
         charge_target_action.triggered.connect(self.showChargeTargetDialog)
         roast_menu.addAction(charge_target_action)
+        rorflick_action = QAction(QApplication.translate('Menu', 'RoR 异常检测...'), self)
+        rorflick_action.triggered.connect(self.showRoRFlickDialog)
+        roast_menu.addAction(rorflick_action)
 
         # Historical roast comparison overlay (pyqtgraph only)
         compare_action = QAction(QApplication.translate('Label', 'Compare Roasts...'), self)
@@ -20117,6 +20126,18 @@ class ApplicationWindow(QMainWindow):
             if settings.contains('ChargeTargetEnabled'):
                 self.charge_manager.enabled = toBool(settings.value('ChargeTargetEnabled', self.charge_manager.enabled))
 
+            # RoR Flick Detector
+            if settings.contains('RoRFlickEnabled'):
+                self.rorflick_manager.enabled = toBool(settings.value('RoRFlickEnabled', self.rorflick_manager.enabled))
+            if settings.contains('RoRFlickFlickThreshold'):
+                self.rorflick_manager.flick_threshold = toFloat(settings.value('RoRFlickFlickThreshold', self.rorflick_manager.flick_threshold))
+            if settings.contains('RoRFlickCrashThreshold'):
+                self.rorflick_manager.crash_threshold = toFloat(settings.value('RoRFlickCrashThreshold', self.rorflick_manager.crash_threshold))
+            if settings.contains('RoRFlickExitThreshold'):
+                self.rorflick_manager.exit_threshold = toFloat(settings.value('RoRFlickExitThreshold', self.rorflick_manager.exit_threshold))
+            if settings.contains('RoRFlickDevPhaseMultiplier'):
+                self.rorflick_manager.dev_phase_multiplier = toFloat(settings.value('RoRFlickDevPhaseMultiplier', self.rorflick_manager.dev_phase_multiplier))
+
             #watermark image
             self.logoimgalpha = toFloat(settings.value('logoimgalpha', self.logoimgalpha))
             self.logoimgflag = toBool(settings.value('logoimgflag', self.logoimgflag))
@@ -20751,6 +20772,13 @@ class ApplicationWindow(QMainWindow):
                 settings.setValue('ChargeTargetRoRTol', self.charge_manager.ror_tolerance)
                 settings.setValue('ChargeTargetEnabled', self.charge_manager.enabled)
 
+                # RoR Flick Detector
+                settings.setValue('RoRFlickEnabled', self.rorflick_manager.enabled)
+                settings.setValue('RoRFlickFlickThreshold', self.rorflick_manager.flick_threshold)
+                settings.setValue('RoRFlickCrashThreshold', self.rorflick_manager.crash_threshold)
+                settings.setValue('RoRFlickExitThreshold', self.rorflick_manager.exit_threshold)
+                settings.setValue('RoRFlickDevPhaseMultiplier', self.rorflick_manager.dev_phase_multiplier)
+
                 # only add those on exporting settings (those are never read by Artisan)
 #--- BEGIN GROUP System
                 settings.beginGroup('System')
@@ -20990,6 +21018,18 @@ class ApplicationWindow(QMainWindow):
                 self.charge_manager.ror_tolerance = toFloat(settings.value('ChargeTargetRoRTol', self.charge_manager.ror_tolerance))
             if settings.contains('ChargeTargetEnabled'):
                 self.charge_manager.enabled = toBool(settings.value('ChargeTargetEnabled', self.charge_manager.enabled))
+
+            # RoR Flick Detector
+            if settings.contains('RoRFlickEnabled'):
+                self.rorflick_manager.enabled = toBool(settings.value('RoRFlickEnabled', self.rorflick_manager.enabled))
+            if settings.contains('RoRFlickFlickThreshold'):
+                self.rorflick_manager.flick_threshold = toFloat(settings.value('RoRFlickFlickThreshold', self.rorflick_manager.flick_threshold))
+            if settings.contains('RoRFlickCrashThreshold'):
+                self.rorflick_manager.crash_threshold = toFloat(settings.value('RoRFlickCrashThreshold', self.rorflick_manager.crash_threshold))
+            if settings.contains('RoRFlickExitThreshold'):
+                self.rorflick_manager.exit_threshold = toFloat(settings.value('RoRFlickExitThreshold', self.rorflick_manager.exit_threshold))
+            if settings.contains('RoRFlickDevPhaseMultiplier'):
+                self.rorflick_manager.dev_phase_multiplier = toFloat(settings.value('RoRFlickDevPhaseMultiplier', self.rorflick_manager.dev_phase_multiplier))
 
             #watermark image
 
@@ -28664,6 +28704,13 @@ class ApplicationWindow(QMainWindow):
     @pyqtSlot(bool)
     def showChargeTargetDialog(self, _:bool = False) -> None:
         dlg = ChargeTempRorDlg(self, self.charge_manager)
+        if dlg.exec():
+            self.qmc.redraw(recomputeAllDeltas=False)
+
+    @pyqtSlot()
+    @pyqtSlot(bool)
+    def showRoRFlickDialog(self, _:bool = False) -> None:
+        dlg = RoRFlickDlg(self, self.rorflick_manager)
         if dlg.exec():
             self.qmc.redraw(recomputeAllDeltas=False)
 
