@@ -28560,6 +28560,7 @@ class ApplicationWindow(QMainWindow):
             dlg.setMinimumWidth(450)
             layout = QVBoxLayout(dlg)
 
+            list_widget = None
             if recent_alog:
                 layout.addWidget(QLabel(QApplication.translate('Label', 'Recent roasts:')))
                 list_widget = QListWidget()
@@ -28569,6 +28570,8 @@ class ApplicationWindow(QMainWindow):
                     list_widget.addItem(label)
                     list_widget.item(list_widget.count() - 1).setData(0x0100, f)
                 layout.addWidget(list_widget)
+            else:
+                layout.addWidget(QLabel(QApplication.translate('Label', 'No recent roasts. Click Browse to select files.')))
 
             btn_layout = QHBoxLayout()
             browse_btn = QPushButton(QApplication.translate('Label', 'Browse...'))
@@ -28585,7 +28588,7 @@ class ApplicationWindow(QMainWindow):
 
             def load_selected():
                 selected_files = []
-                if recent_alog:
+                if list_widget is not None:
                     for item in list_widget.selectedItems():
                         fp = item.data(0x0100)
                         if fp:
