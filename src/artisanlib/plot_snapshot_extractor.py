@@ -553,7 +553,7 @@ def _phase_bands(source: object) -> tuple[PhaseBandSnapshot, ...]:
             minimum=minimum,
             maximum=maximum,
             color=_phase_band_color(source, color_key, index),
-            opacity=0.22,
+            opacity=0.30,
         ))
     return tuple(bands)
 

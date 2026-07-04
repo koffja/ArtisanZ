@@ -5871,11 +5871,72 @@ class tgraphcanvas(QObject):
         try:
             self.configure_pyqtgraph_axes()
             set_snapshot(build_roast_plot_snapshot(self))
+            self._sync_pyqtgraph_visual_overlays(target)
         except Exception as exc: # pylint: disable=broad-exception-caught
             self.plot_renderer_embed_fallback_reason = 'pyqtgraph_snapshot_error'
             gui_perf_count('canvas.pyqtgraph_snapshot_error')
             _log.warning('falling back to Matplotlib plot widget after PyQtGraph snapshot failure: %s', exc)
             self.disable_selected_plot_widget()
+
+
+    def _sync_pyqtgraph_visual_overlays(self, target: object) -> None:
+        """Push phase/event data to pyqtgraph visual overlays after snapshot render."""
+        try:
+            phase_bands = getattr(target, 'phase_bands', None)
+            if phase_bands is not None and hasattr(phase_bands, 'update_phases'):
+                bounds = self._extract_phase_time_bounds()
+                if bounds:
+                    phase_bands.update_phases(bounds)
+            event_markers = getattr(target, 'event_markers', None)
+            if event_markers is not None and hasattr(event_markers, 'update_events'):
+                events = self._extract_event_marker_data()
+                if events:
+                    event_markers.update_events(events)
+            enhance = getattr(target, 'enhance_curves', None)
+            if callable(enhance):
+                enhance()
+        except Exception:
+            _log.debug('pyqtgraph visual overlay sync failed', exc_info=True)
+
+    def _extract_phase_time_bounds(self) -> dict:
+        """Extract drying/Maillard/development time boundaries from timeindex."""
+        bounds = {'drying': None, 'maillard': None, 'development': None}
+        try:
+            if not self.timex or len(self.timeindex) < 7:
+                return bounds
+            ti = self.timeindex
+            charge_t = float(self.timex[ti[0]]) if ti[0] >= 0 else 0.0
+            dry_t = float(self.timex[ti[1]]) if ti[1] > 0 else None
+            fcs_t = float(self.timex[ti[2]]) if ti[2] > 0 else None
+            drop_t = float(self.timex[ti[6]]) if ti[6] > 0 else None
+            if dry_t is not None and dry_t > charge_t:
+                bounds['drying'] = (charge_t, dry_t)
+            if fcs_t is not None and dry_t is not None and fcs_t > dry_t:
+                bounds['maillard'] = (dry_t, fcs_t)
+            if drop_t is not None and fcs_t is not None and drop_t > fcs_t:
+                bounds['development'] = (fcs_t, drop_t)
+        except (IndexError, TypeError, ValueError):
+            pass
+        return bounds
+
+    def _extract_event_marker_data(self) -> list:
+        """Extract event codes with time and temperature for overlay markers."""
+        events = []
+        try:
+            codes = ['CHARGE', '', 'DRY', 'FCs', 'FCe', 'SCs', 'DROP', '']
+            for i, code in enumerate(codes):
+                if not code or i >= len(self.timeindex):
+                    continue
+                idx = self.timeindex[i]
+                if idx is None or idx < 0 or idx >= len(self.timex):
+                    continue
+                t = float(self.timex[idx])
+                temp = float(self.temp2[idx]) if idx < len(self.temp2) else None
+                events.append({'code': code, 'time': t, 'temp': temp})
+        except (IndexError, TypeError, ValueError):
+            pass
+        return events
+
 
     def sync_pyqtgraph_static_overlays_from_canvas(self) -> None:
         target = self.plot_pyqtgraph_target
