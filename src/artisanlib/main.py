@@ -28536,7 +28536,7 @@ class ApplicationWindow(QMainWindow):
 
 
     def showComparisonFileDialog(self) -> None:
-        """Open a file dialog to select historical roast files for curve overlay comparison."""
+        """Show comparison dialog with recent files + browse option."""
         try:
             target = getattr(self.qmc, 'plot_pyqtgraph_target', None)
             if target is None:
@@ -28545,24 +28545,81 @@ class ApplicationWindow(QMainWindow):
             overlay = getattr(target, 'comparison_overlay', None)
             if overlay is None:
                 return
-            from PyQt6.QtWidgets import QFileDialog
-            files, _ = QFileDialog.getOpenFileNames(
-                self,
-                QApplication.translate('Label', 'Select roast profiles to compare'),
-                '',
-                QApplication.translate('Label', 'Artisan profiles (*.alog)'),
-            )
-            if not files:
-                return
-            added = 0
-            for filepath in files:
-                if overlay.add_from_file(filepath):
-                    added += 1
-            if added > 0:
-                self.sendmessage(QApplication.translate('Message', f'Loaded {added} comparison roast(s)'))
-                self.qmc.redraw(recomputeAllDeltas=False)
+
+            # Gather recent .alog files from QSettings
+            from PyQt6.QtCore import QSettings
+            settings = QSettings()
+            from artisanlib.util import toStringList
+            recent_files = toStringList(settings.value('recentFileList', []))
+            recent_alog = [f for f in recent_files if f.endswith('.alog') and os.path.isfile(f)][:15]
+
+            # Build selection dialog
+            from PyQt6.QtWidgets import QDialog, QVBoxLayout, QListWidget, QPushButton, QHBoxLayout, QFileDialog, QLabel
+            dlg = QDialog(self)
+            dlg.setWindowTitle(QApplication.translate('Label', 'Compare Roasts'))
+            dlg.setMinimumWidth(450)
+            layout = QVBoxLayout(dlg)
+
+            if recent_alog:
+                layout.addWidget(QLabel(QApplication.translate('Label', 'Recent roasts:')))
+                list_widget = QListWidget()
+                list_widget.setSelectionMode(QListWidget.SelectionMode.MultiSelection)
+                for f in recent_alog:
+                    label = os.path.basename(f)
+                    list_widget.addItem(label)
+                    list_widget.item(list_widget.count() - 1).setData(0x0100, f)
+                layout.addWidget(list_widget)
+
+            btn_layout = QHBoxLayout()
+            browse_btn = QPushButton(QApplication.translate('Label', 'Browse...'))
+            ok_btn = QPushButton(QApplication.translate('Label', 'Load Selected'))
+            cancel_btn = QPushButton(QApplication.translate('Label', 'Cancel'))
+            btn_layout.addWidget(browse_btn)
+            btn_layout.addStretch()
+            btn_layout.addWidget(ok_btn)
+            btn_layout.addWidget(cancel_btn)
+            layout.addLayout(btn_layout)
+
+            browse_btn.clicked.connect(lambda: self._comparisonBrowseMore(dlg, overlay))
+            cancel_btn.clicked.connect(dlg.reject)
+
+            def load_selected():
+                selected_files = []
+                if recent_alog:
+                    for item in list_widget.selectedItems():
+                        fp = item.data(0x0100)
+                        if fp:
+                            selected_files.append(fp)
+                added = 0
+                for fp in selected_files:
+                    if overlay.add_from_file(fp):
+                        added += 1
+                if added > 0:
+                    self.sendmessage(QApplication.translate('Message', f'Loaded {added} comparison roast(s)'))
+                    self.qmc.redraw(recomputeAllDeltas=False)
+                dlg.accept()
+
+            ok_btn.clicked.connect(load_selected)
+            dlg.exec()
         except Exception as e:
             _log.exception(e)
+
+    def _comparisonBrowseMore(self, parent_dialog: object, overlay: object) -> None:
+        """Open file picker for additional .alog files outside the recent list."""
+        from PyQt6.QtWidgets import QFileDialog
+        files, _ = QFileDialog.getOpenFileNames(
+            parent_dialog,
+            QApplication.translate('Label', 'Select roast profiles to compare'),
+            '',
+            QApplication.translate('Label', 'Artisan profiles (*.alog)'),
+        )
+        added = 0
+        for filepath in files:
+            if overlay.add_from_file(filepath):
+                added += 1
+        if added > 0:
+            self.sendmessage(QApplication.translate('Message', f'Loaded {added} more comparison roast(s)'))
+            self.qmc.redraw(recomputeAllDeltas=False)
 
     def clearComparisonCurves(self) -> None:
         """Remove all historical comparison overlay curves."""
