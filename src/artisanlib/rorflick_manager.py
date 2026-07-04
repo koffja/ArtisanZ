@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from typing import Literal, Optional, Tuple
+from collections.abc import Iterable
 
 
 FlickEventType = Literal['flick', 'crash']
@@ -139,3 +140,98 @@ class RoRFlickManager:
             severity=severity,
             in_development=in_development,
         )
+
+    def process_batch(
+        self,
+        samples: Iterable[tuple[int, float, float, bool]],
+    ) -> list[RoRFlickEvent]:
+        """Process pre-computed samples for a complete roast. Resets first."""
+        self.reset()
+        completed: list[RoRFlickEvent] = []
+        last_idx = 0
+        last_in_dev = False
+        for sample in samples:
+            sample_idx, short_avg, long_avg, in_dev = sample
+            last_idx = sample_idx
+            last_in_dev = in_dev
+            event = self.process_sample(sample_idx, short_avg, long_avg, in_dev)
+            if event is not None:
+                completed.append(event)
+
+        # Close any open event at end of batch
+        if self._current_start is not None:
+            event = self._finalize_event(last_idx, last_in_dev)
+            self.events.append(event)
+            completed.append(event)
+            self._current_start = None
+            self._current_type = None
+            self._current_peak = 0.0
+            self._current_peak_idx = 0
+
+        return completed
+
+    def process_roast(
+        self,
+        delta2: list[float],
+        fcs_idx: int = -1,
+        sample_rate_hz: float = 1.0,
+    ) -> list[RoRFlickEvent]:
+        """
+        Process a complete roast from raw delta2 (replay mode).
+        Computes its own short/long window averages internally.
+        """
+        self.reset()
+        if not delta2:
+            return []
+
+        short_window = max(1, int(9.0 * sample_rate_hz))
+        long_window = max(1, int(30.0 * sample_rate_hz))
+
+        for i in range(len(delta2)):
+            short_avg = self._window_average(delta2, i, short_window)
+            long_avg = self._window_average(delta2, i, long_window)
+            in_dev = fcs_idx > -1 and i >= fcs_idx
+            self.process_sample(i, short_avg, long_avg, in_dev)
+
+        # Close any open event at end
+        if self._current_start is not None:
+            final_idx = len(delta2) - 1
+            final_in_dev = fcs_idx > -1 and final_idx >= fcs_idx
+            event = self._finalize_event(final_idx, final_in_dev)
+            self.events.append(event)
+            self._current_start = None
+            self._current_type = None
+            self._current_peak = 0.0
+            self._current_peak_idx = 0
+
+        return list(self.events)
+
+    @staticmethod
+    def _window_average(data: list[float], end_idx: int, window: int) -> float:
+        """Average of data[max(0, end_idx-window+1) .. end_idx]."""
+        if not data or end_idx < 0 or end_idx >= len(data):
+            return 0.0
+        start = max(0, end_idx - window + 1)
+        slice_data = data[start:end_idx + 1]
+        if not slice_data:
+            return 0.0
+        return sum(slice_data) / len(slice_data)
+
+    def should_show_annotations(self) -> bool:
+        return self.enabled and len(self.events) > 0
+
+    def get_status_message(self) -> Tuple[str, str]:
+        """For status bar: returns (text, color)."""
+        if not self.enabled:
+            return ('', '')
+        if not self.events:
+            return ('RoR 监测: 正常', '#888888')
+        last = self.events[-1]
+        if last.severity == 'hard':
+            color = '#CC0000'
+        elif last.severity == 'moderate':
+            color = '#FF8800'
+        else:
+            color = '#FFCC00'
+        text = f'RoR {last.event_type.upper()}: {last.peak_magnitude:.1f}°C/min ({last.severity})'
+        return (text, color)

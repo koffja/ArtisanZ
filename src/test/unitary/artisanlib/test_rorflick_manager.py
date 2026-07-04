@@ -172,3 +172,195 @@ class TestRoRFlickDetection:
         # While in crash, even if flick conditions arise, ignore
         m.process_sample(1, 10.0, 5.0, False)
         assert m._current_type == 'crash'  # still in crash
+
+
+class TestRoRFlickBatch:
+    def test_process_batch_resets_state_first(self):
+        m = RoRFlickManager()
+        m.enabled = True
+        # pre-existing event from previous roast
+        m.events.append(RoRFlickEvent(
+            start_idx=0, peak_idx=0, end_idx=0,
+            event_type='flick', peak_magnitude=99.0,
+            severity='hard', in_development=False,
+        ))
+
+        samples = [
+            (0, 10.0, 5.0, False),  # enter flick
+            (1, 5.5, 5.0, False),   # exit
+        ]
+        events = m.process_batch(samples)
+
+        # pre-existing event was cleared
+        assert all(e.peak_magnitude != 99.0 for e in events)
+        assert len(events) == 1
+        assert events[0].event_type == 'flick'
+        assert events == m.events  # batch result equals internal state
+
+    def test_process_batch_closes_open_event_at_end(self):
+        m = RoRFlickManager()
+        m.enabled = True
+        m.flick_threshold = 3.0
+        m.exit_threshold = 1.0
+
+        samples = [
+            (0, 8.0, 5.0, False),  # enter flick (mag=3), no exit
+        ]
+        events = m.process_batch(samples)
+
+        # event force-closed at end of batch
+        assert len(events) == 1
+        assert events[0].start_idx == 0
+        assert events[0].end_idx == 0
+        # state cleared after close
+        assert m._current_start is None
+
+    def test_process_batch_handles_empty_samples(self):
+        m = RoRFlickManager()
+        m.enabled = True
+        events = m.process_batch([])
+        assert events == []
+
+
+class TestRoRFlickProcessRoast:
+    def test_process_roast_with_empty_delta2(self):
+        m = RoRFlickManager()
+        m.enabled = True
+        events = m.process_roast([], fcs_idx=-1, sample_rate_hz=1.0)
+        assert events == []
+
+    def test_process_roast_detects_flick_in_synthetic_data(self):
+        m = RoRFlickManager()
+        m.enabled = True
+        m.flick_threshold = 3.0
+        m.exit_threshold = 1.0
+
+        # Build synthetic delta2: flat at 5, then spike to 15, then back to 6
+        # At sample rate 1Hz, short_window=9, long_window=30
+        delta2 = [5.0] * 35 + [15.0] * 5 + [6.0] * 10
+        events = m.process_roast(delta2, fcs_idx=-1, sample_rate_hz=1.0)
+
+        # A flick should be detected when the spike diverges from the long avg
+        assert len(events) >= 1
+        assert any(e.event_type == 'flick' for e in events)
+
+    def test_process_roast_respects_fcs_index_for_dev_phase(self):
+        m = RoRFlickManager()
+        m.enabled = True
+        m.flick_threshold = 3.0
+        m.exit_threshold = 1.0
+        m.dev_phase_multiplier = 2.0
+
+        # Flick happens after FCs (index 20)
+        delta2 = [5.0] * 20 + [15.0] * 5 + [6.0] * 10
+        events = m.process_roast(delta2, fcs_idx=20, sample_rate_hz=1.0)
+
+        flick_events = [e for e in events if e.event_type == 'flick']
+        if flick_events:
+            # The flick started after index 20, so in_development should be True
+            assert any(e.in_development for e in flick_events)
+
+    def test_process_roast_resets_previous_events(self):
+        m = RoRFlickManager()
+        m.enabled = True
+        # Pre-existing event
+        m.events.append(RoRFlickEvent(
+            start_idx=0, peak_idx=0, end_idx=0,
+            event_type='flick', peak_magnitude=99.0,
+            severity='hard', in_development=False,
+        ))
+
+        delta2 = [5.0] * 40
+        events = m.process_roast(delta2, fcs_idx=-1, sample_rate_hz=1.0)
+
+        # Pre-existing event cleared
+        assert all(e.peak_magnitude != 99.0 for e in events)
+
+
+class TestRoRFlickSeverity:
+    def test_soft_severity_when_magnitude_below_5(self):
+        m = RoRFlickManager()
+        m.enabled = True
+        m.flick_threshold = 1.0
+        m.exit_threshold = 0.5
+
+        # mag = 2 (< 5)
+        m.process_sample(0, 3.0, 1.0, False)
+        result = m.process_sample(1, 1.4, 1.0, False)
+        assert result.severity == 'soft'
+        assert result.in_development is False
+
+    def test_moderate_severity_at_5(self):
+        m = RoRFlickManager()
+        m.enabled = True
+        m.flick_threshold = 1.0
+        m.exit_threshold = 0.5
+
+        # mag = 5
+        m.process_sample(0, 6.0, 1.0, False)
+        result = m.process_sample(1, 1.4, 1.0, False)
+        assert result.severity == 'moderate'
+
+    def test_hard_severity_at_10(self):
+        m = RoRFlickManager()
+        m.enabled = True
+        m.flick_threshold = 1.0
+        m.exit_threshold = 0.5
+
+        # mag = 10
+        m.process_sample(0, 11.0, 1.0, False)
+        result = m.process_sample(1, 1.4, 1.0, False)
+        assert result.severity == 'hard'
+
+    def test_dev_phase_multiplier_upgrades_severity(self):
+        m = RoRFlickManager()
+        m.enabled = True
+        m.flick_threshold = 1.0
+        m.exit_threshold = 0.5
+        m.dev_phase_multiplier = 2.0
+
+        # mag=3, in dev: 3 * 2 = 6 -> moderate (would be soft without boost)
+        m.process_sample(0, 4.0, 1.0, True)
+        result = m.process_sample(1, 1.4, 1.0, True)
+        assert result.severity == 'moderate'
+        assert result.in_development is True
+        # peak_magnitude is the raw magnitude (not multiplied) — boost only affects severity
+        assert result.peak_magnitude == 3.0
+
+
+class TestRoRFlickStatus:
+    def test_status_disabled_returns_empty(self):
+        m = RoRFlickManager()
+        text, color = m.get_status_message()
+        assert text == ''
+        assert color == ''
+
+    def test_status_enabled_no_events_says_normal(self):
+        m = RoRFlickManager()
+        m.enabled = True
+        text, color = m.get_status_message()
+        assert '正常' in text
+
+    def test_status_with_last_event_hard_is_red(self):
+        m = RoRFlickManager()
+        m.enabled = True
+        m.events.append(RoRFlickEvent(
+            start_idx=0, peak_idx=0, end_idx=1,
+            event_type='flick', peak_magnitude=12.0,
+            severity='hard', in_development=False,
+        ))
+        text, color = m.get_status_message()
+        assert 'FLICK' in text.upper()
+        assert color == '#CC0000'
+
+    def test_should_show_annotations_requires_enabled_and_events(self):
+        m = RoRFlickManager()
+        assert m.should_show_annotations() is False
+        m.enabled = True
+        assert m.should_show_annotations() is False
+        m.events.append(RoRFlickEvent(
+            start_idx=0, peak_idx=0, end_idx=0,
+            event_type='flick', peak_magnitude=5.0,
+            severity='moderate', in_development=False,
+        ))
+        assert m.should_show_annotations() is True
