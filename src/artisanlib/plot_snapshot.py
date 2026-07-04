@@ -9,6 +9,7 @@ EventMarkerKind = Literal['main', 'special', 'background']
 GuideOrientation = Literal['vertical', 'horizontal']
 GuideKind = Literal['auc', 'bbp', 'charge_target', 'time', 'custom']
 AreaFillKind = Literal['auc', 'custom']
+ChargeAnnotationColor = Literal['gray', 'blue', 'green', 'red']
 
 
 @dataclass(frozen=True, slots=True)
@@ -84,6 +85,26 @@ class PhaseSummarySnapshot:
     delta_text: str
     color: str = '#C9D2D4'
     opacity: float = 0.38
+
+
+@dataclass(frozen=True, slots=True)
+class ChargeTargetAnnotationSnapshot:
+    enabled: bool
+    is_charged: bool
+    target_temp: float
+    target_ror: float
+    charged_temp: float
+    charged_ror: float
+    title: str
+    reason: str
+    prediction_seconds: float | None
+    color: ChargeAnnotationColor
+    current_rwt: float
+    target_rwt: float
+    anchor_time: float
+    anchor_temp: float
+    x_limit: float
+    y_limit_top: float
 
 
 @dataclass(frozen=True, slots=True)
@@ -186,6 +207,7 @@ class RoastPlotSnapshot:
     phase_summaries: tuple[PhaseSummarySnapshot, ...] = ()
     guides: tuple[GuideLineSnapshot, ...] = ()
     areas: tuple[AreaFillSnapshot, ...] = ()
+    charge_target_annotations: tuple[ChargeTargetAnnotationSnapshot, ...] = ()
 
     def visible_curves(self) -> tuple[CurveSnapshot, ...]:
         return tuple(curve for curve in self.curves if curve.visible)
@@ -216,6 +238,8 @@ __all__ = [
     'AreaFillKind',
     'AreaFillSnapshot',
     'AxisSnapshot',
+    'ChargeAnnotationColor',
+    'ChargeTargetAnnotationSnapshot',
     'CurveSnapshot',
     'EventMarkerKind',
     'EventMarkerSnapshot',
