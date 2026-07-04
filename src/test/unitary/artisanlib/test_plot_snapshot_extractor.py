@@ -493,3 +493,101 @@ def test_build_roast_plot_snapshot_keeps_auc_base_offsets_with_invalid_samples()
             kind='auc',
         ),
     )
+
+
+def test_charge_target_annotations_disabled_returns_empty():
+    """When charge_manager.enabled is False, the extractor returns an empty tuple."""
+    from artisanlib.plot_snapshot_extractor import _charge_target_annotations
+    class FakeManager:
+        enabled = False
+        target_temp = 200.0
+        target_ror = 18.0
+        active = True
+    class FakeSource:
+        charge_manager = FakeManager()
+    assert _charge_target_annotations(FakeSource()) == ()
+
+
+def test_charge_target_annotations_active_state_returns_snapshot():
+    """When enabled and not yet charged, extractor returns a single active-state snapshot."""
+    from artisanlib.plot_snapshot_extractor import _charge_target_annotations
+    from artisanlib.plot_snapshot import ChargeTargetAnnotationSnapshot
+    from artisanlib.charge_manager import ChargeReadiness
+    class FakeManager:
+        enabled = True
+        active = True
+        target_temp = 200.0
+        target_ror = 18.0
+        charged_temp = 0.0
+        charged_ror = 0.0
+        temp_tolerance = 1.0
+        ror_tolerance = 6.0
+        prediction_window = 5.0
+        prediction_time = None
+        def evaluate_readiness(self, current_temp, current_ror, short_ror=None, long_ror=None, et_bt_gap=None, reference_et_bt_gap=None):
+            return ChargeReadiness(
+                status='near',
+                title='接近目标',
+                reason='接近目标，继续观察',
+                color='green',
+                prediction_seconds=8.4,
+                current_rwt=34.9,
+                target_rwt=33.3,
+            )
+        @staticmethod
+        def calculate_rwt(ror):
+            return 600.0 / ror if ror and ror > 0 else 0.0
+    class FakeSource:
+        charge_manager = FakeManager()
+        timex = (0.0, 100.0, 200.0, 423.5)
+        temp2 = (25.0, 100.0, 150.0, 192.1)
+        delta2 = (0.0, 30.0, 22.0, 18.5)
+    result = _charge_target_annotations(FakeSource())
+    assert len(result) == 1
+    snap = result[0]
+    assert isinstance(snap, ChargeTargetAnnotationSnapshot)
+    assert snap.enabled is True
+    assert snap.is_charged is False
+    assert snap.target_temp == 200.0
+    assert snap.target_ror == 18.0
+    assert snap.title == '接近目标'
+    assert snap.color == 'green'
+    assert snap.prediction_seconds == 8.4
+    assert snap.anchor_time == 423.5
+    assert snap.anchor_temp == 192.1
+    assert snap.x_limit > 0
+    assert snap.y_limit_top > 0
+
+
+def test_charge_target_annotations_charged_state_returns_snapshot():
+    """When charge_manager.active is False (post-charge), extractor returns a charged-state snapshot."""
+    from artisanlib.plot_snapshot_extractor import _charge_target_annotations
+    class FakeManager:
+        enabled = True
+        active = False  # post-charge
+        target_temp = 200.0
+        target_ror = 18.0
+        charged_temp = 198.5
+        charged_ror = 17.2
+        temp_tolerance = 1.0
+        ror_tolerance = 6.0
+        prediction_window = 5.0
+        prediction_time = None
+        def evaluate_readiness(self, current_temp, current_ror, short_ror=None, long_ror=None, et_bt_gap=None, reference_et_bt_gap=None):
+            raise AssertionError('evaluate_readiness should NOT be called in charged state')
+        @staticmethod
+        def calculate_rwt(ror):
+            return 600.0 / ror if ror and ror > 0 else 0.0
+    class FakeSource:
+        charge_manager = FakeManager()
+        timex = (0.0, 100.0, 200.0, 423.5)
+        temp2 = (25.0, 100.0, 150.0, 192.1)
+        delta2 = (0.0, 30.0, 22.0, 18.5)
+    result = _charge_target_annotations(FakeSource())
+    assert len(result) == 1
+    snap = result[0]
+    assert snap.is_charged is True
+    assert snap.charged_temp == 198.5
+    assert snap.charged_ror == 17.2
+    assert snap.target_temp == 200.0
+    assert snap.target_ror == 18.0

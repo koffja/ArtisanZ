@@ -11,6 +11,7 @@ except ImportError:  # pragma: no cover - PyQt6 is a runtime dependency in norma
 from artisanlib.plot_snapshot import (
     AreaFillSnapshot,
     AxisSnapshot,
+    ChargeTargetAnnotationSnapshot,
     CurveSnapshot,
     EventMarkerSnapshot,
     EventValueSnapshot,
@@ -84,6 +85,7 @@ def build_roast_plot_snapshot(source: object) -> RoastPlotSnapshot:
         time_ranges=_time_ranges(source),
         phase_summaries=_phase_summaries(source),
         guides=_guide_lines(source),
+        charge_target_annotations=_charge_target_annotations(source),
         areas=_area_fills(source),
     )
 
@@ -106,6 +108,7 @@ def build_roast_plot_static_overlay_snapshot(
         time_ranges=_time_ranges(source),
         phase_summaries=_phase_summaries(source),
         guides=_guide_lines(source),
+        charge_target_annotations=_charge_target_annotations(source),
         areas=_area_fills(source),
     )
 
@@ -847,6 +850,115 @@ def _charge_target_guide(source: object) -> GuideLineSnapshot | None:
         opacity=0.42,
         kind='charge_target',
     )
+
+
+_BG_COLOR_MAP: dict[str, str] = {
+    'red': '#FFEDED',
+    'blue': '#E6E6FF',
+    'green': '#E8F5E9',
+    'gray': '#F5F5F5',
+}
+
+
+def _charge_target_annotations(source: object) -> tuple[ChargeTargetAnnotationSnapshot, ...]:
+    """Extract a single charge-target annotation snapshot, or empty tuple when disabled.
+
+    Mirrors the visual states of canvas.draw_charge_target_annotation:
+    - is_charged=True:  static top-left card showing target/actual temp/RoR/RWT
+    - is_charged=False: dynamic arrow callout showing readiness title/reason/prediction
+    """
+    manager = getattr(source, 'charge_manager', None)
+    if manager is None:
+        return ()
+    enabled = bool(getattr(manager, 'enabled', False))
+    if not enabled:
+        return ()
+    target_temp = _numeric_value(getattr(manager, 'target_temp', None)) or 0.0
+    target_ror = _numeric_value(getattr(manager, 'target_ror', None)) or 0.0
+    charged_temp = _numeric_value(getattr(manager, 'charged_temp', None)) or 0.0
+    charged_ror = _numeric_value(getattr(manager, 'charged_ror', None)) or 0.0
+    is_charged = not bool(getattr(manager, 'active', True))
+
+    timex = _sequence(source, 'timex')
+    temp2 = _sequence(source, 'temp2')
+    delta2 = _sequence(source, 'delta2')
+    current_time = float(timex[-1]) if timex else 0.0
+    current_temp = float(temp2[-1]) if temp2 else 0.0
+    current_ror = _numeric_value(delta2[-1] if delta2 else None)
+
+    x_limit = float(timex[-1] * 1.05) if timex else 600.0
+    y_limit_top = float(max(temp2) * 1.05) if temp2 else 250.0
+
+    calculate_rwt = getattr(manager, 'calculate_rwt', lambda _ror: 0.0)
+    target_rwt = float(calculate_rwt(target_ror) or 0.0)
+
+    if is_charged:
+        current_rwt = float(calculate_rwt(charged_ror) or 0.0)
+        return (ChargeTargetAnnotationSnapshot(
+            enabled=True,
+            is_charged=True,
+            target_temp=target_temp,
+            target_ror=target_ror,
+            charged_temp=charged_temp,
+            charged_ror=charged_ror,
+            title='',
+            reason='',
+            prediction_seconds=None,
+            color='gray',
+            current_rwt=current_rwt,
+            target_rwt=target_rwt,
+            anchor_time=0.0,
+            anchor_temp=0.0,
+            x_limit=x_limit,
+            y_limit_top=y_limit_top,
+        ),)
+
+    # Active state: call evaluate_readiness
+    evaluate = getattr(manager, 'evaluate_readiness', None)
+    if evaluate is None or current_ror is None:
+        return (ChargeTargetAnnotationSnapshot(
+            enabled=True,
+            is_charged=False,
+            target_temp=target_temp,
+            target_ror=target_ror,
+            charged_temp=charged_temp,
+            charged_ror=charged_ror,
+            title='等待数据',
+            reason='升温数据不足',
+            prediction_seconds=None,
+            color='gray',
+            current_rwt=0.0,
+            target_rwt=target_rwt,
+            anchor_time=current_time,
+            anchor_temp=current_temp,
+            x_limit=x_limit,
+            y_limit_top=y_limit_top,
+        ),)
+
+    readiness = evaluate(
+        current_temp=current_temp,
+        current_ror=current_ror,
+    )
+    current_rwt = float(calculate_rwt(current_ror) or 0.0)
+    color_value = readiness.color if readiness.color in _BG_COLOR_MAP else 'gray'
+    return (ChargeTargetAnnotationSnapshot(
+        enabled=True,
+        is_charged=False,
+        target_temp=target_temp,
+        target_ror=target_ror,
+        charged_temp=charged_temp,
+        charged_ror=charged_ror,
+        title=readiness.title,
+        reason=readiness.reason,
+        prediction_seconds=readiness.prediction_seconds,
+        color=color_value,
+        current_rwt=current_rwt,
+        target_rwt=target_rwt,
+        anchor_time=current_time,
+        anchor_temp=current_temp,
+        x_limit=x_limit,
+        y_limit_top=y_limit_top,
+    ),)
 
 
 def _event_type_visible(source: object, event_type: int) -> bool:
