@@ -852,12 +852,8 @@ def _charge_target_guide(source: object) -> GuideLineSnapshot | None:
     )
 
 
-_BG_COLOR_MAP: dict[str, str] = {
-    'red': '#FFEDED',
-    'blue': '#E6E6FF',
-    'green': '#E8F5E9',
-    'gray': '#F5F5F5',
-}
+# Valid readiness color keywords (render-layer hex mapping lives in plot_pyqtgraph_adapter._CHARGE_BG_COLOR_HEX)
+_VALID_READINESS_COLORS: frozenset[str] = frozenset({'red', 'blue', 'green', 'gray'})
 
 
 def _charge_target_annotations(source: object) -> tuple[ChargeTargetAnnotationSnapshot, ...]:
@@ -940,7 +936,7 @@ def _charge_target_annotations(source: object) -> tuple[ChargeTargetAnnotationSn
         current_ror=current_ror,
     )
     current_rwt = float(calculate_rwt(current_ror) or 0.0)
-    color_value = readiness.color if readiness.color in _BG_COLOR_MAP else 'gray'
+    color_value = readiness.color if readiness.color in _VALID_READINESS_COLORS else 'gray'
     return (ChargeTargetAnnotationSnapshot(
         enabled=True,
         is_charged=False,

@@ -23,6 +23,7 @@ from artisanlib.plot_live_frame import (
 from artisanlib.plot_snapshot import (
     AreaFillSnapshot,
     AxisSnapshot,
+    ChargeTargetAnnotationSnapshot,
     EventMarkerSnapshot,
     EventValueSnapshot,
     GuideLineSnapshot,
@@ -427,3 +428,40 @@ def test_merge_static_plot_overlays_keeps_live_curves_and_restores_background_la
     assert merged.phase_bands == static_snapshot.phase_bands
     assert merged.guides == static_snapshot.guides
     assert merged.areas == static_snapshot.areas
+
+
+def test_merge_static_plot_overlays_preserves_charge_target_annotations() -> None:
+    """The live-frame merge must carry charge_target_annotations from static snapshot."""
+    annotation = ChargeTargetAnnotationSnapshot(
+        enabled=True,
+        is_charged=False,
+        target_temp=200.0,
+        target_ror=18.0,
+        charged_temp=0.0,
+        charged_ror=0.0,
+        title='接近目标',
+        reason='接近目标，继续观察',
+        prediction_seconds=8.4,
+        color='green',
+        current_rwt=34.9,
+        target_rwt=33.3,
+        anchor_time=423.5,
+        anchor_temp=192.1,
+        x_limit=600.0,
+        y_limit_top=250.0,
+    )
+    static_snapshot = RoastPlotSnapshot(
+        curves=(),
+        time_axis=AxisSnapshot(minimum=0.0, maximum=600.0, label=''),
+        temperature_axis=AxisSnapshot(minimum=0.0, maximum=250.0, label=''),
+        charge_target_annotations=(annotation,),
+    )
+    live_snapshot = RoastPlotSnapshot(
+        curves=(),
+        time_axis=AxisSnapshot(minimum=0.0, maximum=400.0, label=''),
+        temperature_axis=AxisSnapshot(minimum=0.0, maximum=220.0, label=''),
+    )
+    merged = merge_static_plot_overlays(live_snapshot, static_snapshot)
+    assert merged.charge_target_annotations == (annotation,), (
+        'charge_target_annotations must be preserved from static snapshot'
+    )

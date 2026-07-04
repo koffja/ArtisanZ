@@ -219,6 +219,7 @@ def merge_static_plot_overlays(
         phase_summaries=static_snapshot.phase_summaries,
         guides=static_snapshot.guides,
         areas=static_snapshot.areas,
+        charge_target_annotations=static_snapshot.charge_target_annotations,
     )
 
 

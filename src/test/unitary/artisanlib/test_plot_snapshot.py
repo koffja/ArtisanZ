@@ -138,7 +138,7 @@ def test_charge_target_annotation_snapshot_charged_state() -> None:
     import dataclasses
 
     try:
-        snap.target_temp = 999.0  # type: ignore[misc]
+        snap.target_temp = 999.0  # type: ignore[misc]  # intentional: verify frozen dataclass raises
         raise AssertionError('snapshot must be frozen')
     except dataclasses.FrozenInstanceError:
         pass
