@@ -144,6 +144,8 @@ Important observations from the code review:
 - Avoid nested cards, oversized rounded rectangles, and dark gray default widget wells.
 - Preserve existing translations, shortcuts, validation, and settings persistence.
 
+**2026-07-04 Update:** Five stale `[ ]` items in the Phase 1.6 plan were flipped to `[x]` with cross-references to Phases 1.9, 1.10, 1.12, 1.17, 1.18 (documentation-only back-fill — see `docs/superpowers/plans/2026-07-04-phase-1-6-closure-workspace-switcher-charge-target-annotation.md` Task Group A). The Workspace Status dock now exposes 5 clickable workspace switcher buttons (Task Group B) via a QML Repeater bound to the existing `setWorkspaceModeValue` slot, with the active mode highlighted by `accentColor`. The charge-target annotation text/callout now renders in the PyQtGraph path via `ChargeTargetAnnotationSnapshot` (`plot_snapshot.py`) + `_charge_target_annotations` extractor (`plot_snapshot_extractor.py`) + `_default_charge_target_annotation_factory` (`plot_pyqtgraph_adapter.py`, following the phase-summary multi-item tuple pattern), closing the critical ArtisanZ-specific gap noted in the Phase 1.6 audit. Charged state renders a static top-left card; active state renders a dynamic callout with dashed connector line to the current (time, temp) point. Rectangular bbox is used instead of Matplotlib's `boxstyle=round` (PyQtGraph limitation); rounded corners are a future visual-parity follow-up.
+
 ## Phase 1.7: WebSocket Virtual Roast Validation
 
 **Goal:** Validate GUI renderer behavior with protocol-level virtual roast data before a physical machine/device session.
