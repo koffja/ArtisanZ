@@ -708,6 +708,13 @@ def _default_time_range_item_factory(time_range: TimeRangeSnapshot, _: RoastPlot
     return item
 
 
+_PHASE_SUMMARY_BAR_COLORS: dict[str, str] = {
+    'Drying':      '#8FBC8F',   # 草绿 sage green
+    'Maillard':    '#C4A06A',   # 焦糖 caramel
+    'Development': '#B8868E',   # 枯萎玫瑰 dusty rose
+}
+
+
 def _default_phase_summary_item_factory(
         summary: PhaseSummarySnapshot,
         snapshot: RoastPlotSnapshot) -> tuple[object, ...] | None:
@@ -723,7 +730,7 @@ def _default_phase_summary_item_factory(
     bar = pg.PlotDataItem(
         [summary.start, summary.end],
         [y_bar, y_bar],
-        pen=pg.mkPen(color=_color_with_alpha(pg, summary.color, max(0.55, min(0.78, summary.opacity + 0.40))), width=14),
+        pen=pg.mkPen(color=_color_with_alpha(pg, _PHASE_SUMMARY_BAR_COLORS.get(summary.label, summary.color), 0.72), width=14),
     )
     _call_if_available(bar, 'setZValue', 12)
     if _settings_bool(('phaseSummaryLabels', 'phase_summary_labels'), True):
