@@ -769,7 +769,7 @@ ROAST_TOOLBAR_VISUAL_METRICS: Final[dict[str, int]] = {
     'toolbar_vertical_padding': 6,
     'button_height': 44,
     'button_width': 48,
-    'brand_width': 112,
+    'brand_width': 92,
     'icon_size': 30,
     'label_height': 44,
 }

@@ -103,12 +103,14 @@ class Login(ArtisanDialog):
             )
 
         self.textPass:QLineEdit = QLineEdit(self)
+        self.textPass.setMinimumWidth(300)
         self.textPass.setEchoMode(QLineEdit.EchoMode.Password)
         self.textPass.setPlaceholderText(
             QApplication.translate('Plus', 'Password')
         )
 
         self.textName:QLineEdit = QLineEdit(self)
+        self.textName.setMinimumWidth(300)
         self.textName.setPlaceholderText(
             QApplication.translate('Plus', 'Username or email')
         )
@@ -125,6 +127,7 @@ class Login(ArtisanDialog):
         self.rememberCheckbox.stateChanged.connect(self.rememberCheckChanged)
 
         credentialsLayout:QVBoxLayout = QVBoxLayout(self)
+        credentialsLayout.setSpacing(8)
         credentialsLayout.addWidget(self.textName)
         credentialsLayout.addWidget(self.textPass)
         credentialsLayout.addWidget(self.rememberCheckbox)
@@ -148,8 +151,9 @@ class Login(ArtisanDialog):
         layout.addWidget(credentialsGroup)
         layout.addLayout(linkLayout)
         layout.addLayout(buttonLayout)
-        layout.setContentsMargins(10, 10, 10, 10)
-        layout.setSpacing(5)
+        layout.setContentsMargins(24, 20, 24, 20)
+        layout.setSpacing(14)
+        self.setMinimumWidth(440)
 
         if saved_password is not None:
             self.passwd = saved_password
