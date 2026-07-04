@@ -15,6 +15,7 @@ from artisanlib.plot_pyqtgraph_adapter import (
 from artisanlib.plot_snapshot import (
     AreaFillSnapshot,
     AxisSnapshot,
+    ChargeTargetAnnotationSnapshot,
     CurveSnapshot,
     EventMarkerSnapshot,
     EventValueSnapshot,
@@ -643,6 +644,86 @@ def test_phase_band_opacity_has_visible_floor_on_light_canvas() -> None:
     assert _visible_phase_band_opacity(0.05) == 0.24
     assert _visible_phase_band_opacity(0.22) == pytest.approx(0.33)
     assert _visible_phase_band_opacity(0.8) == 0.38
+
+
+def test_charge_target_annotation_factory_charged_state_returns_single_text_item() -> None:
+    """Charged state emits one TextItem placed at axes-top-left equivalent."""
+    from PyQt6.QtWidgets import QApplication
+
+    from artisanlib.plot_pyqtgraph_adapter import _default_charge_target_annotation_factory
+
+    _app = QApplication.instance() or QApplication([])
+    snap = ChargeTargetAnnotationSnapshot(
+        enabled=True,
+        is_charged=True,
+        target_temp=200.0,
+        target_ror=18.0,
+        charged_temp=198.5,
+        charged_ror=17.2,
+        title='',
+        reason='',
+        prediction_seconds=None,
+        color='gray',
+        current_rwt=34.9,
+        target_rwt=33.3,
+        anchor_time=0.0,
+        anchor_temp=0.0,
+        x_limit=600.0,
+        y_limit_top=250.0,
+    )
+    snapshot = RoastPlotSnapshot(
+        curves=(),
+        time_axis=AxisSnapshot(minimum=0.0, maximum=600.0, label=''),
+        temperature_axis=AxisSnapshot(minimum=0.0, maximum=250.0, label=''),
+    )
+
+    items = _default_charge_target_annotation_factory(snap, snapshot)
+
+    assert items is not None
+    item_tuple = items if isinstance(items, tuple) else (items,)
+    assert len(item_tuple) == 1, f"charged state should emit exactly 1 item, got {len(item_tuple)}"
+    text_item = item_tuple[0]
+    assert hasattr(text_item, 'setText') or hasattr(text_item, 'setPlainText'), (
+        f"expected TextItem-like object, got {type(text_item).__name__}"
+    )
+
+
+def test_charge_target_annotation_factory_active_state_returns_text_and_connector() -> None:
+    """Active state emits a TextItem plus a connector line back to (anchor_time, anchor_temp)."""
+    from PyQt6.QtWidgets import QApplication
+
+    from artisanlib.plot_pyqtgraph_adapter import _default_charge_target_annotation_factory
+
+    _app = QApplication.instance() or QApplication([])
+    snap = ChargeTargetAnnotationSnapshot(
+        enabled=True,
+        is_charged=False,
+        target_temp=200.0,
+        target_ror=18.0,
+        charged_temp=0.0,
+        charged_ror=0.0,
+        title='接近目标',
+        reason='接近目标，继续观察',
+        prediction_seconds=8.4,
+        color='green',
+        current_rwt=34.9,
+        target_rwt=33.3,
+        anchor_time=423.5,
+        anchor_temp=192.1,
+        x_limit=600.0,
+        y_limit_top=250.0,
+    )
+    snapshot = RoastPlotSnapshot(
+        curves=(),
+        time_axis=AxisSnapshot(minimum=0.0, maximum=600.0, label=''),
+        temperature_axis=AxisSnapshot(minimum=0.0, maximum=250.0, label=''),
+    )
+
+    items = _default_charge_target_annotation_factory(snap, snapshot)
+
+    assert items is not None
+    item_tuple = items if isinstance(items, tuple) else (items,)
+    assert len(item_tuple) >= 2, f"active state should emit >=2 items, got {len(item_tuple)}"
 
 
 def test_event_markers_are_optional_when_pyqtgraph_is_not_installed(monkeypatch: pytest.MonkeyPatch) -> None:

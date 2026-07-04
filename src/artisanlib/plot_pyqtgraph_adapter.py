@@ -4,9 +4,12 @@ from collections.abc import Callable
 import math
 from typing import Any
 
+from PyQt6 import QtCore
+
 from artisanlib.plot_snapshot import (
     AreaFillSnapshot,
     AxisSnapshot,
+    ChargeTargetAnnotationSnapshot,
     CurveSnapshot,
     EventMarkerSnapshot,
     EventValueSnapshot,
@@ -25,6 +28,10 @@ PhaseItemFactory = Callable[[PhaseBandSnapshot, RoastPlotSnapshot], object | Non
 TimeRangeItemFactory = Callable[[TimeRangeSnapshot, RoastPlotSnapshot], object | tuple[object, ...] | None]
 PhaseSummaryItemFactory = Callable[[PhaseSummarySnapshot, RoastPlotSnapshot], object | tuple[object, ...] | None]
 AreaItemFactory = Callable[[AreaFillSnapshot, RoastPlotSnapshot], object | None]
+ChargeTargetAnnotationItemFactory = Callable[
+    [ChargeTargetAnnotationSnapshot, RoastPlotSnapshot],
+    object | tuple[object, ...] | None,
+]
 CurvePenFactory = Callable[[CurveSnapshot], object]
 
 
@@ -43,6 +50,7 @@ class PyQtGraphSnapshotRenderer:
             time_range_factory: TimeRangeItemFactory | None = None,
             phase_summary_factory: PhaseSummaryItemFactory | None = None,
             area_item_factory: AreaItemFactory | None = None,
+            charge_target_annotation_factory: ChargeTargetAnnotationItemFactory | None = None,
             pen_factory: CurvePenFactory | None = None) -> None:
         self._temperature_plot = temperature_plot
         self._ror_plot = ror_plot
@@ -55,6 +63,9 @@ class PyQtGraphSnapshotRenderer:
         self._time_range_factory = time_range_factory or _default_time_range_item_factory
         self._phase_summary_factory = phase_summary_factory or _default_phase_summary_item_factory
         self._area_item_factory = area_item_factory or _default_area_item_factory
+        self._charge_target_annotation_factory = (
+            charge_target_annotation_factory or _default_charge_target_annotation_factory
+        )
         self._pen_factory = pen_factory or _default_pen_factory
         self._items: dict[str, object] = {}
         self._phase_items: list[object] = []
@@ -64,6 +75,7 @@ class PyQtGraphSnapshotRenderer:
         self._event_items: list[object] = []
         self._event_value_items: list[tuple[object, object]] = []
         self._guide_items: list[tuple[object, object]] = []
+        self._charge_target_annotation_items: list[object] = []
         self._static_overlay_signature: tuple[object, ...] | None = None
         self._last_view_state = RendererViewState(
             time_axis=AxisSnapshot(minimum=0.0, maximum=0.0, label='Time'),
@@ -117,6 +129,9 @@ class PyQtGraphSnapshotRenderer:
     def area_item_count(self) -> int:
         return len(self._area_items)
 
+    def charge_target_annotation_item_count(self) -> int:
+        return len(self._charge_target_annotation_items)
+
     def _apply_static_overlays(self, snapshot: RoastPlotSnapshot, *, force: bool) -> None:
         signature = _static_overlay_signature(snapshot)
         if not force and signature == self._static_overlay_signature:
@@ -128,6 +143,7 @@ class PyQtGraphSnapshotRenderer:
         self._apply_event_values(snapshot)
         self._apply_events(snapshot)
         self._apply_guides(snapshot)
+        self._apply_charge_target_annotations(snapshot)
         self._static_overlay_signature = signature
 
     def _apply_curves(self, snapshot: RoastPlotSnapshot) -> None:
@@ -285,6 +301,18 @@ class PyQtGraphSnapshotRenderer:
     def _clear_guide_items(self) -> None:
         _clear_item_pairs(self._guide_items)
 
+    def _apply_charge_target_annotations(self, snapshot: RoastPlotSnapshot) -> None:
+        self._clear_charge_target_annotation_items()
+        for annotation in snapshot.charge_target_annotations:
+            for item in _as_items(self._charge_target_annotation_factory(annotation, snapshot)):
+                _call_if_available(self._temperature_plot, 'addItem', item)
+                self._charge_target_annotation_items.append(item)
+
+    def _clear_charge_target_annotation_items(self) -> None:
+        for item in self._charge_target_annotation_items:
+            _call_if_available(self._temperature_plot, 'removeItem', item)
+        self._charge_target_annotation_items.clear()
+
     def _plot_for_guide(self, guide: GuideLineSnapshot) -> object:
         if guide.y_axis == 'ror' and self._ror_plot is not None:
             return self._ror_plot
@@ -312,6 +340,7 @@ def _static_overlay_signature(snapshot: RoastPlotSnapshot) -> tuple[object, ...]
         snapshot.event_values,
         snapshot.events,
         snapshot.guides,
+        snapshot.charge_target_annotations,
     )
 
 
@@ -686,6 +715,115 @@ def _default_phase_summary_item_factory(
     delta.setPos(x_mid, y_top - span * 0.105)
     _call_if_available(delta, 'setZValue', 34)
     return bar, label, delta
+
+
+_CHARGE_BG_COLOR_HEX = {
+    'red': '#FFEDED',
+    'blue': '#E6E6FF',
+    'green': '#E8F5E9',
+    'gray': '#F5F5F5',
+}
+
+
+def _format_charge_ror(ror: float) -> str:
+    return f'{ror:.1f}' if ror and ror > 0 else '--'
+
+
+def _format_charge_rwt(rwt: float) -> str:
+    return f'{rwt:.1f}s' if rwt and rwt > 0 else '--'
+
+
+def _format_charge_prediction_seconds(seconds: object) -> str:
+    if seconds is None:
+        return '---'
+    try:
+        return f'{float(seconds):.1f}秒'
+    except (TypeError, ValueError):
+        return '---'
+
+
+def _default_charge_target_annotation_factory(
+        annotation: ChargeTargetAnnotationSnapshot,
+        snapshot: RoastPlotSnapshot) -> tuple[object, ...] | None:
+    try:
+        import pyqtgraph as pg  # type: ignore[import-not-found,unused-ignore]
+    except ImportError:
+        return None
+
+    if not annotation.enabled:
+        return None
+
+    bg_color = _CHARGE_BG_COLOR_HEX.get(annotation.color, '#FFFFF0')
+
+    if annotation.is_charged:
+        # Charged state: static top-left card, no arrow.
+        x_span = max(1.0, snapshot.time_axis.maximum - snapshot.time_axis.minimum)
+        y_span = max(1.0, snapshot.temperature_axis.maximum - snapshot.temperature_axis.minimum)
+        x_pos = snapshot.time_axis.minimum + x_span * 0.02
+        y_pos = snapshot.temperature_axis.maximum - y_span * 0.05
+        target_ror_str = _format_charge_ror(annotation.target_ror)
+        charged_ror_str = _format_charge_ror(annotation.charged_ror)
+        target_rwt_str = _format_charge_rwt(annotation.target_rwt)
+        current_rwt_str = _format_charge_rwt(annotation.current_rwt)
+        text = (
+            '【已投豆】\n'
+            f'目标: {annotation.target_temp:.1f}° | RoR: {target_ror_str} | RWT: {target_rwt_str}\n'
+            f'实际: {annotation.charged_temp:.1f}° | RoR: {charged_ror_str} | RWT: {current_rwt_str}'
+        )
+        item = pg.TextItem(
+            text=text,
+            color='#555555',
+            anchor=(0.0, 1.0),
+            fill=pg.mkBrush('#F8F8F8'),
+            border=pg.mkPen(color='#DDDDDD', width=1),
+        )
+        item.setPos(x_pos, y_pos)
+        _call_if_available(item, 'setZValue', 36)
+        return (item,)
+
+    # Active state: dynamic arrow callout.
+    x_span = max(1.0, annotation.x_limit - snapshot.time_axis.minimum)
+    y_span = max(1.0, annotation.y_limit_top - snapshot.temperature_axis.minimum)
+    offset_x = x_span * 0.12
+    offset_y = y_span * 0.12
+    halign_left = annotation.anchor_time < annotation.x_limit * 0.7
+    if not halign_left:
+        offset_x = -offset_x
+    if annotation.anchor_temp > annotation.y_limit_top * 0.8:
+        offset_y = -offset_y
+    text_x = annotation.anchor_time + offset_x
+    text_y = annotation.anchor_temp + offset_y
+    text_x = max(
+        snapshot.time_axis.minimum + x_span * 0.02,
+        min(text_x, snapshot.time_axis.maximum - x_span * 0.02),
+    )
+    text_y = max(
+        snapshot.temperature_axis.minimum + y_span * 0.05,
+        min(text_y, snapshot.temperature_axis.maximum - y_span * 0.05),
+    )
+    anchor = (0.0, 0.5) if halign_left else (1.0, 0.5)
+    prediction_str = _format_charge_prediction_seconds(annotation.prediction_seconds)
+    text = (
+        f'【{annotation.title}】\n'
+        f'预计: {prediction_str}\n'
+        f'原因: {annotation.reason}'
+    )
+    text_item = pg.TextItem(
+        text=text,
+        color='#333333',
+        anchor=anchor,
+        fill=pg.mkBrush(bg_color),
+        border=pg.mkPen(color='#AAAAAA', width=1),
+    )
+    text_item.setPos(text_x, text_y)
+    _call_if_available(text_item, 'setZValue', 36)
+    connector = pg.PlotDataItem(
+        [annotation.anchor_time, text_x],
+        [annotation.anchor_temp, text_y],
+        pen=pg.mkPen(color='#666666', width=1, style=QtCore.Qt.PenStyle.DashLine),
+    )
+    _call_if_available(connector, 'setZValue', 21)
+    return text_item, connector
 
 
 def _visible_phase_band_opacity(opacity: float) -> float:
