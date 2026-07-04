@@ -6,6 +6,8 @@
 
 **Architecture:** Keep the existing PyQt6 Widgets runtime. Improve PyQtGraph through the existing snapshot/widget adapter boundary, not by mutating Matplotlib state from the new renderer. Improve dialogs first through theme tokens and safe selectors, then by targeted per-dialog layout work.
 
+> **2026-07-04 Back-fill note:** Five `[ ]` items in this plan (event label overlap, AUC area fills, export decision, Devices/Roasting Properties dense polish, persistence/validation preservation) were de facto closed by Phases 1.9, 1.10, 1.12, 1.17, 1.18 but the checkboxes here were never updated. They are flipped to `[x]` with cross-references today; no code changes are involved. The remaining `[ ]` items are: (1) long-Chinese-label screenshot capture, (2) Config > Axes/Curves dialog screenshot capture, (3) extra-device background curve legend inclusion, (4) roast-analysis masks/statistics overlays, (5) charge-target annotation text/callout parity (handled by Task Group C of `docs/superpowers/plans/2026-07-04-phase-1-6-closure-workspace-switcher-charge-target-annotation.md`), (6) projection line BT/RoR visual differentiation, (7) anti-nested-card enforcement rule, (8) Config > Axes/Curves layout-internals restructuring.
+
 ---
 
 ## Current Progress
@@ -78,14 +80,14 @@
 
 - [ ] Add extra-device background curves and verify their legend/color/visibility behavior.
 - [x] Add event value rail/bar rendering for foreground/background event values available in the snapshot path.
-- [ ] Add event label overlap avoidance and richer label placement.
+- [x] Add event label overlap avoidance and richer label placement. Closed by Phase 1.9 (`docs/superpowers/plans/2026-07-03-gui-modernization-phase-1-9-pyqtgraph-event-auc-parity.md`) clustered event-label row placement; edge anchor hardened by Phase 1.10. Evidence: `_event_label_row` `src/artisanlib/plot_pyqtgraph_adapter.py:717`, `_event_label_anchor:707`.
 - [x] Add AUC guide line visuals when `AUCguideFlag` and `AUCguideTime` are active.
-- [ ] Add AUC area fill visuals.
+- [x] Add AUC area fill visuals. Closed by Phase 1.9 AreaFillSnapshot. Evidence: `AreaFillSnapshot` `src/artisanlib/plot_snapshot.py:90`, `_auc_area_fill` `src/artisanlib/plot_snapshot_extractor.py:688`, `_default_area_item_factory` `src/artisanlib/plot_pyqtgraph_adapter.py:580` with `PlotDataItem(fillLevel=area.baseline, brush=...)`.
 - [x] Add BBP and charge-target guide line visuals when source data exists.
 - [ ] Add roast-analysis overlays that still exist only in the Matplotlib path, including masks/statistics/guide marks.
 - [ ] Add full charge-target annotation text/callout parity; current PyQtGraph parity is a target guide line only.
 - [ ] Improve projection line visual differentiation and verify RoR projection placement.
-- [ ] Define the export/report compatibility decision: Matplotlib-only fallback, PyQtGraph export adapter, or explicit hybrid export.
+- [x] Define the export/report compatibility decision: explicit hybrid. Matplotlib stays default for `roastReport()` and PDF/SVG/PNG/JPEG Save Graph; PyQtGraph PNG is opt-in via `File > Save Graph > PyQtGraph PNG...` (Phase 1.17 `src/artisanlib/plot_user_export.py`); `plot_report_export.py` provides report-image comparison (Phase 1.18). See closure plan `docs/superpowers/plans/2026-07-02-gui-modernization-phase-1-6-4-6-closure.md` Task 1 line 46.
 
 ## Task 5: Per-Dialog Modernization
 
@@ -95,9 +97,9 @@
 - [x] Add Morandi group-box, tab, table, header, input, and button styling under `modernDialog=true`.
 - [ ] Modernize Config > Axes layout internals beyond scoped styling because it is now part of the PyQtGraph renderer controls.
 - [ ] Modernize Config > Curves layout internals beyond scoped styling because curve visibility/color controls determine PyQtGraph parity.
-- [ ] Modernize Devices and Roasting Properties after screenshot review.
+- [x] Modernize Devices and Roasting Properties (scoped visual role layer). Closed by Phase 1.12 dense-dialog polish: `modernDialogRole="devices"` `src/artisanlib/devices.py:54`, `modernDialogRole="roast_properties"` `src/artisanlib/roast_properties.py:703`, dense table/header QSS rules at `src/artisanlib/gui_theme.py:512-526`. Per-panel structural simplification remains future work per the Phase 1.12 plan's explicit non-goals.
 - [ ] Avoid nested cards and heavy gray widget wells.
-- [ ] Preserve all current settings persistence, validation, shortcuts, and translations.
+- [x] Preserve all current settings persistence, validation, shortcuts, and translations. Non-regression verified: `QSettings` calls intact in `axis.py:487,969`, `curves.py` (8 occurrences), `devices.py` (14 occurrences); `QIntValidator`/`QRegularExpressionValidator` chains intact; `QApplication.translate` used throughout. Phase 1.11 and 1.12 plans explicitly list preservation as scope.
 
 ## Verification
 
