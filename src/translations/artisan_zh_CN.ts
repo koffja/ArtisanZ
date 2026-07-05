@@ -1973,7 +1973,7 @@ END</source>
         <translation>开始</translation>
     </message>
     <message>
-        <location filename="../artisanlib/canvas.py" line="19771" />
+        <location filename="../artisanlib/canvas.py" line="19773" />
         <location filename="../artisanlib/alarms.py" line="914" />
         <location filename="../artisanlib/alarms.py" line="858" />
         <location filename="../artisanlib/curves.py" line="2349" />
@@ -2569,47 +2569,47 @@ END</source>
         <translation>隐藏</translation>
     </message>
     <message>
-        <location filename="../artisanlib/canvas.py" line="19546" />
+        <location filename="../artisanlib/canvas.py" line="19548" />
         <source>Add point</source>
         <translation>增加点</translation>
     </message>
     <message>
-        <location filename="../artisanlib/canvas.py" line="19550" />
+        <location filename="../artisanlib/canvas.py" line="19552" />
         <source>Remove point</source>
         <translation>移除点</translation>
     </message>
     <message>
-        <location filename="../artisanlib/canvas.py" line="19556" />
+        <location filename="../artisanlib/canvas.py" line="19558" />
         <source>Load points</source>
         <translation>读取点</translation>
     </message>
     <message>
-        <location filename="../artisanlib/canvas.py" line="19560" />
+        <location filename="../artisanlib/canvas.py" line="19562" />
         <source>Save points</source>
         <translation>保存点</translation>
     </message>
     <message>
-        <location filename="../artisanlib/canvas.py" line="19566" />
+        <location filename="../artisanlib/canvas.py" line="19568" />
         <source>Reset Designer</source>
         <translation>重置曲线设计器</translation>
     </message>
     <message>
-        <location filename="../artisanlib/canvas.py" line="19570" />
+        <location filename="../artisanlib/canvas.py" line="19572" />
         <source>Config...</source>
         <translation>配置表...</translation>
     </message>
     <message>
-        <location filename="../artisanlib/canvas.py" line="20347" />
+        <location filename="../artisanlib/canvas.py" line="20349" />
         <source>Add to Cupping Notes</source>
         <translation>加入杯测记录</translation>
     </message>
     <message>
-        <location filename="../artisanlib/canvas.py" line="20351" />
+        <location filename="../artisanlib/canvas.py" line="20353" />
         <source>Add to Roasting Notes</source>
         <translation>加入烘焙记录</translation>
     </message>
     <message>
-        <location filename="../artisanlib/canvas.py" line="20357" />
+        <location filename="../artisanlib/canvas.py" line="20359" />
         <source>Edit</source>
         <translation>编辑</translation>
     </message>
@@ -4030,12 +4030,12 @@ END</source>
         <translation>IO错误:</translation>
     </message>
     <message>
-        <location filename="../artisanlib/canvas.py" line="20531" />
-        <location filename="../artisanlib/canvas.py" line="20092" />
-        <location filename="../artisanlib/canvas.py" line="19988" />
-        <location filename="../artisanlib/canvas.py" line="19946" />
-        <location filename="../artisanlib/canvas.py" line="19841" />
-        <location filename="../artisanlib/canvas.py" line="19823" />
+        <location filename="../artisanlib/canvas.py" line="20533" />
+        <location filename="../artisanlib/canvas.py" line="20094" />
+        <location filename="../artisanlib/canvas.py" line="19990" />
+        <location filename="../artisanlib/canvas.py" line="19948" />
+        <location filename="../artisanlib/canvas.py" line="19843" />
+        <location filename="../artisanlib/canvas.py" line="19825" />
         <location filename="../artisanlib/canvas.py" line="18724" />
         <location filename="../artisanlib/canvas.py" line="18702" />
         <location filename="../artisanlib/canvas.py" line="18417" />
@@ -4416,8 +4416,8 @@ END</source>
         <translation>Arduino无法设置筛选器</translation>
     </message>
     <message>
-        <location filename="../artisanlib/canvas.py" line="20525" />
-        <location filename="../artisanlib/canvas.py" line="20086" />
+        <location filename="../artisanlib/canvas.py" line="20527" />
+        <location filename="../artisanlib/canvas.py" line="20088" />
         <location filename="../artisanlib/canvas.py" line="18412" />
         <location filename="../artisanlib/canvas.py" line="18386" />
         <location filename="../artisanlib/canvas.py" line="18200" />
@@ -4677,8 +4677,8 @@ END</source>
         <translation>回归错误:</translation>
     </message>
     <message>
-        <location filename="../artisanlib/canvas.py" line="19475" />
-        <location filename="../artisanlib/canvas.py" line="19471" />
+        <location filename="../artisanlib/canvas.py" line="19477" />
+        <location filename="../artisanlib/canvas.py" line="19473" />
         <source>Exception: redrawdesigner() Roast events may be out of order. Resetting Designer.</source>
         <translation>例外：redrawdesigner() 烘焙事件可能无序。重置设计师。</translation>
     </message>
@@ -12023,8 +12023,8 @@ Keyboard Shortcuts must be disabled (ENTER)</source>
         <translation />
     </message>
     <message>
-        <location filename="../artisanlib/canvas.py" line="19397" />
-        <location filename="../artisanlib/canvas.py" line="19387" />
+        <location filename="../artisanlib/canvas.py" line="19399" />
+        <location filename="../artisanlib/canvas.py" line="19389" />
         <location filename="../artisanlib/canvas.py" line="9918" />
         <location filename="../artisanlib/canvas.py" line="9862" />
         <location filename="../artisanlib/main.py" line="19442" />
@@ -12056,8 +12056,8 @@ Keyboard Shortcuts must be disabled (ENTER)</source>
         <translation />
     </message>
     <message>
-        <location filename="../artisanlib/canvas.py" line="19394" />
-        <location filename="../artisanlib/canvas.py" line="19383" />
+        <location filename="../artisanlib/canvas.py" line="19396" />
+        <location filename="../artisanlib/canvas.py" line="19385" />
         <location filename="../artisanlib/canvas.py" line="9891" />
         <location filename="../artisanlib/canvas.py" line="9840" />
         <location filename="../artisanlib/main.py" line="19435" />
@@ -12097,7 +12097,7 @@ Keyboard Shortcuts must be disabled (ENTER)</source>
         <translation>对齐</translation>
     </message>
     <message>
-        <location filename="../artisanlib/canvas.py" line="19750" />
+        <location filename="../artisanlib/canvas.py" line="19752" />
         <location filename="../artisanlib/canvas.py" line="15288" />
         <location filename="../artisanlib/canvas.py" line="15221" />
         <location filename="../artisanlib/canvas.py" line="12937" />
@@ -12206,7 +12206,7 @@ Keyboard Shortcuts must be disabled (ENTER)</source>
         <translation>二爆结束</translation>
     </message>
     <message>
-        <location filename="../artisanlib/canvas.py" line="19768" />
+        <location filename="../artisanlib/canvas.py" line="19770" />
         <location filename="../artisanlib/canvas.py" line="12617" />
         <location filename="../artisanlib/canvas.py" line="4347" />
         <location filename="../artisanlib/canvas.py" line="1481" />
@@ -12480,7 +12480,7 @@ Keyboard Shortcuts must be disabled (ENTER)</source>
         <translation>标签</translation>
     </message>
     <message>
-        <location filename="../artisanlib/canvas.py" line="19753" />
+        <location filename="../artisanlib/canvas.py" line="19755" />
         <location filename="../artisanlib/canvas.py" line="4342" />
         <location filename="../artisanlib/transposer.py" line="1198" />
         <location filename="../artisanlib/transposer.py" line="1127" />
@@ -12502,7 +12502,7 @@ Keyboard Shortcuts must be disabled (ENTER)</source>
         <translation>脱水结束</translation>
     </message>
     <message>
-        <location filename="../artisanlib/canvas.py" line="19756" />
+        <location filename="../artisanlib/canvas.py" line="19758" />
         <location filename="../artisanlib/canvas.py" line="4343" />
         <location filename="../artisanlib/transposer.py" line="1199" />
         <location filename="../artisanlib/transposer.py" line="1128" />
@@ -12522,7 +12522,7 @@ Keyboard Shortcuts must be disabled (ENTER)</source>
         <translation>第一次爆裂</translation>
     </message>
     <message>
-        <location filename="../artisanlib/canvas.py" line="19759" />
+        <location filename="../artisanlib/canvas.py" line="19761" />
         <location filename="../artisanlib/canvas.py" line="4344" />
         <location filename="../artisanlib/alarms.py" line="910" />
         <location filename="../artisanlib/alarms.py" line="854" />
@@ -12539,7 +12539,7 @@ Keyboard Shortcuts must be disabled (ENTER)</source>
         <translation>一爆结束</translation>
     </message>
     <message>
-        <location filename="../artisanlib/canvas.py" line="19762" />
+        <location filename="../artisanlib/canvas.py" line="19764" />
         <location filename="../artisanlib/canvas.py" line="4345" />
         <location filename="../artisanlib/transposer.py" line="1200" />
         <location filename="../artisanlib/transposer.py" line="1129" />
@@ -12558,7 +12558,7 @@ Keyboard Shortcuts must be disabled (ENTER)</source>
         <translation>第二次爆裂</translation>
     </message>
     <message>
-        <location filename="../artisanlib/canvas.py" line="19765" />
+        <location filename="../artisanlib/canvas.py" line="19767" />
         <location filename="../artisanlib/canvas.py" line="4346" />
         <location filename="../artisanlib/alarms.py" line="912" />
         <location filename="../artisanlib/alarms.py" line="856" />
@@ -14812,13 +14812,13 @@ Fewer nodes: simpler curve but may lose detail</source>
         <translation>背景YT</translation>
     </message>
     <message>
-        <location filename="../artisanlib/canvas.py" line="19362" />
+        <location filename="../artisanlib/canvas.py" line="19364" />
         <location filename="../artisanlib/canvas.py" line="10632" />
         <source>BackgroundET</source>
         <translation>背景曲线ET</translation>
     </message>
     <message>
-        <location filename="../artisanlib/canvas.py" line="19366" />
+        <location filename="../artisanlib/canvas.py" line="19368" />
         <location filename="../artisanlib/canvas.py" line="10663" />
         <source>BackgroundBT</source>
         <translation>背景曲线BT</translation>
@@ -14889,17 +14889,17 @@ Fewer nodes: simpler curve but may lose detail</source>
         <translation>一爆</translation>
     </message>
     <message>
-        <location filename="../artisanlib/canvas.py" line="19333" />
+        <location filename="../artisanlib/canvas.py" line="19335" />
         <source>Designer</source>
         <translation>曲线设计器</translation>
     </message>
     <message>
-        <location filename="../artisanlib/canvas.py" line="20146" />
+        <location filename="../artisanlib/canvas.py" line="20148" />
         <source>BT {0} {1}/min for {2}</source>
         <translation>{2}BT {0} {1}/分钟</translation>
     </message>
     <message>
-        <location filename="../artisanlib/canvas.py" line="20159" />
+        <location filename="../artisanlib/canvas.py" line="20161" />
         <source>ET {0} {1}/min for {2}</source>
         <translation>{2}ET {0} {1}/分钟</translation>
     </message>
@@ -15763,7 +15763,7 @@ Fewer nodes: simpler curve but may lose detail</source>
         <translation>已保存风味轮</translation>
     </message>
     <message>
-        <location filename="../artisanlib/canvas.py" line="20288" />
+        <location filename="../artisanlib/canvas.py" line="20290" />
         <location filename="../artisanlib/wheels.py" line="648" />
         <source>Open Wheel Graph</source>
         <translation>打开风味轮</translation>
@@ -18289,27 +18289,27 @@ Profile missing [CHARGE] or [DROP]</source>
         <translation>无法开始曲线设计.曲线配置缺少[投豆]或[排豆]</translation>
     </message>
     <message>
-        <location filename="../artisanlib/canvas.py" line="20082" />
+        <location filename="../artisanlib/canvas.py" line="20084" />
         <source>New profile created</source>
         <translation>新的曲线配置已创建</translation>
     </message>
     <message>
-        <location filename="../artisanlib/canvas.py" line="20302" />
+        <location filename="../artisanlib/canvas.py" line="20304" />
         <source> added to cupping notes</source>
         <translation> 已添加到杯测记录</translation>
     </message>
     <message>
-        <location filename="../artisanlib/canvas.py" line="20313" />
+        <location filename="../artisanlib/canvas.py" line="20315" />
         <source> added to roasting notes</source>
         <translation> 已添加到烘焙记录</translation>
     </message>
     <message>
-        <location filename="../artisanlib/canvas.py" line="20579" />
+        <location filename="../artisanlib/canvas.py" line="20581" />
         <source>Mouse Cross ON: move mouse around</source>
         <translation>Mouse Cross ON：移动鼠标</translation>
     </message>
     <message>
-        <location filename="../artisanlib/canvas.py" line="20624" />
+        <location filename="../artisanlib/canvas.py" line="20626" />
         <source>Mouse cross OFF</source>
         <translation>鼠标交叉关闭</translation>
     </message>
@@ -18865,47 +18865,67 @@ Continue?</source>
         <translation>RoR 异常检测设置</translation>
     </message>
     <message>
-        <location filename="../artisanlib/rorflick_dialog.py" line="23" />
+        <location filename="../artisanlib/rorflick_dialog.py" line="30" />
+        <source>机器类型预设</source>
+        <translation>机器类型预设</translation>
+    </message>
+    <message>
+        <location filename="../artisanlib/rorflick_dialog.py" line="33" />
+        <source>电热鼓式</source>
+        <translation>电热鼓式</translation>
+    </message>
+    <message>
+        <location filename="../artisanlib/rorflick_dialog.py" line="35" />
+        <source>燃气大鼓</source>
+        <translation>燃气大鼓</translation>
+    </message>
+    <message>
+        <location filename="../artisanlib/rorflick_dialog.py" line="37" />
+        <source>样品烘焙机</source>
+        <translation>样品烘焙机</translation>
+    </message>
+    <message>
+        <location filename="../artisanlib/rorflick_dialog.py" line="47" />
         <source>检测阈值</source>
         <translation>检测阈值</translation>
     </message>
     <message>
-        <location filename="../artisanlib/rorflick_dialog.py" line="26" />
+        <location filename="../artisanlib/rorflick_dialog.py" line="50" />
         <source>Flick 触发 (°C/min):</source>
         <translation>Flick 触发 (°C/min):</translation>
     </message>
     <message>
-        <location filename="../artisanlib/rorflick_dialog.py" line="35" />
+        <location filename="../artisanlib/rorflick_dialog.py" line="59" />
         <source>Crash 触发 (°C/min):</source>
         <translation>Crash 触发 (°C/min):</translation>
     </message>
     <message>
-        <location filename="../artisanlib/rorflick_dialog.py" line="44" />
+        <location filename="../artisanlib/rorflick_dialog.py" line="68" />
         <source>退出阈值 (°C/min):</source>
         <translation>退出阈值 (°C/min):</translation>
     </message>
     <message>
-        <location filename="../artisanlib/rorflick_dialog.py" line="57" />
+        <location filename="../artisanlib/rorflick_dialog.py" line="81" />
         <source>Development 加权</source>
         <translation>Development 加权</translation>
     </message>
     <message>
-        <location filename="../artisanlib/rorflick_dialog.py" line="59" />
+        <location filename="../artisanlib/rorflick_dialog.py" line="83" />
         <source>一爆后严重度倍数:</source>
         <translation>一爆后严重度倍数:</translation>
     </message>
     <message>
-        <location filename="../artisanlib/rorflick_dialog.py" line="70" />
+        <location filename="../artisanlib/rorflick_dialog.py" line="94" />
         <source>启用功能</source>
         <translation>启用功能</translation>
     </message>
     <message>
-        <location filename="../artisanlib/rorflick_dialog.py" line="75" />
+        <location filename="../artisanlib/rorflick_dialog.py" line="99" />
         <source>保存</source>
         <translation>保存</translation>
     </message>
     <message>
-        <location filename="../artisanlib/rorflick_dialog.py" line="77" />
+        <location filename="../artisanlib/rorflick_dialog.py" line="101" />
         <source>取消</source>
         <translation>取消</translation>
     </message>
