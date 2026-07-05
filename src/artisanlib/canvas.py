@@ -443,7 +443,7 @@ class tgraphcanvas(QObject):
         'swapdeltalcds', 'PIDbuttonflag', 'Controlbuttonflag', 'deltaETfilter', 'deltaBTfilter', 'curvefilter', 'deltaETspan', 'deltaBTspan',
         'deltaETsamples', 'deltaBTsamples', 'profile_sampling_interval', 'background_profile_sampling_interval', 'profile_meter', 'optimalSmoothing', 'polyfitRoRcalc',
         'patheffects', 'graphstyle', 'graphfont', 'buttonvisibility', 'buttonactions', 'buttonactionstrings', 'extrabuttonactions', 'extrabuttonactionstrings',
-        'xextrabuttonactions', 'xextrabuttonactionstrings', 'charge_manager', 'charge_target_annotation', 'rorflick_artists', '_rorflick_last_len', 'chargeTimerFlag', 'autoChargeFlag', 'autoDropFlag', 'autoChargeMode', 'autoDropMode', 'autoChargeIdx', 'autoDropIdx', 'markTPflag',
+        'xextrabuttonactions', 'xextrabuttonactionstrings', 'charge_manager', 'charge_target_annotation', 'rorflick_artists', '_rorflick_last_len', '_rorflick_last_status_text', 'chargeTimerFlag', 'autoChargeFlag', 'autoDropFlag', 'autoChargeMode', 'autoDropMode', 'autoChargeIdx', 'autoDropIdx', 'markTPflag',
         'autoDRYflag', 'autoFCsFlag', 'autoCHARGEenabled', 'autoDRYenabled', 'autoFCsenabled', 'autoDROPenabled', 'projectionconstant',
         'projectionmode', 'transMappingMode', 'weight', 'end_weight_est', 'roasted_defects_weight', 'volume', 'density', 'roasted_defects_mode', 'density_roasted', 'volumeCalcUnit', 'volumeCalcWeightInStr',
         'volumeCalcWeightOutStr', 'container_names', 'container_weights', 'specialevents', 'etypes', 'etypesdefault',
@@ -546,6 +546,7 @@ class tgraphcanvas(QObject):
         self.rorflick_manager: RoRFlickManager | None = None
         self.rorflick_artists: list = []       # tracks ALL matplotlib artists (annotations + axvspans) for cleanup
         self._rorflick_last_len: int = 0       # tracks delta2 length to detect live vs replay mode
+        self._rorflick_last_status_text: str = ''  # caches last status message to avoid spamming sendmessage
 
         #default palette of colors
         self.locale_str:str = locale
@@ -19234,6 +19235,16 @@ class tgraphcanvas(QObject):
             )
 
         self._rorflick_last_len = current_len
+
+        # Update status bar (guarded to avoid spamming on unchanged state)
+        text, color = self.rorflick_manager.get_status_message()
+        if text != self._rorflick_last_status_text:
+            self._rorflick_last_status_text = text
+            if text:
+                self.aw.sendmessage(
+                    text, append=False,
+                    style=f"background-color:'transparent'; color:{color};"
+                )
 
         if not self.rorflick_manager.should_show_annotations():
             return
