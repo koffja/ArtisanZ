@@ -277,6 +277,21 @@ class TestRoRFlickProcessRoast:
         assert all(e.peak_magnitude != 99.0 for e in events)
 
 
+class TestRoRFlickNoneHandling:
+    def test_window_average_handles_none_values(self):
+        data = [5.0, None, 10.0, None, 15.0]
+        assert RoRFlickManager._window_average(data, 4, 5) == 10.0  # avg of [5,10,15]
+        assert RoRFlickManager._window_average(data, 4, 3) == 12.5  # avg of [10,15]
+        assert RoRFlickManager._window_average([None, None, None], 2, 3) == 0.0
+
+    def test_process_roast_with_none_in_delta2_does_not_crash(self):
+        m = RoRFlickManager()
+        m.enabled = True
+        delta2 = [5.0, None, 5.0, 15.0, None, 15.0, 6.0, 6.0]
+        events = m.process_roast(delta2, fcs_idx=-1, sample_rate_hz=1.0)
+        assert isinstance(events, list)  # did not crash
+
+
 class TestRoRFlickSeverity:
     def test_soft_severity_when_magnitude_below_5(self):
         m = RoRFlickManager()

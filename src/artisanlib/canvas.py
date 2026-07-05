@@ -19205,7 +19205,7 @@ class tgraphcanvas(QObject):
 
         current_len = len(self.delta2)
 
-        # Mode detection: live if delta2 grew by exactly 1 sample, else replay
+        # Mode detection: live if delta2 grew by exactly 1 sample, replay only if data changed
         if current_len == self._rorflick_last_len + 1:
             # --- Live mode: process one new sample ---
             try:
@@ -19218,11 +19218,13 @@ class tgraphcanvas(QObject):
             sample_idx = current_len - 1
             in_dev = self.timeindex[2] > -1
             self.rorflick_manager.process_sample(sample_idx, short_avg, long_avg, in_dev)
-        else:
-            # --- Replay mode: re-run full batch over entire delta2 ---
-            # Determine sample rate from canvas config (fallback to 1.0 Hz)
+        elif current_len != self._rorflick_last_len:
+            # --- Replay mode: data changed (new profile loaded or batch append) ---
             try:
-                sample_rate_hz = 1.0 / max(0.1, getattr(self, 'samplinginterval', 1.0))
+                interval_s = self.profile_sampling_interval
+                if interval_s is None:
+                    interval_s = self.delay / 1000.
+                sample_rate_hz = 1.0 / max(0.1, interval_s)
             except Exception:
                 sample_rate_hz = 1.0
             self.rorflick_manager.process_roast(
@@ -19269,7 +19271,8 @@ class tgraphcanvas(QObject):
 
             # Peak annotation — TRACK the artist for cleanup
             try:
-                label_lines = [f'{event.event_type.upper()}', f'+{event.peak_magnitude:.1f}°/min']
+                sign = '-' if event.event_type == 'crash' else '+'
+                label_lines = [f'{event.event_type.upper()}', f'{sign}{event.peak_magnitude:.1f}°/min']
                 if event.in_development:
                     label_lines.append('(DEV)')
                 ann = self.ax.annotate(

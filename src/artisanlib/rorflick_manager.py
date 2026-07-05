@@ -172,7 +172,7 @@ class RoRFlickManager:
 
     def process_roast(
         self,
-        delta2: list[float],
+        delta2: list[float | None],
         fcs_idx: int = -1,
         sample_rate_hz: float = 1.0,
     ) -> list[RoRFlickEvent]:
@@ -207,12 +207,12 @@ class RoRFlickManager:
         return list(self.events)
 
     @staticmethod
-    def _window_average(data: list[float], end_idx: int, window: int) -> float:
-        """Average of data[max(0, end_idx-window+1) .. end_idx]."""
+    def _window_average(data: list[float | None], end_idx: int, window: int) -> float:
+        """Average of data[max(0, end_idx-window+1) .. end_idx], ignoring None."""
         if not data or end_idx < 0 or end_idx >= len(data):
             return 0.0
         start = max(0, end_idx - window + 1)
-        slice_data = data[start:end_idx + 1]
+        slice_data = [v for v in data[start:end_idx + 1] if v is not None]
         if not slice_data:
             return 0.0
         return sum(slice_data) / len(slice_data)

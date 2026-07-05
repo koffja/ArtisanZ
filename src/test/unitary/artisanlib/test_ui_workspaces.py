@@ -107,7 +107,11 @@ class FakeQAction:
     def __init__(self, text: str, _parent: object | None = None) -> None:
         self.label = text
         self.triggered = FakeSignal()
+        self.checkable: bool | None = None
         self.instances.append(self)
+
+    def setCheckable(self, checkable: bool) -> None:
+        self.checkable = checkable
 
     def __repr__(self) -> str:
         return repr(self.label)
@@ -243,6 +247,18 @@ class FakeRoastMenuApplicationWindow:
 
     def showChargeTargetDialog(self) -> None:
         self.charge_target_dialog_calls += 1
+
+    def showRoRFlickDialog(self, _: bool = False) -> None:
+        pass
+
+    def showComparisonFileDialog(self, _: bool = False) -> None:
+        pass
+
+    def clearComparisonCurves(self, _: bool = False) -> None:
+        pass
+
+    def toggleComparisonDistribution(self, _: bool = False) -> None:
+        pass
 
 
 class FakeToolsMenuApplicationWindow:
@@ -1080,7 +1096,8 @@ def test_application_window_create_roast_menu_connects_charge_target_action(
 
     main.ApplicationWindow.create_roast_menu(window, main.UI_MODE.PRODUCTION)
 
-    charge_target_action = FakeQAction.instances[-1]
+    charge_target_action = next(
+        action for action in FakeQAction.instances if action.label == '投豆目标...')
     assert charge_target_action.label == '投豆目标...'
     assert charge_target_action.triggered.connected_to == window.showChargeTargetDialog
 
