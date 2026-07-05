@@ -18,6 +18,7 @@ from artisanlib.plot_snapshot import (
     PhaseSummarySnapshot,
     RendererViewState,
     RoastPlotSnapshot,
+    RoRFlickAnnotationSnapshot,
     TimeRangeSnapshot,
 )
 
@@ -30,6 +31,10 @@ PhaseSummaryItemFactory = Callable[[PhaseSummarySnapshot, RoastPlotSnapshot], ob
 AreaItemFactory = Callable[[AreaFillSnapshot, RoastPlotSnapshot], object | None]
 ChargeTargetAnnotationItemFactory = Callable[
     [ChargeTargetAnnotationSnapshot, RoastPlotSnapshot],
+    object | tuple[object, ...] | None,
+]
+RoRFlickAnnotationItemFactory = Callable[
+    [RoRFlickAnnotationSnapshot, RoastPlotSnapshot],
     object | tuple[object, ...] | None,
 ]
 CurvePenFactory = Callable[[CurveSnapshot], object]
@@ -75,6 +80,7 @@ class PyQtGraphSnapshotRenderer:
             phase_summary_factory: PhaseSummaryItemFactory | None = None,
             area_item_factory: AreaItemFactory | None = None,
             charge_target_annotation_factory: ChargeTargetAnnotationItemFactory | None = None,
+            rorflick_annotation_factory: RoRFlickAnnotationItemFactory | None = None,
             pen_factory: CurvePenFactory | None = None) -> None:
         self._temperature_plot = temperature_plot
         self._ror_plot = ror_plot
@@ -90,6 +96,7 @@ class PyQtGraphSnapshotRenderer:
         self._charge_target_annotation_factory = (
             charge_target_annotation_factory or _default_charge_target_annotation_factory
         )
+        self._rorflick_annotation_factory = rorflick_annotation_factory or _default_rorflick_annotation_factory
         self._pen_factory = pen_factory or _default_pen_factory
         self._items: dict[str, object] = {}
         self._phase_items: list[object] = []
@@ -100,6 +107,7 @@ class PyQtGraphSnapshotRenderer:
         self._event_value_items: list[tuple[object, object]] = []
         self._guide_items: list[tuple[object, object]] = []
         self._charge_target_annotation_items: list[object] = []
+        self._rorflick_annotation_items: list[object] = []
         self._static_overlay_signature: tuple[object, ...] | None = None
         self._last_view_state = RendererViewState(
             time_axis=AxisSnapshot(minimum=0.0, maximum=0.0, label='Time'),
@@ -156,6 +164,9 @@ class PyQtGraphSnapshotRenderer:
     def charge_target_annotation_item_count(self) -> int:
         return len(self._charge_target_annotation_items)
 
+    def rorflick_annotation_item_count(self) -> int:
+        return len(self._rorflick_annotation_items)
+
     def _apply_static_overlays(self, snapshot: RoastPlotSnapshot, *, force: bool) -> None:
         signature = _static_overlay_signature(snapshot)
         if not force and signature == self._static_overlay_signature:
@@ -168,6 +179,7 @@ class PyQtGraphSnapshotRenderer:
         self._apply_events(snapshot)
         self._apply_guides(snapshot)
         self._apply_charge_target_annotations(snapshot)
+        self._apply_rorflick_annotations(snapshot)
         self._static_overlay_signature = signature
 
     def _apply_curves(self, snapshot: RoastPlotSnapshot) -> None:
@@ -337,6 +349,18 @@ class PyQtGraphSnapshotRenderer:
             _call_if_available(self._temperature_plot, 'removeItem', item)
         self._charge_target_annotation_items.clear()
 
+    def _apply_rorflick_annotations(self, snapshot: RoastPlotSnapshot) -> None:
+        self._clear_rorflick_annotation_items()
+        for annotation in snapshot.rorflick_annotations:
+            for item in _as_items(self._rorflick_annotation_factory(annotation, snapshot)):
+                _call_if_available(self._temperature_plot, 'addItem', item)
+                self._rorflick_annotation_items.append(item)
+
+    def _clear_rorflick_annotation_items(self) -> None:
+        for item in self._rorflick_annotation_items:
+            _call_if_available(self._temperature_plot, 'removeItem', item)
+        self._rorflick_annotation_items.clear()
+
     def _plot_for_guide(self, guide: GuideLineSnapshot) -> object:
         if guide.y_axis == 'ror' and self._ror_plot is not None:
             return self._ror_plot
@@ -365,6 +389,7 @@ def _static_overlay_signature(snapshot: RoastPlotSnapshot) -> tuple[object, ...]
         snapshot.events,
         snapshot.guides,
         snapshot.charge_target_annotations,
+        snapshot.rorflick_annotations,
     )
 
 
@@ -776,6 +801,18 @@ _CHARGE_BG_COLOR_HEX = {
     'gray': '#F5F5F5',
 }
 
+_RORFLICK_SEVERITY_COLORS: dict[str, str] = {
+    'soft': '#FFCC00',
+    'moderate': '#FF8800',
+    'hard': '#CC0000',
+}
+_RORFLICK_SEVERITY_ALPHA: dict[str, float] = {
+    'soft': 0.20,
+    'moderate': 0.30,
+    'hard': 0.40,
+}
+_RORFLICK_Z = 35
+
 
 def _format_charge_ror(ror: float) -> str:
     return f'{ror:.1f}' if ror and ror > 0 else '--'
@@ -876,6 +913,44 @@ def _default_charge_target_annotation_factory(
     )
     _call_if_available(connector, 'setZValue', _CHARGE_CONNECTOR_Z)
     return text_item, connector
+
+
+def _default_rorflick_annotation_factory(
+        annotation: RoRFlickAnnotationSnapshot,
+        snapshot: RoastPlotSnapshot) -> tuple[object, ...] | None:
+    """Render a single RoR flick/crash event as pyqtgraph items."""
+    try:
+        import pyqtgraph as pg  # type: ignore[import-not-found,unused-ignore]
+    except ImportError:
+        return None
+
+    if not annotation.enabled:
+        return None
+
+    _ = snapshot
+    color = _RORFLICK_SEVERITY_COLORS.get(annotation.severity, '#FFCC00')
+    alpha = _RORFLICK_SEVERITY_ALPHA.get(annotation.severity, 0.20)
+    band = pg.LinearRegionItem(
+        values=[annotation.start_time, annotation.end_time],
+        orientation='vertical',
+        brush=pg.mkBrush(color, alpha=alpha),
+        movable=False,
+    )
+    _call_if_available(band, 'setZValue', _RORFLICK_Z - 1)
+
+    sign = '-' if annotation.event_type == 'crash' else '+'
+    dev_tag = ' (DEV)' if annotation.in_development else ''
+    text_item = pg.TextItem(
+        text=(
+            f'{annotation.event_type.upper()}\n'
+            f'{sign}{annotation.peak_magnitude:.1f}°/min{dev_tag}'
+        ),
+        color='#333333',
+        fill=pg.mkBrush(color + 'CC'),
+    )
+    text_item.setPos(annotation.peak_time, annotation.peak_value + 5)
+    _call_if_available(text_item, 'setZValue', _RORFLICK_Z)
+    return band, text_item
 
 
 def _visible_phase_band_opacity(opacity: float) -> float:

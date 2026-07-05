@@ -24,6 +24,7 @@ from artisanlib.plot_snapshot import (
     PhaseSummarySnapshot,
     RendererViewState,
     RoastPlotSnapshot,
+    RoRFlickAnnotationSnapshot,
     TimeRangeSnapshot,
 )
 
@@ -117,7 +118,8 @@ def _snapshot(
         time_ranges: tuple[TimeRangeSnapshot, ...] = (),
         phase_summaries: tuple[PhaseSummarySnapshot, ...] = (),
         areas: tuple[AreaFillSnapshot, ...] = (),
-        guides: tuple[GuideLineSnapshot, ...] = ()) -> RoastPlotSnapshot:
+        guides: tuple[GuideLineSnapshot, ...] = (),
+        rorflick_annotations: tuple[RoRFlickAnnotationSnapshot, ...] = ()) -> RoastPlotSnapshot:
     return RoastPlotSnapshot(
         curves=curves,
         events=events,
@@ -127,6 +129,7 @@ def _snapshot(
         phase_summaries=phase_summaries,
         areas=areas,
         guides=guides,
+        rorflick_annotations=rorflick_annotations,
         time_axis=AxisSnapshot(minimum=-1.0, maximum=12.0, label='Time'),
         temperature_axis=AxisSnapshot(minimum=70.0, maximum=270.0, label='Temperature'),
         ror_axis=AxisSnapshot(minimum=-15.0, maximum=25.0, label='RoR'),
@@ -724,6 +727,62 @@ def test_charge_target_annotation_factory_active_state_returns_text_and_connecto
     assert items is not None
     item_tuple = items if isinstance(items, tuple) else (items,)
     assert len(item_tuple) >= 2, f"active state should emit >=2 items, got {len(item_tuple)}"
+
+
+def test_rorflick_annotation_factory_returns_band_and_peak_label() -> None:
+    from PyQt6.QtWidgets import QApplication
+
+    from artisanlib.plot_pyqtgraph_adapter import _default_rorflick_annotation_factory
+
+    _app = QApplication.instance() or QApplication([])
+    annotation = RoRFlickAnnotationSnapshot(
+        enabled=True,
+        start_time=120.0,
+        end_time=150.0,
+        peak_time=135.0,
+        peak_value=18.5,
+        event_type='flick',
+        severity='hard',
+        peak_magnitude=9.2,
+        in_development=True,
+    )
+
+    items = _default_rorflick_annotation_factory(annotation, _snapshot())
+
+    assert items is not None
+    item_tuple = items if isinstance(items, tuple) else (items,)
+    assert len(item_tuple) == 2
+    assert item_tuple[0].__class__.__name__ == 'LinearRegionItem'
+    assert item_tuple[1].__class__.__name__ == 'TextItem'
+
+
+def test_rorflick_annotation_factory_uses_severity_color_for_band() -> None:
+    from PyQt6.QtWidgets import QApplication
+
+    from artisanlib.plot_pyqtgraph_adapter import _default_rorflick_annotation_factory
+
+    _app = QApplication.instance() or QApplication([])
+    annotation = RoRFlickAnnotationSnapshot(
+        enabled=True,
+        start_time=1.0,
+        end_time=3.0,
+        peak_time=2.0,
+        peak_value=-4.5,
+        event_type='crash',
+        severity='moderate',
+        peak_magnitude=5.5,
+        in_development=False,
+    )
+
+    items = _default_rorflick_annotation_factory(annotation, _snapshot())
+
+    assert items is not None
+    band = items[0] if isinstance(items, tuple) else items
+    brush = band.brush if hasattr(band, 'brush') else band.getBrush()
+    color = brush.color()
+    assert color.red() == 255
+    assert color.green() == 136
+    assert color.blue() == 0
 
 
 def test_event_markers_are_optional_when_pyqtgraph_is_not_installed(monkeypatch: pytest.MonkeyPatch) -> None:

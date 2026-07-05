@@ -21,6 +21,7 @@ from artisanlib.plot_snapshot import (
     PhaseBandSnapshot,
     PhaseSummarySnapshot,
     RoastPlotSnapshot,
+    RoRFlickAnnotationSnapshot,
     TimeRangeSnapshot,
     YAxisName,
 )
@@ -122,6 +123,11 @@ def build_roast_plot_snapshot(source: object) -> RoastPlotSnapshot:
             time_axis=time_axis,
             temperature_axis=temperature_axis,
         ),
+        rorflick_annotations=_rorflick_annotations(
+            source,
+            time_axis=time_axis,
+            temperature_axis=temperature_axis,
+        ),
         areas=_area_fills(source),
     )
 
@@ -145,6 +151,11 @@ def build_roast_plot_static_overlay_snapshot(
         phase_summaries=_phase_summaries(source),
         guides=_guide_lines(source),
         charge_target_annotations=_charge_target_annotations(
+            source,
+            time_axis=time_axis,
+            temperature_axis=temperature_axis,
+        ),
+        rorflick_annotations=_rorflick_annotations(
             source,
             time_axis=time_axis,
             temperature_axis=temperature_axis,
@@ -1032,6 +1043,59 @@ def _charge_target_annotations(
         x_limit=x_limit,
         y_limit_top=y_limit_top,
     ),)
+
+
+def _rorflick_annotations(
+        source: object,
+        *,
+        time_axis: AxisSnapshot | None = None,
+        temperature_axis: AxisSnapshot | None = None,
+) -> tuple[RoRFlickAnnotationSnapshot, ...]:
+    """Extract RoR flick/crash events from the source's rorflick_manager."""
+    _ = time_axis, temperature_axis
+    manager = getattr(source, 'rorflick_manager', None)
+    if manager is None or not bool(getattr(manager, 'enabled', False)):
+        return ()
+
+    try:
+        timex = _sequence(source, 'timex')
+        delta2 = _sequence(source, 'delta2')
+    except TypeError:
+        return ()
+    if not timex or not delta2:
+        return ()
+
+    snapshots: list[RoRFlickAnnotationSnapshot] = []
+    for event in getattr(manager, 'events', ()):
+        try:
+            start_idx = int(event.start_idx)
+            end_idx = int(event.end_idx)
+            peak_idx = int(event.peak_idx)
+        except (AttributeError, TypeError, ValueError):
+            continue
+
+        if (start_idx < 0
+                or end_idx < 0
+                or peak_idx < 0
+                or start_idx >= len(timex)
+                or end_idx >= len(timex)
+                or peak_idx >= len(timex)
+                or peak_idx >= len(delta2)):
+            continue
+
+        snapshots.append(RoRFlickAnnotationSnapshot(
+            enabled=True,
+            start_time=_finite_numeric_value(timex[start_idx]),
+            end_time=_finite_numeric_value(timex[end_idx]),
+            peak_time=_finite_numeric_value(timex[peak_idx]),
+            peak_value=_finite_numeric_value(delta2[peak_idx]),
+            event_type=event.event_type,
+            severity=event.severity,
+            peak_magnitude=_finite_numeric_value(event.peak_magnitude),
+            in_development=bool(event.in_development),
+        ))
+
+    return tuple(snapshots)
 
 
 def _event_type_visible(source: object, event_type: int) -> bool:

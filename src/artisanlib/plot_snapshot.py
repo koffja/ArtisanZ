@@ -10,6 +10,7 @@ GuideOrientation = Literal['vertical', 'horizontal']
 GuideKind = Literal['auc', 'bbp', 'charge_target', 'time', 'custom']
 AreaFillKind = Literal['auc', 'custom']
 ChargeAnnotationColor = Literal['gray', 'blue', 'green', 'red']
+RoRFlickSeverity = Literal['soft', 'moderate', 'hard']
 
 
 @dataclass(frozen=True, slots=True)
@@ -105,6 +106,20 @@ class ChargeTargetAnnotationSnapshot:
     anchor_temp: float
     x_limit: float
     y_limit_top: float
+
+
+@dataclass(frozen=True, slots=True)
+class RoRFlickAnnotationSnapshot:
+    """A single RoR flick/crash event for pyqtgraph rendering."""
+    enabled: bool
+    start_time: float
+    end_time: float
+    peak_time: float
+    peak_value: float
+    event_type: Literal['flick', 'crash']
+    severity: RoRFlickSeverity
+    peak_magnitude: float
+    in_development: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -208,6 +223,7 @@ class RoastPlotSnapshot:
     guides: tuple[GuideLineSnapshot, ...] = ()
     areas: tuple[AreaFillSnapshot, ...] = ()
     charge_target_annotations: tuple[ChargeTargetAnnotationSnapshot, ...] = ()
+    rorflick_annotations: tuple[RoRFlickAnnotationSnapshot, ...] = ()
 
     def visible_curves(self) -> tuple[CurveSnapshot, ...]:
         return tuple(curve for curve in self.curves if curve.visible)
@@ -252,6 +268,8 @@ __all__ = [
     'PhaseSummarySnapshot',
     'RendererViewState',
     'RoastPlotSnapshot',
+    'RoRFlickAnnotationSnapshot',
+    'RoRFlickSeverity',
     'TimeRangeSnapshot',
     'YAxisName',
 ]

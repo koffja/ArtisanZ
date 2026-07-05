@@ -172,3 +172,53 @@ def test_charge_target_annotation_snapshot_active_state() -> None:
     assert snap.color == 'green'
     assert snap.anchor_time == 423.5
     assert snap.anchor_temp == 192.1
+
+
+def test_rorflick_annotation_snapshot_captures_resolved_event_coordinates() -> None:
+    from artisanlib.plot_snapshot import RoRFlickAnnotationSnapshot
+
+    snap = RoRFlickAnnotationSnapshot(
+        enabled=True,
+        start_time=120.0,
+        end_time=150.0,
+        peak_time=135.0,
+        peak_value=18.5,
+        event_type='flick',
+        severity='hard',
+        peak_magnitude=9.2,
+        in_development=True,
+    )
+
+    assert snap.enabled is True
+    assert snap.start_time == 120.0
+    assert snap.end_time == 150.0
+    assert snap.peak_time == 135.0
+    assert snap.peak_value == 18.5
+    assert snap.event_type == 'flick'
+    assert snap.severity == 'hard'
+    assert snap.peak_magnitude == 9.2
+    assert snap.in_development is True
+
+
+def test_roast_plot_snapshot_carries_rorflick_annotations() -> None:
+    from artisanlib.plot_snapshot import RoRFlickAnnotationSnapshot
+
+    annotation = RoRFlickAnnotationSnapshot(
+        enabled=True,
+        start_time=1.0,
+        end_time=3.0,
+        peak_time=2.0,
+        peak_value=-4.5,
+        event_type='crash',
+        severity='moderate',
+        peak_magnitude=5.5,
+        in_development=False,
+    )
+    snapshot = RoastPlotSnapshot(
+        curves=(),
+        temperature_axis=AxisSnapshot(minimum=70.0, maximum=270.0),
+        time_axis=AxisSnapshot(minimum=-1.0, maximum=12.0),
+        rorflick_annotations=(annotation,),
+    )
+
+    assert snapshot.rorflick_annotations == (annotation,)

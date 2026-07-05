@@ -13,6 +13,7 @@ from artisanlib.plot_snapshot import (
     GuideLineSnapshot,
     PhaseBandSnapshot,
     PhaseSummarySnapshot,
+    RoRFlickAnnotationSnapshot,
     TimeRangeSnapshot,
 )
 from artisanlib import plot_snapshot_extractor
@@ -411,6 +412,98 @@ def test_build_roast_plot_snapshot_extracts_guides_when_source_data_exists() -> 
         opacity=0.42,
         kind='charge_target',
     ) in snapshot.guides
+
+
+def test_rorflick_annotations_returns_empty_when_manager_disabled() -> None:
+    source = SimpleNamespace(
+        timex=[0.0, 1.0, 2.0],
+        delta2=[None, 5.0, 6.0],
+        rorflick_manager=SimpleNamespace(enabled=False, events=(
+            SimpleNamespace(
+                start_idx=0,
+                end_idx=2,
+                peak_idx=1,
+                event_type='flick',
+                severity='soft',
+                peak_magnitude=3.0,
+                in_development=False,
+            ),
+        )),
+    )
+
+    assert plot_snapshot_extractor._rorflick_annotations(source) == ()
+
+
+def test_rorflick_annotations_extracts_single_event_coordinates() -> None:
+    source = SimpleNamespace(
+        timex=[0.0, 60.0, 120.0, 180.0],
+        delta2=[None, 4.0, 13.5, 5.0],
+        rorflick_manager=SimpleNamespace(enabled=True, events=(
+            SimpleNamespace(
+                start_idx=1,
+                end_idx=3,
+                peak_idx=2,
+                event_type='flick',
+                severity='hard',
+                peak_magnitude=8.4,
+                in_development=True,
+            ),
+        )),
+    )
+
+    assert plot_snapshot_extractor._rorflick_annotations(source) == (
+        RoRFlickAnnotationSnapshot(
+            enabled=True,
+            start_time=60.0,
+            end_time=180.0,
+            peak_time=120.0,
+            peak_value=13.5,
+            event_type='flick',
+            severity='hard',
+            peak_magnitude=8.4,
+            in_development=True,
+        ),
+    )
+
+
+def test_rorflick_annotations_skips_events_with_out_of_bounds_indices() -> None:
+    source = SimpleNamespace(
+        timex=[0.0, 60.0],
+        delta2=[None, 4.0],
+        rorflick_manager=SimpleNamespace(enabled=True, events=(
+            SimpleNamespace(
+                start_idx=0,
+                end_idx=3,
+                peak_idx=1,
+                event_type='crash',
+                severity='moderate',
+                peak_magnitude=4.2,
+                in_development=False,
+            ),
+        )),
+    )
+
+    assert plot_snapshot_extractor._rorflick_annotations(source) == ()
+
+
+def test_rorflick_annotations_returns_empty_when_timex_is_none() -> None:
+    source = SimpleNamespace(
+        timex=None,
+        delta2=[None, 4.0],
+        rorflick_manager=SimpleNamespace(enabled=True, events=(
+            SimpleNamespace(
+                start_idx=0,
+                end_idx=1,
+                peak_idx=1,
+                event_type='flick',
+                severity='soft',
+                peak_magnitude=2.4,
+                in_development=False,
+            ),
+        )),
+    )
+
+    assert plot_snapshot_extractor._rorflick_annotations(source) == ()
 
 
 def test_build_roast_plot_snapshot_extracts_auc_area_fill() -> None:
