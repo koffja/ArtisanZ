@@ -24,6 +24,10 @@ SOURCES = \
     artisanlib/batches.py \
     artisanlib/calculator.py \
     artisanlib/canvas.py \
+    artisanlib/charge_dialog.py \
+    artisanlib/charge_manager.py \
+    artisanlib/rorflick_dialog.py \
+    artisanlib/rorflick_manager.py \
     artisanlib/colors.py \
     artisanlib/comm.py \
     artisanlib/comparator.py \
