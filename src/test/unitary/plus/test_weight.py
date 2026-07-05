@@ -195,11 +195,6 @@ def mock_pyqt_slot(*args:Any, **kwargs:Any) -> Any:
     return decorator
 
 
-sys.modules['PyQt6.QtCore'].QObject = MockQObject # type: ignore[attr-defined]
-sys.modules['PyQt6.QtCore'].QTimer = MockQTimer # type: ignore[attr-defined]
-sys.modules['PyQt6.QtCore'].QSemaphore = Mock(return_value=mock_qsemaphore) # type: ignore[attr-defined]
-sys.modules['PyQt6.QtCore'].pyqtSlot = mock_pyqt_slot # type: ignore[attr-defined]
-
 sys.modules['PyQt5.QtCore'].QObject = MockQObject # type: ignore[attr-defined]
 sys.modules['PyQt5.QtCore'].QTimer = MockQTimer # type: ignore[attr-defined]
 sys.modules['PyQt5.QtCore'].QSemaphore = Mock(return_value=mock_qsemaphore) # type: ignore[attr-defined]
@@ -301,11 +296,44 @@ def mock_unique(cls:Any) -> Any:
     return cls
 
 
-with patch('enum.IntEnum', MockIntEnum), patch('enum.unique', mock_unique):
+with (
+    patch.multiple(
+        sys.modules['PyQt6.QtCore'],
+        QObject=MockQObject,
+        QTimer=MockQTimer,
+        QSemaphore=Mock(return_value=mock_qsemaphore),
+        pyqtSlot=mock_pyqt_slot,
+    ),
+    patch('enum.IntEnum', MockIntEnum),
+    patch('enum.unique', mock_unique),
+):
     from plus import weight
 
 # Patch the PROCESS_STATE enum in the weight module
 weight.PROCESS_STATE = MockProcessState   # type:ignore[assignment, misc]
+
+
+def restore_mocked_import_modules() -> None:
+    """Restore module cache entries replaced only to import plus.weight in isolation."""
+    for module_name, mock_module in mock_modules.items():
+        if module_name in original_modules:
+            sys.modules[module_name] = original_modules[module_name]
+        else:
+            sys.modules.pop(module_name, None)
+
+        if '.' not in module_name:
+            continue
+        parent_name, attr_name = module_name.rsplit('.', 1)
+        parent_module = sys.modules.get(parent_name)
+        if parent_module is None or getattr(parent_module, attr_name, None) is not mock_module:
+            continue
+        if module_name in original_modules:
+            setattr(parent_module, attr_name, original_modules[module_name])
+        else:
+            delattr(parent_module, attr_name)
+
+
+restore_mocked_import_modules()
 
 # ============================================================================
 # SESSION-LEVEL ISOLATION FIXTURES

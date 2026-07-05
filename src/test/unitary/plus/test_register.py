@@ -127,9 +127,6 @@ class MockQSemaphore:
         self.available = Mock(return_value=1)
 
 
-sys.modules['PyQt6.QtCore'].QSemaphore = MockQSemaphore # type: ignore[attr-defined]
-
-
 # Mock portalocker with proper context manager behavior
 class MockPortalockerLock:
     def __init__(self, *args: Any, **kwargs: Any) -> None:
@@ -197,7 +194,11 @@ sys.modules.pop('plus.register', None)
 if 'plus' in sys.modules and hasattr(sys.modules['plus'], 'register'):
     delattr(sys.modules['plus'], 'register')
 
-from plus import register
+with patch.multiple(
+    sys.modules['PyQt6.QtCore'],
+    QSemaphore=MockQSemaphore,
+):
+    from plus import register
 
 
 def restore_mocked_import_modules() -> None:

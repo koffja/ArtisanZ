@@ -183,25 +183,19 @@ mock_modules = {
 for module_name, mock_module in mock_modules.items():
     sys.modules[module_name] = mock_module
 
-# Setup specific Qt mocks
-sys.modules['PyQt6.QtCore'].QSemaphore = MockQSemaphore # type: ignore[attr-defined]
-sys.modules['PyQt6.QtCore'].QTimer = MockQTimer # type: ignore[attr-defined]
-sys.modules['PyQt6.QtCore'].pyqtSlot = Mock(side_effect=lambda *args, **kwargs: lambda f: f) # type: ignore[attr-defined] # noqa: ARG005
-
+# Setup specific Qt mocks used during import
 # Mock QCoreApplication.instance() to return a mock app
 mock_app = Mock()
 mock_app.applicationName = Mock(return_value='Artisan')
 mock_app.setApplicationName = Mock()
-sys.modules['PyQt6.QtCore'].QCoreApplication = Mock() # type: ignore[attr-defined]
-sys.modules['PyQt6.QtCore'].QCoreApplication.instance = Mock(return_value=mock_app) # ty: ignore
+mock_qcoreapplication = Mock()
+mock_qcoreapplication.instance = Mock(return_value=mock_app)
 
 # Mock QStandardPaths for directory operations
-sys.modules['PyQt6.QtCore'].QStandardPaths = Mock() # type: ignore[attr-defined]
-sys.modules['PyQt6.QtCore'].QStandardPaths.standardLocations = Mock(return_value=['/tmp/data']) # ty: ignore
-sys.modules['PyQt6.QtCore'].QStandardPaths.StandardLocation = Mock() # ty: ignore
-sys.modules['PyQt6.QtCore'].QStandardPaths.StandardLocation.AppLocalDataLocation = Mock() # ty: ignore
-
-sys.modules['PyQt6.QtWidgets'].QApplication = MockQApplication # type: ignore[attr-defined]
+mock_qstandardpaths = Mock()
+mock_qstandardpaths.standardLocations = Mock(return_value=['/tmp/data'])
+mock_qstandardpaths.StandardLocation = Mock()
+mock_qstandardpaths.StandardLocation.AppLocalDataLocation = Mock()
 
 # Setup portalocker mocks
 sys.modules['portalocker'].Lock = MockPortalockerLock # type: ignore[attr-defined]
@@ -229,7 +223,21 @@ if 'plus' in sys.modules and hasattr(sys.modules['plus'], 'sync'):
     delattr(sys.modules['plus'], 'sync')
 
 # Import the sync module after setting up mocks
-from plus import sync
+with (
+    patch.multiple(
+        sys.modules['PyQt6.QtCore'],
+        QSemaphore=MockQSemaphore,
+        QTimer=MockQTimer,
+        pyqtSlot=Mock(side_effect=lambda *args, **kwargs: lambda f: f), # noqa: ARG005
+        QCoreApplication=mock_qcoreapplication,
+        QStandardPaths=mock_qstandardpaths,
+    ),
+    patch.multiple(
+        sys.modules['PyQt6.QtWidgets'],
+        QApplication=MockQApplication,
+    ),
+):
+    from plus import sync
 
 
 def restore_mocked_import_modules() -> None:

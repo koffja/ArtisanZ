@@ -161,16 +161,9 @@ sys.modules.pop('plus.stock', None)
 if 'plus' in sys.modules and hasattr(sys.modules['plus'], 'stock'):
     delattr(sys.modules['plus'], 'stock')
 
-# Mock specific Qt classes that stock module uses
-sys.modules['PyQt6.QtCore'].QSemaphore = MockQSemaphore # type: ignore[attr-defined]
-sys.modules['PyQt6.QtCore'].QThread = MockQThread # type: ignore[attr-defined]
-sys.modules['PyQt6.QtCore'].QObject = MockQObject # type: ignore[attr-defined]
-sys.modules['PyQt6.QtCore'].pyqtSignal = MockSignal # type: ignore[attr-defined]
-sys.modules['PyQt6.QtCore'].pyqtSlot = mock_pyqt_slot # type: ignore[attr-defined]
-
-# Mock QApplication in QtWidgets (where it actually belongs)
-sys.modules['PyQt6.QtWidgets'].QApplication = Mock() # type: ignore[attr-defined]
-sys.modules['PyQt6.QtWidgets'].QApplication.translate = Mock(return_value='Ethiopia') # ty: ignore
+# Mock specific Qt classes that stock module uses during import
+mock_qapplication = Mock()
+mock_qapplication.translate = Mock(return_value='Ethiopia')
 
 # Mock specific artisanlib.util functions that stock module uses
 sys.modules['artisanlib.util'].getDirectory = Mock(return_value='test_cache_dir') # type: ignore[attr-defined]
@@ -181,7 +174,21 @@ sys.modules['artisanlib.util'].is_float_list = Mock(return_value=True) # type: i
 sys.modules['artisanlib.util'].render_weight = Mock(return_value='1.0 kg') # type: ignore[attr-defined]
 
 # Import the stock module after setting up mocks
-from plus import stock
+with (
+    patch.multiple(
+        sys.modules['PyQt6.QtCore'],
+        QSemaphore=MockQSemaphore,
+        QThread=MockQThread,
+        QObject=MockQObject,
+        pyqtSignal=MockSignal,
+        pyqtSlot=mock_pyqt_slot,
+    ),
+    patch.multiple(
+        sys.modules['PyQt6.QtWidgets'],
+        QApplication=mock_qapplication,
+    ),
+):
+    from plus import stock
 
 
 def restore_mocked_import_modules() -> None:

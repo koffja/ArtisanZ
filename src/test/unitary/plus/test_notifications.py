@@ -134,10 +134,7 @@ mock_modules = {
 for module_name, mock_module in mock_modules.items():
     sys.modules[module_name] = mock_module
 
-# Set up specific mock attributes
-sys.modules['PyQt6.QtCore'].QSemaphore = MockQSemaphore # type: ignore[attr-defined]
-sys.modules['PyQt6.QtCore'].QTimer = MockQTimer # type: ignore[attr-defined]
-sys.modules['PyQt6.QtCore'].pyqtSlot = Mock(side_effect=lambda *_args, **_kwargs: lambda f: f) # type: ignore[attr-defined]
+# Set up specific mock attributes used during import
 
 sys.modules['PyQt5.QtCore'].QSemaphore = MockQSemaphore # type: ignore[attr-defined]
 sys.modules['PyQt5.QtCore'].QTimer = MockQTimer # type: ignore[attr-defined]
@@ -161,7 +158,13 @@ sys.modules['artisanlib.main'].QApplication.instance = Mock(return_value=mock_qa
 # Immediate cleanup registration to prevent cross-file contamination
 import atexit
 
-from plus import notifications
+with patch.multiple(
+    sys.modules['PyQt6.QtCore'],
+    QSemaphore=MockQSemaphore,
+    QTimer=MockQTimer,
+    pyqtSlot=Mock(side_effect=lambda *_args, **_kwargs: lambda f: f),
+):
+    from plus import notifications
 
 
 # Immediately clean up mocked modules to prevent cross-file contamination
