@@ -948,7 +948,7 @@ def _default_rorflick_annotation_factory(
     text_item = pg.TextItem(
         text=(
             f'{annotation.event_type.upper()}\n'
-            f'{sign}{annotation.peak_magnitude:.1f}°/min{dev_tag}'
+            f'{sign}{annotation.peak_magnitude:.1f}°C/min{dev_tag}'
         ),
         color='#333333',
         fill=pg.mkBrush(color + 'CC'),

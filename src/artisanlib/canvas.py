@@ -19192,8 +19192,11 @@ class tgraphcanvas(QObject):
         if not self.rorflick_manager or not self.rorflick_manager.enabled:
             return
 
-        # Clear ALL previous artists (annotations + axvspans) to prevent accumulation
-        if self.rorflick_artists:
+        # Clear ALL previous artists (annotations + axvspans) to prevent accumulation.
+        # Detection (process_sample/process_roast) always runs — pyqtgraph reads from
+        # manager.events. Matplotlib drawing is skipped when pyqtgraph renderer is active.
+        _skip_mpl = getattr(self, 'plot_pyqtgraph_target', None) is not None
+        if not _skip_mpl and self.rorflick_artists:
             for artist in self.rorflick_artists:
                 try:
                     artist.remove()
@@ -19245,6 +19248,9 @@ class tgraphcanvas(QObject):
         if not self.rorflick_manager.should_show_annotations():
             return
 
+        if _skip_mpl:
+            return  # pyqtgraph renderer handles visual drawing
+
         severity_colors = {
             'soft': '#FFCC00',
             'moderate': '#FF8800',
@@ -19279,7 +19285,7 @@ class tgraphcanvas(QObject):
             # Peak annotation — TRACK the artist for cleanup
             try:
                 sign = '-' if event.event_type == 'crash' else '+'
-                label_lines = [f'{event.event_type.upper()}', f'{sign}{event.peak_magnitude:.1f}°/min']
+                label_lines = [f'{event.event_type.upper()}', f'{sign}{event.peak_magnitude:.1f}°C/min']
                 if event.in_development:
                     label_lines.append('(DEV)')
                 ann = self.ax.annotate(

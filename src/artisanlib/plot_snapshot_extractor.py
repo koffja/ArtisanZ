@@ -959,7 +959,7 @@ def _charge_target_annotations(
     if is_charged:
         current_rwt = _safe_charge_rwt(calculate_rwt, charged_ror)
         return (ChargeTargetAnnotationSnapshot(
-            enabled=True,
+            enabled=bool(getattr(manager, 'enabled', False)),
             is_charged=True,
             target_temp=target_temp,
             target_ror=target_ror,
@@ -981,7 +981,7 @@ def _charge_target_annotations(
     evaluate = getattr(manager, 'evaluate_readiness', None)
     if evaluate is None:
         return (ChargeTargetAnnotationSnapshot(
-            enabled=True,
+            enabled=bool(getattr(manager, 'enabled', False)),
             is_charged=False,
             target_temp=target_temp,
             target_ror=target_ror,
@@ -1006,7 +1006,7 @@ def _charge_target_annotations(
         )
     except (ArithmeticError, TypeError, ValueError, AttributeError):
         return (ChargeTargetAnnotationSnapshot(
-            enabled=True,
+            enabled=bool(getattr(manager, 'enabled', False)),
             is_charged=False,
             target_temp=target_temp,
             target_ror=target_ror,
@@ -1026,7 +1026,7 @@ def _charge_target_annotations(
     current_rwt = _safe_charge_rwt(calculate_rwt, current_ror)
     color_value = readiness.color if readiness.color in _VALID_READINESS_COLORS else 'gray'
     return (ChargeTargetAnnotationSnapshot(
-        enabled=True,
+        enabled=bool(getattr(manager, 'enabled', False)),
         is_charged=False,
         target_temp=target_temp,
         target_ror=target_ror,
@@ -1084,7 +1084,7 @@ def _rorflick_annotations(
             continue
 
         snapshots.append(RoRFlickAnnotationSnapshot(
-            enabled=True,
+            enabled=bool(getattr(manager, 'enabled', False)),
             start_time=_finite_numeric_value(timex[start_idx]),
             end_time=_finite_numeric_value(timex[end_idx]),
             peak_time=_finite_numeric_value(timex[peak_idx]),
