@@ -226,7 +226,7 @@ class TestRoRFlickProcessRoast:
     def test_process_roast_with_empty_delta2(self):
         m = RoRFlickManager()
         m.enabled = True
-        events = m.process_roast([], fcs_idx=-1, sample_rate_hz=1.0)
+        events = m.process_roast([], [], fcs_idx=-1)
         assert events == []
 
     def test_process_roast_detects_flick_in_synthetic_data(self):
@@ -238,7 +238,8 @@ class TestRoRFlickProcessRoast:
         # Build synthetic delta2: flat at 5, then spike to 15, then back to 6
         # At sample rate 1Hz, short_window=9, long_window=30
         delta2 = [5.0] * 35 + [15.0] * 5 + [6.0] * 10
-        events = m.process_roast(delta2, fcs_idx=-1, sample_rate_hz=1.0)
+        timex = [float(i) for i in range(len(delta2))]
+        events = m.process_roast(delta2, timex, fcs_idx=-1)
 
         # A flick should be detected when the spike diverges from the long avg
         assert len(events) >= 1
@@ -253,7 +254,8 @@ class TestRoRFlickProcessRoast:
 
         # Flick happens after FCs (index 20)
         delta2 = [5.0] * 20 + [15.0] * 5 + [6.0] * 10
-        events = m.process_roast(delta2, fcs_idx=20, sample_rate_hz=1.0)
+        timex = [float(i) for i in range(len(delta2))]
+        events = m.process_roast(delta2, timex, fcs_idx=20)
 
         flick_events = [e for e in events if e.event_type == 'flick']
         if flick_events:
@@ -271,7 +273,8 @@ class TestRoRFlickProcessRoast:
         ))
 
         delta2 = [5.0] * 40
-        events = m.process_roast(delta2, fcs_idx=-1, sample_rate_hz=1.0)
+        timex = [float(i) for i in range(len(delta2))]
+        events = m.process_roast(delta2, timex, fcs_idx=-1)
 
         # Pre-existing event cleared
         assert all(e.peak_magnitude != 99.0 for e in events)
@@ -288,7 +291,8 @@ class TestRoRFlickNoneHandling:
         m = RoRFlickManager()
         m.enabled = True
         delta2 = [5.0, None, 5.0, 15.0, None, 15.0, 6.0, 6.0]
-        events = m.process_roast(delta2, fcs_idx=-1, sample_rate_hz=1.0)
+        timex = [float(i) for i in range(len(delta2))]
+        events = m.process_roast(delta2, timex, fcs_idx=-1)
         assert isinstance(events, list)  # did not crash
 
 
@@ -379,3 +383,38 @@ class TestRoRFlickStatus:
             severity='moderate', in_development=False,
         ))
         assert m.should_show_annotations() is True
+
+
+class TestRoRFlickLiveReplayParity:
+    """Verify that live and replay processing produce identical events."""
+
+    def test_parity_with_synthetic_flick(self):
+        delta2 = [5.0] * 35 + [15.0] * 5 + [6.0] * 10
+        timex = [float(i) for i in range(len(delta2))]
+
+        # Live: one sample at a time using _time_window_average
+        m_live = RoRFlickManager()
+        m_live.enabled = True
+        m_live.flick_threshold = 3.0
+        m_live.exit_threshold = 1.0
+        for i in range(len(delta2)):
+            short = RoRFlickManager._time_window_average(delta2, timex, i, 9.0)
+            long_ = RoRFlickManager._time_window_average(delta2, timex, i, 30.0)
+            m_live.process_sample(i, short, long_, False)
+        if m_live._current_start is not None:
+            m_live._finalize_event(len(delta2) - 1, False)
+
+        # Replay
+        m_replay = RoRFlickManager()
+        m_replay.enabled = True
+        m_replay.flick_threshold = 3.0
+        m_replay.exit_threshold = 1.0
+        m_replay.process_roast(delta2, timex, fcs_idx=-1)
+
+        assert len(m_live.events) == len(m_replay.events), (
+            f"Live={len(m_live.events)}, Replay={len(m_replay.events)}"
+        )
+        for live_evt, replay_evt in zip(m_live.events, m_replay.events):
+            assert live_evt.event_type == replay_evt.event_type
+            assert live_evt.peak_magnitude == pytest.approx(replay_evt.peak_magnitude)
+            assert live_evt.start_idx == replay_evt.start_idx

@@ -19221,17 +19221,10 @@ class tgraphcanvas(QObject):
             self.rorflick_manager.process_sample(sample_idx, short_avg, long_avg, in_dev)
         elif current_len != self._rorflick_last_len:
             # --- Replay mode: data changed (new profile loaded or batch append) ---
-            try:
-                interval_s = self.profile_sampling_interval
-                if interval_s is None:
-                    interval_s = self.delay / 1000.
-                sample_rate_hz = 1.0 / max(0.1, interval_s)
-            except Exception:
-                sample_rate_hz = 1.0
             self.rorflick_manager.process_roast(
                 self.delta2,
+                self.timex,
                 fcs_idx=self.timeindex[2],
-                sample_rate_hz=sample_rate_hz,
             )
 
         self._rorflick_last_len = current_len

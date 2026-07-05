@@ -173,29 +173,28 @@ class RoRFlickManager:
     def process_roast(
         self,
         delta2: list[float | None],
+        timex: list[float],
         fcs_idx: int = -1,
-        sample_rate_hz: float = 1.0,
     ) -> list[RoRFlickEvent]:
         """
-        Process a complete roast from raw delta2 (replay mode).
-        Computes its own short/long window averages internally.
+        Process a complete roast from raw delta2 + timex (replay mode).
+        Uses time-based windowing identical to canvas._charge_window_average_delta
+        to ensure live and replay produce identical results.
         """
         self.reset()
-        if not delta2:
+        if not delta2 or not timex:
             return []
 
-        short_window = max(1, int(9.0 * sample_rate_hz))
-        long_window = max(1, int(30.0 * sample_rate_hz))
-
-        for i in range(len(delta2)):
-            short_avg = self._window_average(delta2, i, short_window)
-            long_avg = self._window_average(delta2, i, long_window)
+        n = min(len(delta2), len(timex))
+        for i in range(n):
+            short_avg = self._time_window_average(delta2, timex, i, 9.0)
+            long_avg = self._time_window_average(delta2, timex, i, 30.0)
             in_dev = fcs_idx > -1 and i >= fcs_idx
             self.process_sample(i, short_avg, long_avg, in_dev)
 
         # Close any open event at end
         if self._current_start is not None:
-            final_idx = len(delta2) - 1
+            final_idx = n - 1
             final_in_dev = fcs_idx > -1 and final_idx >= fcs_idx
             event = self._finalize_event(final_idx, final_in_dev)
             self.events.append(event)
@@ -216,6 +215,34 @@ class RoRFlickManager:
         if not slice_data:
             return 0.0
         return sum(slice_data) / len(slice_data)
+
+    @staticmethod
+    def _time_window_average(
+        delta2: list[float | None],
+        timex: list[float],
+        end_idx: int,
+        window_seconds: float,
+    ) -> float | None:
+        """Time-based window average mirroring canvas._charge_window_average_delta."""
+        if not delta2 or not timex:
+            return None
+        if end_idx < 0 or end_idx >= len(delta2) or end_idx >= len(timex):
+            return None
+        if len(timex) < 2 or len(delta2) < 2:
+            return None
+        latest_time = timex[end_idx]
+        values: list[float] = []
+        for idx in range(end_idx, -1, -1):
+            if idx >= len(timex):
+                continue
+            if latest_time - timex[idx] > window_seconds:
+                break
+            value = delta2[idx]
+            if value is not None and value > 0:
+                values.append(value)
+        if not values:
+            return None
+        return sum(values) / len(values)
 
     def should_show_annotations(self) -> bool:
         return self.enabled and len(self.events) > 0
