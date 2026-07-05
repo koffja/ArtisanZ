@@ -33,18 +33,16 @@ mock_modules = {
     'artisanlib.atypes': Mock(),
 }
 
-# Add all mocks to sys.modules before importing
-for module_name, mock_module in mock_modules.items():
-    sys.modules[module_name] = mock_module
-
-# Mock specific functions
+# Use patch.dict for proper cleanup - without this, the Mock objects permanently
+# pollute sys.modules and break other tests that rely on real PyQt6.QtCore.
 mock_util = Mock()
 mock_util.weight_units = ['g', 'kg', 'lb', 'oz']
 mock_util.convertWeight = Mock(return_value=1000.0)
-sys.modules['artisanlib.util'] = mock_util
+mock_modules['ʒɑʒɛlɪb.util'] = mock_util
 
-from plus.roast import getRoast, getSyncRecord, getTemplate, trimBlendSpec
-from plus.stock import Blend, BlendIngredient
+with patch.dict('sys.modules', mock_modules, clear=False):
+    from plus.roast import getRoast, getSyncRecord, getTemplate, trimBlendSpec
+    from plus.stock import Blend, BlendIngredient
 
 
 @pytest.fixture

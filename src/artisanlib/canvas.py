@@ -19238,6 +19238,9 @@ class tgraphcanvas(QObject):
                     text, append=False,
                     style=f"background-color:'transparent'; color:{color};"
                 )
+            else:
+                # Clear stale message when manager is disabled or has no events
+                self.aw.sendmessage('', append=False)
 
         if not self.rorflick_manager.should_show_annotations():
             return

@@ -930,16 +930,21 @@ def _default_rorflick_annotation_factory(
     _ = snapshot
     color = _RORFLICK_SEVERITY_COLORS.get(annotation.severity, '#FFCC00')
     alpha = _RORFLICK_SEVERITY_ALPHA.get(annotation.severity, 0.20)
+    # NOTE: pg.mkBrush(color, alpha=) silently ignores the alpha kwarg.
+    # Use QColor.setAlphaF to get proper translucency matching matplotlib axvspan.
+    from PyQt6.QtGui import QColor
+    band_color = QColor(color)
+    band_color.setAlphaF(alpha)
     band = pg.LinearRegionItem(
         values=[annotation.start_time, annotation.end_time],
         orientation='vertical',
-        brush=pg.mkBrush(color, alpha=alpha),
+        brush=pg.mkBrush(band_color),
         movable=False,
     )
     _call_if_available(band, 'setZValue', _RORFLICK_Z - 1)
 
     sign = '-' if annotation.event_type == 'crash' else '+'
-    dev_tag = ' (DEV)' if annotation.in_development else ''
+    dev_tag = '\n(DEV)' if annotation.in_development else ''
     text_item = pg.TextItem(
         text=(
             f'{annotation.event_type.upper()}\n'
