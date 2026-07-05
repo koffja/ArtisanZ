@@ -42,3 +42,28 @@ def test_dialog_save_pushes_values_back_to_manager(qapp):
     assert m.crash_threshold == pytest.approx(8.1)
     assert m.exit_threshold == pytest.approx(0.3)
     assert m.dev_phase_multiplier == pytest.approx(2.1)
+
+
+def test_dialog_preset_buttons_set_thresholds(qapp):
+    from artisanlib.rorflick_manager import RoRFlickManager
+    from artisanlib.rorflick_dialog import RoRFlickDlg
+    m = RoRFlickManager()
+    dlg = RoRFlickDlg(None, m)
+
+    # Test electric preset
+    dlg._apply_preset('electric')
+    assert dlg.flick_spinbox.value() == 3.0
+    assert dlg.crash_spinbox.value() == 3.0
+    assert dlg.exit_spinbox.value() == 0.5
+
+    # Test gas preset
+    dlg._apply_preset('gas')
+    assert dlg.flick_spinbox.value() == 7.0
+    assert dlg.crash_spinbox.value() == 7.0
+    assert dlg.exit_spinbox.value() == 1.5
+
+    # Test sample preset
+    dlg._apply_preset('sample')
+    assert dlg.flick_spinbox.value() == 5.0
+    assert dlg.crash_spinbox.value() == 5.0
+    assert dlg.exit_spinbox.value() == 1.0

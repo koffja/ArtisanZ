@@ -16,8 +16,32 @@ class RoRFlickDlg(QDialog):
         self.setup_ui()
         self.load_settings()
 
+    # Machine type presets: (flick, crash, exit, dev_mult)
+    _PRESETS = {
+        'electric': (3.0, 3.0, 0.5, 1.5),   # 电热鼓式 — 稳定热惯性，低阈值
+        'gas': (7.0, 7.0, 1.5, 1.5),         # 燃气大鼓 — 噪声大，高阈值
+        'sample': (5.0, 5.0, 1.0, 1.5),       # 样品烘焙机 — 当前默认
+    }
+
     def setup_ui(self) -> None:
         layout = QVBoxLayout(self)
+
+        # --- Preset Group ---
+        preset_group = QGroupBox(QApplication.translate('RoRFlickDlg', '机器类型预设'))
+        preset_layout = QHBoxLayout()
+
+        electric_btn = QPushButton(QApplication.translate('RoRFlickDlg', '电热鼓式'))
+        electric_btn.clicked.connect(lambda: self._apply_preset('electric'))
+        gas_btn = QPushButton(QApplication.translate('RoRFlickDlg', '燃气大鼓'))
+        gas_btn.clicked.connect(lambda: self._apply_preset('gas'))
+        sample_btn = QPushButton(QApplication.translate('RoRFlickDlg', '样品烘焙机'))
+        sample_btn.clicked.connect(lambda: self._apply_preset('sample'))
+
+        preset_layout.addWidget(electric_btn)
+        preset_layout.addWidget(gas_btn)
+        preset_layout.addWidget(sample_btn)
+        preset_group.setLayout(preset_layout)
+        layout.addWidget(preset_group)
 
         # --- Threshold Group ---
         thresh_group = QGroupBox(QApplication.translate('RoRFlickDlg', '检测阈值'))
@@ -79,6 +103,17 @@ class RoRFlickDlg(QDialog):
         btn_layout.addWidget(save_btn)
         btn_layout.addWidget(cancel_btn)
         layout.addLayout(btn_layout)
+
+    def _apply_preset(self, preset: str) -> None:
+        """Apply a machine-type preset to the threshold spinboxes."""
+        values = self._PRESETS.get(preset)
+        if values is None:
+            return
+        flick, crash, exit_val, dev_mult = values
+        self.flick_spinbox.setValue(flick)
+        self.crash_spinbox.setValue(crash)
+        self.exit_spinbox.setValue(exit_val)
+        self.dev_spinbox.setValue(dev_mult)
 
     def load_settings(self) -> None:
         self.flick_spinbox.setValue(self.manager.flick_threshold)
