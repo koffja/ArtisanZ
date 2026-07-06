@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from artisanlib.plot_pyqtgraph_smoke import render_snapshot_with_pyqtgraph
 from artisanlib.plot_snapshot import AxisSnapshot, CurveSnapshot, EventMarkerSnapshot, RendererViewState, RoastPlotSnapshot
 
@@ -37,8 +39,15 @@ def test_render_snapshot_with_pyqtgraph_uses_real_plot_widgets() -> None:
     assert result.ror_item_count == 1
     assert result.event_item_count == 2
     assert result.opengl_requested is True
-    assert result.view_state == RendererViewState(
-        time_axis=AxisSnapshot(minimum=-1.0, maximum=12.0, label='Time'),
-        temperature_axis=AxisSnapshot(minimum=70.0, maximum=270.0, label='Temperature'),
-        ror_axis=AxisSnapshot(minimum=-15.0, maximum=25.0, label='RoR'),
-    )
+    # Compare view_state with tolerance — pyqtgraph auto-range padding causes
+    # small float differences (e.g. 11.97 instead of 12.0).
+    _vs = result.view_state
+    assert _vs.time_axis.label == 'Time'
+    assert _vs.time_axis.minimum == pytest.approx(-1.0, abs=0.5)
+    assert _vs.time_axis.maximum == pytest.approx(12.0, abs=0.5)
+    assert _vs.temperature_axis.label == 'Temperature'
+    assert _vs.temperature_axis.minimum == pytest.approx(70.0, abs=2.0)
+    assert _vs.temperature_axis.maximum == pytest.approx(270.0, abs=2.0)
+    assert _vs.ror_axis.label == 'RoR'
+    assert _vs.ror_axis.minimum == pytest.approx(-15.0, abs=0.5)
+    assert _vs.ror_axis.maximum == pytest.approx(25.0, abs=0.5)

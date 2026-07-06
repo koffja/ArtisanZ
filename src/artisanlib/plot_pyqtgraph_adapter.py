@@ -440,7 +440,9 @@ def _default_pen_factory(curve: CurveSnapshot) -> object:
                 ]
                 cached = pg.ColorMap(pos, colors)
                 globals()['_cached_bt_morandi_cm'] = cached
-            return cached.getPen(span=(100.0, 250.0), width=int(line_width), orientation='vertical')
+            _gradient_pen = cached.getPen(span=(100.0, 250.0), width=int(line_width), orientation='vertical')
+            _gradient_pen.setWidthF(line_width)  # restore float width (getPen truncates to int)
+            return _gradient_pen
         except Exception:
             pass
     return pg.mkPen(color=_color_with_alpha(pg, curve.color, curve.opacity), width=line_width, style=_qt_pen_style(curve.line_style))
