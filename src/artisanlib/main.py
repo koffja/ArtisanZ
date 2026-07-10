@@ -18922,7 +18922,7 @@ class ApplicationWindow(QMainWindow):
             self.qmc.flagOpenCompleted = toBool(settings.value('flagOpenCompleted',self.qmc.flagOpenCompleted))
             self.qmc.extra_event_sampling_delay = toInt(settings.value('ExtraEventSamplingDelay',int(self.qmc.extra_event_sampling_delay)))
             #restore colors
-            _do_pal_v2 = not toBool(settings.value('PaletteMigrated_v2', False))
+            _do_pal_v2 = not toBool(settings.value('PaletteMigrated_v3', False))
             if settings.contains('Colors'):
                 for (k, v) in list(settings.value('Colors').items()):
                     self.qmc.palette[str(k)] = s2a(toString(v))
@@ -20659,7 +20659,7 @@ class ApplicationWindow(QMainWindow):
             # --- ArtisanZ final palette override (after fetchCurveStyles reads from lines) ---
             from PyQt6.QtCore import QSettings as _QS
             _qs = _QS()
-            if not _qs.value('PaletteMigrated_v2', False, type=bool):
+            if not _qs.value('PaletteMigrated_v3', False, type=bool):
                 _v2 = {
                     'et': '#C0504D', 'bt': '#3A7CA5',
                     'deltaet': '#D4943A', 'deltabt': '#5B9BD5',
@@ -20686,7 +20686,7 @@ class ApplicationWindow(QMainWindow):
                 if self.qmc.l_back2 is not None:
                     self.qmc.l_back2.set_color('#6BAEDB')
                 self.qmc.palette1 = self.qmc.palette.copy()
-                _qs.setValue('PaletteMigrated_v2', True)
+                _qs.setValue('PaletteMigrated_v3', True)
 
         except Exception as e: # pylint: disable=broad-except
             _log.exception(e)
