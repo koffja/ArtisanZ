@@ -18961,7 +18961,7 @@ class ApplicationWindow(QMainWindow):
                 self.qmc.backgroundbtcolor = '#6BAEDB'
                 self.qmc.backgrounddeltaetcolor = '#D4943A'
                 self.qmc.backgrounddeltabtcolor = '#5B9BD5'
-                settings.setValue('PaletteMigrated_v2', True)
+                # NOTE: flag is set in fetchCurveStyles() which runs LAST
             self.qmc.backgroundalpha = min(0.5,float2float(toFloat(settings.value('BackgroundAlpha',self.qmc.backgroundalpha))))
             if settings.contains('LCDColors'):
                 for (k, v) in list(settings.value('LCDColors').items()):

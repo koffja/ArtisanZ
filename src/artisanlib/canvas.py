@@ -9841,6 +9841,8 @@ class tgraphcanvas(QObject):
 
     def drawBT(self, temp:'npt.NDArray[numpy.double]') -> None:
         if self.BTcurve and self.ax is not None:
+            import sys as _sys
+            print(f"[DEBUG-DRAWBT] palette['bt']={self.palette.get('bt','?')} palette1['bt']={self.palette1.get('bt','?')}", file=_sys.stderr)
             try:
                 if self.l_temp2 is not None:
                     self.l_temp2.remove()
