@@ -20656,6 +20656,38 @@ class ApplicationWindow(QMainWindow):
                     self.qmc.EvalueColor[3] = self.getColor(self.qmc.l_eventtype4dots)[:7] # no alpha for event colors as it is handled separately
                     self.qmc.Evaluelinethickness[3] = max(self.qmc.linewidth_min, self.qmc.l_eventtype4dots.get_linewidth())
                     self.qmc.etypes[3] = str(self.qmc.l_eventtype4dots.get_label())
+            # --- ArtisanZ final palette override (after fetchCurveStyles reads from lines) ---
+            from PyQt6.QtCore import QSettings as _QS
+            _qs = _QS()
+            if not _qs.value('PaletteMigrated_v2', False, type=bool):
+                _v2 = {
+                    'et': '#C0504D', 'bt': '#3A7CA5',
+                    'deltaet': '#D4943A', 'deltabt': '#5B9BD5',
+                    'rect1': '#D5DFD0', 'rect2': '#E0D0B8', 'rect3': '#DCCBD0',
+                }
+                for _k, _v in _v2.items():
+                    self.qmc.palette[_k] = _v
+                # Also update matplotlib line objects directly
+                if self.qmc.l_temp1 is not None:
+                    self.qmc.l_temp1.set_color('#C0504D')
+                if self.qmc.l_temp2 is not None:
+                    self.qmc.l_temp2.set_color('#3A7CA5')
+                if self.qmc.l_delta1 is not None:
+                    self.qmc.l_delta1.set_color('#D4943A')
+                if self.qmc.l_delta2 is not None:
+                    self.qmc.l_delta2.set_color('#5B9BD5')
+                # Background curves
+                self.qmc.backgroundmetcolor = '#E08070'
+                self.qmc.backgroundbtcolor = '#6BAEDB'
+                self.qmc.backgrounddeltaetcolor = '#D4943A'
+                self.qmc.backgrounddeltabtcolor = '#5B9BD5'
+                if self.qmc.l_back1 is not None:
+                    self.qmc.l_back1.set_color('#E08070')
+                if self.qmc.l_back2 is not None:
+                    self.qmc.l_back2.set_color('#6BAEDB')
+                self.qmc.palette1 = self.qmc.palette.copy()
+                _qs.setValue('PaletteMigrated_v2', True)
+
         except Exception as e: # pylint: disable=broad-except
             _log.exception(e)
             _, _, exc_tb = sys.exc_info()
