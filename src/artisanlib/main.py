@@ -18,6 +18,21 @@
 # MAINTAINER
 # Marko Luther, 2025
 
+
+# === ArtisanZ color diagnostic ===
+import os as _os
+_diag_log = _os.path.join(_os.environ.get('TEMP', '/tmp'), 'artisanz_color_debug.log')
+def _diag(msg):
+    with open(_diag_log, 'a') as _f:
+        _f.write(str(msg) + '\n')
+# Clear previous log
+try:
+    _os.remove(_diag_log)
+except OSError:
+    pass
+_diag(f"=== ArtisanZ color diagnostic started ===")
+# === End diagnostic ===
+
 import time as libtime
 startup_time = libtime.process_time()
 
@@ -18923,6 +18938,8 @@ class ApplicationWindow(QMainWindow):
             self.qmc.extra_event_sampling_delay = toInt(settings.value('ExtraEventSamplingDelay',int(self.qmc.extra_event_sampling_delay)))
             #restore colors
             _do_pal_v2 = not toBool(settings.value('PaletteMigrated_v3', False))
+            _diag(f"[loadSettings] PaletteMigrated_v3 check: _do_pal_v2={_do_pal_v2}")
+            _diag(f"[loadSettings] BEFORE Colors load: bg_met={self.qmc.backgroundmetcolor} bg_bt={self.qmc.backgroundbtcolor}")
             if settings.contains('Colors'):
                 for (k, v) in list(settings.value('Colors').items()):
                     self.qmc.palette[str(k)] = s2a(toString(v))
@@ -18961,7 +18978,9 @@ class ApplicationWindow(QMainWindow):
                 self.qmc.backgroundbtcolor = '#6BAEDB'
                 self.qmc.backgrounddeltaetcolor = '#D4943A'
                 self.qmc.backgrounddeltabtcolor = '#5B9BD5'
+                _diag(f"[loadSettings] AFTER migration: bg_met={self.qmc.backgroundmetcolor} bg_bt={self.qmc.backgroundbtcolor} palette_bt={self.qmc.palette.get('bt','?')}")
                 # NOTE: flag is set in fetchCurveStyles() which runs LAST
+            _diag(f"[loadSettings] AFTER QSettings bg load: bg_met={self.qmc.backgroundmetcolor} bg_bt={self.qmc.backgroundbtcolor} ETBColor={settings.value('ETBColor','NOT_SET')} BTBColor={settings.value('BTBColor','NOT_SET')}")
             self.qmc.backgroundalpha = min(0.5,float2float(toFloat(settings.value('BackgroundAlpha',self.qmc.backgroundalpha))))
             if settings.contains('LCDColors'):
                 for (k, v) in list(settings.value('LCDColors').items()):
@@ -20433,6 +20452,7 @@ class ApplicationWindow(QMainWindow):
         return c
 
     def fetchCurveStyles(self) -> None:
+        _diag(f"[fetchCurveStyles] ENTER")
         try:
             if self.qmc.l_temp1 is not None:
                 ls = self.qmc.l_temp1.get_linestyle()
@@ -20510,6 +20530,7 @@ class ApplicationWindow(QMainWindow):
                     self.qmc.ETbackmarker = m
                 self.qmc.ETbackmarkersize = max(self.qmc.markersize_min, self.qmc.l_back1.get_markersize())
                 self.qmc.backgroundmetcolor = self.getColor(self.qmc.l_back1)
+                _diag(f"[fetchCurveStyles] AFTER getColor(l_back1): bg_met={self.qmc.backgroundmetcolor}")
             if self.qmc.l_back2 is not None:
                 ls = self.qmc.l_back2.get_linestyle()
                 if isinstance(ls, str):
@@ -20525,6 +20546,7 @@ class ApplicationWindow(QMainWindow):
                     self.qmc.BTbackmarker = m
                 self.qmc.BTbackmarkersize = max(self.qmc.markersize_min, self.qmc.l_back2.get_markersize())
                 self.qmc.backgroundbtcolor = self.getColor(self.qmc.l_back2)
+                _diag(f"[fetchCurveStyles] AFTER getColor(l_back2): bg_bt={self.qmc.backgroundbtcolor}")
             if self.qmc.l_back3 is not None:
                 ls = self.qmc.l_back3.get_linestyle()
                 if isinstance(ls, str):
@@ -20659,6 +20681,7 @@ class ApplicationWindow(QMainWindow):
             # --- ArtisanZ final palette override (after fetchCurveStyles reads from lines) ---
             from PyQt6.QtCore import QSettings as _QS
             _qs = _QS()
+            _diag(f"[fetchCurveStyles] BEFORE override: PaletteMigrated_v3={_qs.value('PaletteMigrated_v3', False, type=bool)} bg_met={self.qmc.backgroundmetcolor} bg_bt={self.qmc.backgroundbtcolor}")
             if not _qs.value('PaletteMigrated_v3', False, type=bool):
                 _v2 = {
                     'et': '#C0504D', 'bt': '#3A7CA5',
@@ -20686,6 +20709,7 @@ class ApplicationWindow(QMainWindow):
                 if self.qmc.l_back2 is not None:
                     self.qmc.l_back2.set_color('#6BAEDB')
                 self.qmc.palette1 = self.qmc.palette.copy()
+                _diag(f"[fetchCurveStyles] AFTER override: bg_met={self.qmc.backgroundmetcolor} bg_bt={self.qmc.backgroundbtcolor} l_back1={self.qmc.l_back1} l_back2={self.qmc.l_back2}")
                 _qs.setValue('PaletteMigrated_v3', True)
 
         except Exception as e: # pylint: disable=broad-except
