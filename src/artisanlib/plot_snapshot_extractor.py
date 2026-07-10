@@ -27,14 +27,14 @@ from artisanlib.plot_snapshot import (
 )
 
 _DEFAULT_COLORS = {
-    'bt': '#4E7180',
-    'et': '#B5644F',
-    'deltabt': '#78905D',
-    'deltaet': '#B98A4B',
-    'backgroundbt': '#4E7180',
-    'backgroundet': '#B5644F',
-    'backgrounddeltabt': '#78905D',
-    'backgrounddeltaet': '#B98A4B',
+    'bt': '#3A7CA5',
+    'et': '#C0504D',
+    'deltabt': '#5B9BD5',
+    'deltaet': '#D4943A',
+    'backgroundbt': '#3A7CA5',
+    'backgroundet': '#C0504D',
+    'backgrounddeltabt': '#5B9BD5',
+    'backgrounddeltaet': '#D4943A',
     'aucarea': '#767676',
     'grid': '#C9D2D4',
     'markers': '#5E6B6E',
