@@ -70,7 +70,7 @@ class tphasescanvas(QObject):
         self.aw = aw
         self.dpi_offset:Final[int] = -30 # set the dpi to 30% less than the user selected dpi
         # values that define the bars and spacing
-        self.barheight:float =  0.88  # height of each bar within the norm row height of 1
+        self.barheight:float =  0.65  # height of each bar within the norm row height of 1
         self.m:float = 10.0                   # width of batch number field and drop time field
         self.g:float = 2.0                    # width of the gap between batch number field and drop time field and the actual phase percentage bars
         # set data

@@ -18940,6 +18940,18 @@ class ApplicationWindow(QMainWindow):
                         _migrated = True
                 if _migrated:
                     self.qmc.palette1 = self.qmc.palette.copy()  # sync palette1 too
+                # --- Migrate old rect palette colors (phase bands) ---
+                _rect_migration = {
+                    '#f5f5f0': '#D5DFD0', '#F5F5F0': '#D5DFD0',
+                    '#f5f0e1': '#E0D0B8', '#F5F0E1': '#E0D0B8',
+                    '#f4f2ec': '#DCCBD0', '#F4F2EC': '#DCCBD0',
+                    '#f7f6f0': '#D5DFD0', '#F7F6F0': '#D5DFD0',
+                    '#eef2f0': '#E0D0B8', '#EEF2F0': '#E0D0B8',
+                }
+                for _rkey in ('rect1', 'rect2', 'rect3'):
+                    _rcurrent = self.qmc.palette.get(_rkey, '')
+                    if _rcurrent in _rect_migration:
+                        self.qmc.palette[_rkey] = _rect_migration[_rcurrent]
                 if 'messages' in self.qmc.palette:
                     self.setLabelColor(self.messagelabel,self.qmc.palette['messages'])
                 if 'et' in self.qmc.palette:
