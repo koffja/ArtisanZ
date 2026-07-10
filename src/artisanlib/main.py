@@ -18925,6 +18925,21 @@ class ApplicationWindow(QMainWindow):
             if settings.contains('Colors'):
                 for (k, v) in list(settings.value('Colors').items()):
                     self.qmc.palette[str(k)] = s2a(toString(v))
+                # --- ArtisanZ palette migration: old Morandi → medium saturation ---
+                _morandi_migration = {
+                    '#a76557': '#C0504D', '#A76557': '#C0504D',  # et: rust → coral
+                    '#4e7180': '#3A7CA5', '#4E7180': '#3A7CA5',  # bt: teal → ocean blue
+                    '#c18a6b': '#D4943A', '#C18A6B': '#D4943A',  # deltaet: amber → gold
+                    '#90a1a8': '#5B9BD5', '#90A1A8': '#5B9BD5',  # deltabt: GRAY → sky blue
+                }
+                _migrated = False
+                for _key in ('et', 'bt', 'deltaet', 'deltabt'):
+                    _current = self.qmc.palette.get(_key, '')
+                    if _current in _morandi_migration:
+                        self.qmc.palette[_key] = _morandi_migration[_current]
+                        _migrated = True
+                if _migrated:
+                    self.qmc.palette1 = self.qmc.palette.copy()  # sync palette1 too
                 if 'messages' in self.qmc.palette:
                     self.setLabelColor(self.messagelabel,self.qmc.palette['messages'])
                 if 'et' in self.qmc.palette:
@@ -18944,6 +18959,15 @@ class ApplicationWindow(QMainWindow):
                     self.qmc.palette.pop('canvas_alt')  #remove the canvas_alt element if it somehow snuck into the settings
             self.qmc.backgroundmetcolor = s2a(toString(settings.value('ETBColor',self.qmc.backgroundmetcolor)))
             self.qmc.backgroundbtcolor = s2a(toString(settings.value('BTBColor',self.qmc.backgroundbtcolor)))
+            # --- ArtisanZ background color migration ---
+            _bg_migration = {
+                '#d7b7ac': '#E08070', '#D7B7AC': '#E08070',  # ET bg: muted salmon → warm coral
+                '#b2c3c8': '#6BAEDB', '#B2C3C8': '#6BAEDB',  # BT bg: muted gray-blue → sky blue
+            }
+            if self.qmc.backgroundmetcolor in _bg_migration:
+                self.qmc.backgroundmetcolor = _bg_migration[self.qmc.backgroundmetcolor]
+            if self.qmc.backgroundbtcolor in _bg_migration:
+                self.qmc.backgroundbtcolor = _bg_migration[self.qmc.backgroundbtcolor]
             self.qmc.backgrounddeltaetcolor = s2a(toString(settings.value('ETBdeltaColor',self.qmc.backgrounddeltaetcolor)))
             self.qmc.backgrounddeltabtcolor = s2a(toString(settings.value('BTBdeltaColor',self.qmc.backgrounddeltabtcolor)))
             self.qmc.backgroundalpha = min(0.5,float2float(toFloat(settings.value('BackgroundAlpha',self.qmc.backgroundalpha))))
