@@ -9819,6 +9819,10 @@ class tgraphcanvas(QObject):
 
     def drawET(self, temp:'npt.NDArray[numpy.double]') -> None:
         if self.ETcurve and self.ax is not None:
+            # ArtisanZ: force-correct muted Morandi colors at render time
+            _c = self.palette.get('et', '')
+            if _c.lower() in ('#a76557', '#a76557ff'):
+                self.palette['et'] = '#C0504D'
             try:
                 if self.l_temp1 is not None:
                     self.l_temp1.remove()
@@ -9841,6 +9845,10 @@ class tgraphcanvas(QObject):
 
     def drawBT(self, temp:'npt.NDArray[numpy.double]') -> None:
         if self.BTcurve and self.ax is not None:
+            # ArtisanZ: force-correct muted Morandi colors at render time
+            _c = self.palette.get('bt', '')
+            if _c.lower() in ('#4e7180', '#4e7180ff'):
+                self.palette['bt'] = '#3A7CA5'
             try:
                 if self.l_temp2 is not None:
                     self.l_temp2.remove()
