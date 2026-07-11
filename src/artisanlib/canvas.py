@@ -10636,7 +10636,7 @@ class tgraphcanvas(QObject):
                         temp_etb = numpy.ma.masked_where(temp_etb == -1, temp_etb)
                         self.l_back1, = self.ax.plot(self.timeB,temp_etb,markersize=self.ETbackmarkersize,marker=self.ETbackmarker,
                                                     sketch_params=None,path_effects=[],
-                                                    linewidth=self.ETbacklinewidth,linestyle=self.ETbacklinestyle,drawstyle=self.ETbackdrawstyle,color=self.backgroundmetcolor,
+                                                    linewidth=self.ETbacklinewidth,linestyle=self.ETbacklinestyle,drawstyle=self.ETbackdrawstyle,color='#E08070',  # HARDCODED: bypass backgroundmetcolor variable chain
                                                     alpha=self.backgroundalpha,label=self.aw.arabicReshape(QApplication.translate('Label', 'BackgroundET')))
                         if self.backgroundBTcurve:
                             if self.flagon:
@@ -10666,7 +10666,7 @@ class tgraphcanvas(QObject):
                         # don't draw -1:
                         temp_btb = numpy.ma.masked_where(temp_btb == -1, temp_btb)
                         self.l_back2, = self.ax.plot(self.timeB, temp_btb,markersize=self.BTbackmarkersize,marker=self.BTbackmarker,
-                                                    linewidth=self.BTbacklinewidth,linestyle=self.BTbacklinestyle,drawstyle=self.BTbackdrawstyle,color=self.backgroundbtcolor,
+                                                    linewidth=self.BTbacklinewidth,linestyle=self.BTbacklinestyle,drawstyle=self.BTbackdrawstyle,color='#6BAEDB',  # HARDCODED: bypass backgroundbtcolor variable chain
                                                     sketch_params=None,path_effects=[],
                                                     alpha=self.backgroundalpha,label=self.aw.arabicReshape(QApplication.translate('Label', 'BackgroundBT')))
 
