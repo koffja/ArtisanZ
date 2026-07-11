@@ -9836,7 +9836,7 @@ class tgraphcanvas(QObject):
                 markersize=self.ETmarkersize,
                 marker=self.ETmarker,
                 sketch_params=None,
-                path_effects = self.line_path_effects(self.glow, self.patheffects, self.aw.light_background_p, self.ETlinewidth, self.palette['et']),
+                path_effects = [],  # TEMP: disabled path_effects for color diagnosis
                 linewidth=self.ETlinewidth,
                 linestyle=self.ETlinestyle,
                 drawstyle=self.ETdrawstyle,
@@ -9862,7 +9862,7 @@ class tgraphcanvas(QObject):
                 markersize=self.BTmarkersize,
                 marker=self.BTmarker,
                 sketch_params=None,
-                path_effects = self.line_path_effects(self.glow, self.patheffects, self.aw.light_background_p, self.BTlinewidth, self.palette['bt']),
+                path_effects = [],  # TEMP: disabled path_effects for color diagnosis
                 linewidth = self.BTlinewidth,
                 linestyle = self.BTlinestyle,
                 drawstyle = self.BTdrawstyle,
