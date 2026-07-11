@@ -33,7 +33,10 @@ def apply_shadow_pens(
     shadow_color: str = '#000000',
     shadow_alpha: int = _SHADOW_ALPHA,
 ) -> int:
-    """Apply a shadow pen to every PlotDataItem on *plot* that has a visible pen.
+    """Apply a shadow pen to foreground PlotDataItems with visible pens.
+
+    Background curves are intentionally excluded because their reduced
+    opacity makes a wider black shadow overpower their configured colors.
 
     Returns the number of curves enhanced.
     """
@@ -48,6 +51,10 @@ def apply_shadow_pens(
         try:
             opts = getattr(item, 'opts', None)
             if not isinstance(opts, dict):
+                continue
+            curve_name = opts.get('name')
+            if isinstance(curve_name, str) and curve_name.startswith('Background '):
+                item.setShadowPen(None)
                 continue
             pen = opts.get('pen')
             if pen is None:

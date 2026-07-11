@@ -192,7 +192,7 @@ class PyQtGraphSnapshotRenderer:
             _call_if_available(item, 'setData', curve.x, _pyqtgraph_y_values(curve.y))
             pen = self._pen_factory(curve)
             _call_if_available(item, 'setPen', pen)
-            self._apply_shadow_pen(item, pen)
+            self._apply_shadow_pen(curve, item, pen)
             _call_if_available(item, 'setVisible', curve.visible)
         for name, item in self._items.items():
             if name not in active_names:
@@ -200,8 +200,15 @@ class PyQtGraphSnapshotRenderer:
         self._apply_legend(snapshot)
 
     @staticmethod
-    def _apply_shadow_pen(item: object, pen: object) -> None:
-        """Apply a subtle black shadow pen behind each curve for visibility."""
+    def _apply_shadow_pen(curve: CurveSnapshot, item: object, pen: object) -> None:
+        """Apply a subtle shadow to foreground curves only.
+
+        Background curves already use reduced opacity. A wider black shadow
+        would dominate their configured colors and make them appear black.
+        """
+        if curve.name.startswith('Background '):
+            _call_if_available(item, 'setShadowPen', None)
+            return
         try:
             import pyqtgraph as pg  # type: ignore[import-not-found,unused-ignore]
             pen_width = 2

@@ -35,6 +35,7 @@ class FakePlotDataItem:
         self.y = y
         self.pen = pen
         self.name = name
+        self.shadow_pen: object | None = None
         self.visible = True
 
     def setData(self, x: tuple[float, ...], y: tuple[float, ...]) -> None:  # noqa: N802
@@ -43,6 +44,9 @@ class FakePlotDataItem:
 
     def setPen(self, pen: object) -> None:  # noqa: N802
         self.pen = pen
+
+    def setShadowPen(self, pen: object | None) -> None:  # noqa: N802
+        self.shadow_pen = pen
 
     def setVisible(self, visible: bool) -> None:  # noqa: N802
         self.visible = visible
@@ -181,6 +185,36 @@ def test_set_snapshot_creates_curve_items_and_applies_ranges() -> None:
     assert ror_plot.y_range == (-15.0, 25.0)
     assert temperature_plot.range_padding == [0.0, 0.0]
     assert ror_plot.range_padding == [0.0, 0.0]
+
+
+def test_set_snapshot_does_not_add_black_shadow_to_background_curves() -> None:
+    temperature_plot = FakePlot()
+    renderer = PyQtGraphSnapshotRenderer(
+        temperature_plot=temperature_plot,
+        pen_factory=_fake_pen_factory,
+    )
+
+    renderer.set_snapshot(_snapshot(
+        CurveSnapshot.from_sequences(
+            name='BT',
+            x=[0, 1],
+            y=[140, 142],
+            color='#3A7CA5',
+            line_width=2.0,
+        ),
+        CurveSnapshot.from_sequences(
+            name='Background BT',
+            x=[0, 1],
+            y=[138, 141],
+            color='#3A7CA5',
+            line_width=1.0,
+            opacity=0.2,
+        ),
+    ))
+
+    foreground, background = temperature_plot.items
+    assert foreground.shadow_pen is not None
+    assert background.shadow_pen is None
 
 
 def test_set_snapshot_populates_legend_with_temperature_and_ror_curves() -> None:
