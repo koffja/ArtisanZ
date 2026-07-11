@@ -37,9 +37,11 @@ class FakePlot:
 def test_apply_shadow_pens_skips_background_curves() -> None:
     foreground = FakeDataItem('BT')
     background = FakeDataItem('Background BT')
+    phase_bar = FakeDataItem('')
 
-    count = apply_shadow_pens(FakePlot(foreground, background), FakePyQtGraph)
+    count = apply_shadow_pens(FakePlot(foreground, background, phase_bar), FakePyQtGraph)
 
     assert count == 1
     assert foreground.shadow_pen is not None
     assert background.shadow_pen is None
+    assert phase_bar.shadow_pen is None

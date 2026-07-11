@@ -24,6 +24,7 @@ class _SupportsAddRemove(Protocol):
 
 _SHADOW_WIDTH_RATIO = 2.0  # shadow pen is 2x the main pen width
 _SHADOW_ALPHA = 90          # 0-255; ~35% opacity
+_SHADOW_CURVE_NAMES = frozenset({'BT', 'ET', 'Delta BT', 'Delta ET'})
 
 
 def apply_shadow_pens(
@@ -53,7 +54,7 @@ def apply_shadow_pens(
             if not isinstance(opts, dict):
                 continue
             curve_name = opts.get('name')
-            if isinstance(curve_name, str) and curve_name.startswith('Background '):
+            if curve_name not in _SHADOW_CURVE_NAMES:
                 item.setShadowPen(None)
                 continue
             pen = opts.get('pen')

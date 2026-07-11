@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import math
-from typing import Any
+from typing import Any, Final
 
 try:
     from PyQt6.QtCore import QSettings
@@ -44,6 +44,8 @@ _DEFAULT_COLORS = {
     'specialeventtext': '#FFFFFF',
     'bgeventtext': '#5E6B6E',
 }
+
+DEFAULT_BACKGROUND_OPACITY: Final[float] = 0.35
 
 _MAIN_EVENTS = (
     (0, 'CHARGE'),
@@ -238,7 +240,7 @@ def _background_curves(source: object) -> tuple[CurveSnapshot, ...]:
             y_axis='ror',
             line_style=background_line_style,
             line_width=_line_width(source, 'BTBdeltalinewidth', 1.0),
-            opacity=_opacity(source, 'backgroundalpha', 0.35)),
+            opacity=_opacity(source, 'backgroundalpha', DEFAULT_BACKGROUND_OPACITY)),
         _curve_from_xy(
             source,
             name='Background Delta ET',
@@ -249,7 +251,7 @@ def _background_curves(source: object) -> tuple[CurveSnapshot, ...]:
             y_axis='ror',
             line_style=background_line_style,
             line_width=_line_width(source, 'ETBdeltalinewidth', 1.0),
-            opacity=_opacity(source, 'backgroundalpha', 0.35)),
+            opacity=_opacity(source, 'backgroundalpha', DEFAULT_BACKGROUND_OPACITY)),
     ) if curve is not None)
 
 
@@ -275,7 +277,7 @@ def _background_curve(
         visible=bool(getattr(source, visible_attr, False)),
         line_style=line_style,
         line_width=_line_width(source, line_width_attr, 1.0),
-        opacity=_opacity(source, 'backgroundalpha', 0.35),
+        opacity=_opacity(source, 'backgroundalpha', DEFAULT_BACKGROUND_OPACITY),
     )
 
 

@@ -120,7 +120,11 @@ from artisanlib.plot_live_frame import (
     merge_static_plot_overlays,
 )
 from artisanlib.plot_snapshot import AxisSnapshot, RendererViewState
-from artisanlib.plot_snapshot_extractor import build_roast_plot_snapshot, build_roast_plot_static_overlay_snapshot
+from artisanlib.plot_snapshot_extractor import (
+    DEFAULT_BACKGROUND_OPACITY,
+    build_roast_plot_snapshot,
+    build_roast_plot_static_overlay_snapshot,
+)
 from artisanlib.plot_renderer_registry import create_default_renderer_registry
 from artisanlib.plot_renderer_settings import (
     DEFAULT_RENDERER_ID,
@@ -1688,7 +1692,7 @@ class tgraphcanvas(QObject):
         self.backgroundEtypes:list[int] = []
         self.backgroundEvalues:list[float] = []
         self.backgroundEStrings:list[str] = []
-        self.backgroundalpha:float = 0.2
+        self.backgroundalpha:float = DEFAULT_BACKGROUND_OPACITY
         self.backgroundmetcolor:str = self.palette['et']
         self.backgroundbtcolor:str = self.palette['bt']
         self.backgroundxtcolor:str = self.palette['xt']

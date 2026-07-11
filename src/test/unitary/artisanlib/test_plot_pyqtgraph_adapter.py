@@ -839,26 +839,26 @@ def test_visible_phase_band_opacity_uses_lower_cap() -> None:
     assert _visible_phase_band_opacity(0.22) == 0.22
 
 
-def test_bt_gradient_disabled_by_default_returns_solid_pen(qapp=None) -> None:
+def test_bt_uses_solid_blue_pen_by_default() -> None:
+    from PyQt6.QtCore import Qt
     from artisanlib.plot_pyqtgraph_adapter import (
         _default_pen_factory,
-        set_bt_gradient_enabled,
         _BT_GRADIENT_ENABLED_DEFAULT,
     )
-    set_bt_gradient_enabled(False)
+    assert _BT_GRADIENT_ENABLED_DEFAULT is False
     curve = CurveSnapshot(
         name='BT',
         x=(0.0,),
         y=(200.0,),
-        color='#4f5f66',
+        color='#3A7CA5',
         line_width=2.0,
     )
     pen = _default_pen_factory(curve)
-    assert hasattr(pen, 'color'), f'expected solid pen, got {type(pen).__name__}'
-    set_bt_gradient_enabled(_BT_GRADIENT_ENABLED_DEFAULT)
+    assert pen.color().name() == '#3a7ca5'
+    assert pen.brush().style() == Qt.BrushStyle.SolidPattern
 
 
-def test_phase_summary_includes_phase_label_in_text(qapp=None) -> None:
+def test_phase_summary_uses_light_thin_bar_and_includes_label() -> None:
     from PyQt6.QtWidgets import QApplication
     from artisanlib.plot_pyqtgraph_adapter import _default_phase_summary_item_factory
 
@@ -881,6 +881,10 @@ def test_phase_summary_includes_phase_label_in_text(qapp=None) -> None:
     items = _default_phase_summary_item_factory(summary, snapshot)
     assert items is not None
     item_tuple = items if isinstance(items, tuple) else (items,)
+    bar = item_tuple[0]
+    pen = bar.opts['pen']
+    assert pen.widthF() == pytest.approx(10.0)
+    assert pen.color().alphaF() == pytest.approx(0.68, abs=0.02)
     label_item = item_tuple[1]
     text = label_item.toPlainText() if hasattr(label_item, 'toPlainText') else label_item.text
     assert 'Drying' in text, f'phase label missing from text: {text!r}'

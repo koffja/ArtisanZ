@@ -101,7 +101,7 @@ class PyQtGraphPlotTarget:
             self._cursor_callback(float(time), float(temperature), None if ror is None else float(ror))
 
     def enhance_curves(self) -> int:
-        """Apply shadow pens to all temperature curves. Returns count enhanced."""
+        """Apply shadow pens to foreground curves. Returns count enhanced."""
         return apply_shadow_pens(self.temperature_plot, self._pyqtgraph)
 
     def init_overlays(self) -> None:

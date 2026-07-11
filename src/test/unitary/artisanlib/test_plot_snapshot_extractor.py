@@ -199,6 +199,15 @@ def test_build_roast_plot_snapshot_extracts_main_curves_and_axes() -> None:
     assert [curve.name for curve in snapshot.visible_curves()] == ['BT', 'ET', 'Delta BT']
 
 
+def test_default_background_opacity_is_visible() -> None:
+    assert pytest.approx(0.35) == plot_snapshot_extractor.DEFAULT_BACKGROUND_OPACITY
+    assert plot_snapshot_extractor._opacity(
+        SimpleNamespace(),
+        'backgroundalpha',
+        plot_snapshot_extractor.DEFAULT_BACKGROUND_OPACITY,
+    ) == pytest.approx(0.35)
+
+
 def test_build_roast_plot_snapshot_preserves_curve_data_and_visibility() -> None:
     snapshot = build_roast_plot_snapshot(FakeCanvas())
     curves = {curve.name: curve for curve in snapshot.curves}
