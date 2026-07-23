@@ -33,6 +33,7 @@ def test_curves_dlg_has_phase_style_tab() -> None:
     assert dlg.TabWidget.count() >= 7
     assert 'Phase' in dlg.TabWidget.tabText(6) or 'Style' in dlg.TabWidget.tabText(6)
     tab = dlg.TabWidget.widget(6)
+    assert tab.property('modernDialogTabPage') is True
     for name in (
         'rect1ColorButton',
         'rect2ColorButton',

@@ -897,7 +897,11 @@ class CurvesDlg(ArtisanDialog):
         curve1Layout.addWidget(self.equvdevicebutton,1,2)
         curve1Layout.addWidget(color2Button,1,3)
         curve1Layout.addWidget(self.equc2colorlabel,1,4)
-        plot1GroupBox = QGroupBox()
+        # This is an untitled helper container, not a user-facing section.
+        # Keep it unframed so the Plotter tab does not nest a blank card inside
+        # the dialog surface.
+        plot1GroupBox = QWidget()
+        plot1GroupBox.setProperty('modernDialogHelperSurface', True)
         plot1GroupBox.setLayout(curve1Layout)
         curveLayout = QGridLayout()
         curveLayout.setSpacing(5)
@@ -1462,7 +1466,7 @@ class CurvesDlg(ArtisanDialog):
         C4Widget = QWidget()
         C4Widget.setLayout(tab4Layout)
         tab4Layout.setContentsMargins(5, 5, 5, 0)
-        C3Widget.setContentsMargins(0, 0, 0, 0)
+        C4Widget.setContentsMargins(0, 0, 0, 0)
         self.TabWidget.addTab(C4Widget,QApplication.translate('Tab','Analyze'))
         # UI
         C5Widget = QWidget()
@@ -1470,7 +1474,7 @@ class CurvesDlg(ArtisanDialog):
         tab5Layout.setContentsMargins(5,5,5,0)
         C5Widget.setContentsMargins(0,0,0,0)
         self.TabWidget.addTab(C5Widget,QApplication.translate('Tab','UI'))
-        self._add_phase_style_tab()
+        phase_style_page = self._add_phase_style_tab()
         buttonsLayout = QHBoxLayout()
         buttonsLayout.addStretch()
         buttonsLayout.addWidget(self.dialogbuttons)
@@ -1483,8 +1487,11 @@ class CurvesDlg(ArtisanDialog):
         self.setLayout(Slayout)
 
         self.TabWidget.setContentsMargins(0,0,0,0)
-        Slayout.setContentsMargins(5,15,5,5)
-        Slayout.setSpacing(5)
+        self.TabWidget.setProperty('modernDialogTabStrip', True)
+        for tab_page in (C0Widget, C1Widget, C2Widget, C3Widget, C4Widget, C5Widget, phase_style_page):
+            tab_page.setProperty('modernDialogTabPage', True)
+        Slayout.setContentsMargins(12, 14, 12, 10)
+        Slayout.setSpacing(10)
 
         self.updatePlotterleftlabels()
 
@@ -1514,7 +1521,7 @@ class CurvesDlg(ArtisanDialog):
     def setActiveTab(self) -> None:
         self.TabWidget.setCurrentIndex(self.activeTab)
 
-    def _add_phase_style_tab(self) -> None:
+    def _add_phase_style_tab(self) -> QWidget:
         settings = QSettings()
         self.palette = self.aw.qmc.palette
 
@@ -1595,7 +1602,9 @@ class CurvesDlg(ArtisanDialog):
         layout.addStretch()
         layout.setContentsMargins(5, 5, 5, 0)
         tab.setLayout(layout)
+        tab.setProperty('modernDialogTabPage', True)
         self.TabWidget.addTab(tab, QApplication.translate('Curves', 'Phase & Style'))
+        return tab
 
     def _load_phase_style_settings(self) -> None:
         settings = QSettings()

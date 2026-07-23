@@ -1889,12 +1889,12 @@ END</source>
     <message>
         <location filename="../artisanlib/axis.py" line="242" />
         <source>Minutes</source>
-        <translation type="unfinished" />
+        <translation>分钟</translation>
     </message>
     <message>
         <location filename="../artisanlib/axis.py" line="243" />
         <source>Seconds</source>
-        <translation type="unfinished" />
+        <translation>秒</translation>
     </message>
     <message>
         <location filename="../artisanlib/axis.py" line="300" />
@@ -3941,62 +3941,62 @@ END</source>
         <location filename="../artisanlib/curves.py" line="1598" />
         <location filename="../artisanlib/curves.py" line="1522" />
         <source>Phase &amp; Style</source>
-        <translation type="unfinished" />
+        <translation>阶段与样式</translation>
     </message>
     <message>
         <location filename="../artisanlib/curves.py" line="1547" />
         <source>BT temperature gradient</source>
-        <translation type="unfinished" />
+        <translation>BT 温度渐变</translation>
     </message>
     <message>
         <location filename="../artisanlib/curves.py" line="1572" />
         <source>Show phase names on progress bars</source>
-        <translation type="unfinished" />
+        <translation>在进度条上显示阶段名称</translation>
     </message>
     <message>
         <location filename="../artisanlib/curves.py" line="1577" />
         <source>Restore Defaults</source>
-        <translation type="unfinished">恢复默认</translation>
+        <translation>恢复默认</translation>
     </message>
     <message>
         <location filename="../artisanlib/curves.py" line="1582" />
         <source>Drying</source>
-        <translation type="unfinished">脱水</translation>
+        <translation>脱水</translation>
     </message>
     <message>
         <location filename="../artisanlib/curves.py" line="1583" />
         <source>Maillard</source>
-        <translation type="unfinished">梅纳反应</translation>
+        <translation>梅纳反应</translation>
     </message>
     <message>
         <location filename="../artisanlib/curves.py" line="1584" />
         <source>Development</source>
-        <translation type="unfinished" />
+        <translation>发展期</translation>
     </message>
     <message>
         <location filename="../artisanlib/curves.py" line="1585" />
         <source>Phase band opacity</source>
-        <translation type="unfinished" />
+        <translation>阶段色带不透明度</translation>
     </message>
     <message>
         <location filename="../artisanlib/curves.py" line="1586" />
         <source>BT gradient</source>
-        <translation type="unfinished" />
+        <translation>BT 渐变</translation>
     </message>
     <message>
         <location filename="../artisanlib/curves.py" line="1587" />
         <source>Background alpha</source>
-        <translation type="unfinished" />
+        <translation>背景透明度</translation>
     </message>
     <message>
         <location filename="../artisanlib/curves.py" line="1588" />
         <source>Background style</source>
-        <translation type="unfinished" />
+        <translation>背景样式</translation>
     </message>
     <message>
         <location filename="../artisanlib/curves.py" line="1589" />
         <source>Phase labels</source>
-        <translation type="unfinished" />
+        <translation>阶段标签</translation>
     </message>
 </context><context>
     <name>Dialog</name>

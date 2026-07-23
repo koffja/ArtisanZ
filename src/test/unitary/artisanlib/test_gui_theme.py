@@ -71,6 +71,9 @@ def test_modern_application_stylesheet_contains_core_surfaces() -> None:
     assert 'QPushButton[modernDialogPrimaryButton="true"]' in stylesheet
     assert 'QCheckBox::indicator:checked' in stylesheet
     assert 'QDialog[modernDialogRole="axes"] QTabBar::tab:selected' in stylesheet
+    assert 'QDialog[modernDialogRole="axes"] QGroupBox[modernDialogPanel="true"]' in stylesheet
+    assert 'QDialog[modernDialogRole="curves"] QWidget[modernDialogTabPage="true"]' in stylesheet
+    assert 'QDialog[modernDialogRole="curves"] QWidget[modernDialogHelperSurface="true"]' in stylesheet
     assert 'QDialog[modernDialogRole="events"] QTabBar::tab:selected' in stylesheet
     assert 'QDialog[modernDialogRole="alarms"] QTabBar::tab:selected' in stylesheet
     assert 'QDialog[modernDialogRole="devices"] QTabBar::tab:selected' in stylesheet
@@ -344,6 +347,12 @@ def test_axes_time_step_combo_expands_for_flat_theme(qapp: QApplication) -> None
         assert combo.property('modernExpandValueControl') is True
         assert combo.width() >= combo.fontMetrics().horizontalAdvance('2 minutes') + 40
         assert combo.maximumWidth() > combo.minimumWidth()
+        sections = {
+            str(section.property('modernDialogSection'))
+            for section in dialog.findChildren(QGroupBox)
+        }
+        assert {'time-axis', 'temperature-axis', 'delta-axis', 'legend', 'grid'} <= sections
+        assert dialog.layout().spacing() >= 14
     finally:
         dialog.close()
         qapp.setStyleSheet(original_stylesheet)

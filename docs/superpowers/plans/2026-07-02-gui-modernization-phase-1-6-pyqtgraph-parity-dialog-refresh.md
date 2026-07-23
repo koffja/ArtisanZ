@@ -6,7 +6,7 @@
 
 **Architecture:** Keep the existing PyQt6 Widgets runtime. Improve PyQtGraph through the existing snapshot/widget adapter boundary, not by mutating Matplotlib state from the new renderer. Improve dialogs first through theme tokens and safe selectors, then by targeted per-dialog layout work.
 
-> **2026-07-24 implementation update:** Extra-device background curve extraction, fixed-width dialog control hardening, nested-layout margin preservation, and roast-analysis mask/statistics/guide parity are implemented and independently reviewed. Real themed screenshots now cover long Chinese LCD labels and Config > Axes/Curves. The remaining `[ ]` items are: (1) draggable/editable analysis result boxes, (2) charge-target annotation text/callout parity (handled by Task Group C of `docs/superpowers/plans/2026-07-04-phase-1-6-closure-workspace-switcher-charge-target-annotation.md`), (3) projection line BT/RoR visual differentiation, (4) anti-nested-card enforcement rule, (5) Config > Axes/Curves layout-internals restructuring.
+> **2026-07-24 implementation update:** Extra-device background curve extraction, fixed-width dialog control hardening, nested-layout margin preservation, roast-analysis mask/statistics/guide parity, and snapshot-owned phase/event overlay parity are implemented and independently reviewed. Real themed screenshots now cover long Chinese LCD labels and Config > Axes/Curves. The remaining follow-up is: draggable/editable analysis result boxes, charge-target rounded-corner/deeper interaction polish, drag/edit event interactions, and report/export parity remains Matplotlib-backed by design.
 
 ---
 
@@ -98,10 +98,10 @@
 
 - [x] Apply scoped modern dialog roles to Axes, Curves, Events, and Alarms.
 - [x] Add Morandi group-box, tab, table, header, input, and button styling under `modernDialog=true`.
-- [ ] Modernize Config > Axes layout internals beyond scoped styling because it is now part of the PyQtGraph renderer controls.
-- [ ] Modernize Config > Curves layout internals beyond scoped styling because curve visibility/color controls determine PyQtGraph parity.
+- [x] Modernize Config > Axes layout internals beyond scoped styling because it is now part of the PyQtGraph renderer controls. Control rows now use aligned grid layouts, stable section properties, and explicit inter-column spacing.
+- [x] Modernize Config > Curves layout internals beyond scoped styling because curve visibility/color controls determine PyQtGraph parity. Untitled helper cards are unframed, all seven tab pages have stable outer spacing and the same modern tab-page marker, and semantic group sections use the flat Axes/Curves role treatment. The Analyze-page margin typo was also corrected.
 - [x] Modernize Devices and Roasting Properties (scoped visual role layer). Closed by Phase 1.12 dense-dialog polish: `modernDialogRole="devices"` `src/artisanlib/devices.py:54`, `modernDialogRole="roast_properties"` `src/artisanlib/roast_properties.py:703`, dense table/header QSS rules at `src/artisanlib/gui_theme.py:512-526`. Per-panel structural simplification remains future work per the Phase 1.12 plan's explicit non-goals.
-- [ ] Avoid nested cards and heavy gray widget wells.
+- [x] Avoid nested cards and heavy gray widget wells. Axes/Curves semantic sections now use transparent surfaces and hairline separators; the untitled Plotter helper container is a plain widget.
 - [x] Preserve all current settings persistence, validation, shortcuts, and translations. Non-regression verified: `QSettings` calls intact in `axis.py:487,969`, `curves.py` (8 occurrences), `devices.py` (14 occurrences); `QIntValidator`/`QRegularExpressionValidator` chains intact; `QApplication.translate` used throughout. Phase 1.11 and 1.12 plans explicitly list preservation as scope.
 
 ## Verification

@@ -538,6 +538,35 @@ def modern_application_stylesheet(theme: ModernTheme | None = None) -> str:
         QDialog[modernDialogRole="curves"] QTabBar::tab:selected {{
             color: {t.primary};
         }}
+        QDialog[modernDialogRole="axes"] QGroupBox[modernDialogPanel="true"],
+        QDialog[modernDialogRole="curves"] QGroupBox[modernDialogPanel="true"] {{
+            background-color: transparent;
+            border: none;
+            border-top: 1px solid {t.border};
+            border-radius: 0;
+            margin-top: 15px;
+            padding: 14px 4px 4px 4px;
+        }}
+        QDialog[modernDialogRole="axes"] QGroupBox[modernDialogPanel="true"]::title,
+        QDialog[modernDialogRole="curves"] QGroupBox[modernDialogPanel="true"]::title {{
+            left: 0;
+            padding: 0 6px 0 0;
+            background-color: {t.window};
+            color: {t.text_muted};
+            font-weight: 650;
+        }}
+        QDialog[modernDialogRole="axes"] QFrame[modernDialogDivider="true"],
+        QDialog[modernDialogRole="curves"] QFrame[modernDialogDivider="true"] {{
+            background-color: {t.border};
+            border: none;
+            max-height: 1px;
+        }}
+        QDialog[modernDialogRole="curves"] QWidget[modernDialogTabPage="true"] {{
+            background-color: transparent;
+        }}
+        QDialog[modernDialogRole="curves"] QWidget[modernDialogHelperSurface="true"] {{
+            background-color: transparent;
+        }}
         QDialog[modernDialogRole="events"] QTabBar::tab:selected {{
             color: #3C7A88;
         }}

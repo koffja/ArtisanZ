@@ -28,6 +28,15 @@ Avoid glossy gradients, native 3D bevels, heavy shadows, and saturated single-hu
 
 Implementation anchor: `artisanlib.gui_theme.apply_modern_dialog_polish()` and `modern_application_stylesheet()`.
 
+## Dialog Layout
+
+- Axes controls use aligned control rows: limits, major-tick step, label mode, and record-start options must not depend on manual stretch spacing.
+- Axes and Curves sections use flat section rules and transparent surfaces. Do not add a blank or untitled rounded card around a helper layout.
+- Curves tab pages keep stable outer padding and spacing. Group boxes may provide semantic labels, but must not read as stacked gray cards.
+- Layout refactors must preserve widget object names, validators, signals, QSettings persistence, and translated labels.
+
+Implementation evidence: `/tmp/axes-layout-modern-themed.png`, `/tmp/curves-layout-modern-themed.png`, `/tmp/curves-phase-style-modern-themed.png`; source anchors `artisanlib.axis.WindowsDlg` and `artisanlib.curves.CurvesDlg`. The Curves dialog has seven consistently marked tab pages, including Phase & Style.
+
 ## Graph Grid
 
 - Grid visibility follows the existing Axes dialog settings: `time_grid` and `temp_grid`.
