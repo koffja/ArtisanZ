@@ -22069,6 +22069,7 @@ class ApplicationWindow(QMainWindow):
         while self.qmc.flagsamplingthreadrunning:
             QApplication.processEvents()
             libtime.sleep(.01)
+        self.qmc.shutdown_processed_frame_worker()
         if self.ser.R1 is not None:
             self.ser.R1 = None
         try:

@@ -41,6 +41,7 @@ from psutil._common import bytes2human # pyright:ignore[reportPrivateImportUsage
 from babel.units import get_unit_name
 
 from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 from typing import override, Final, Literal, Any, cast, TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -132,6 +133,11 @@ from artisanlib.plot_renderer_settings import (
     RendererSelection,
     select_renderer,
 )
+from artisanlib.processed_frame_worker import (
+    ProcessedFrameRequest,
+    ProcessedFrameRequestChannel,
+    ProcessedFrameWorker,
+)
 from artisanlib.sample_processing import (
     build_live_processed_sample_frame,
     connected_curve_point,
@@ -155,6 +161,7 @@ from artisanlib.sample_processing import (
     pid_sv_update_target,
     PidSvUpdateTarget,
     post_sample_update_decisions,
+    ProcessedSampleFrame,
     rate_of_rise_per_minute,
     smoothed_rate_of_change_value,
     smoothed_temperature_value,
@@ -344,6 +351,27 @@ class MplCanvas(FigureCanvas):
                 self.lazyredraw_on_resize_timer.start(10)
 
 
+@dataclass(slots=True)
+class _ProcessedFrameContinuation:
+    """GUI-owned state retained while the immutable frame is computed."""
+
+    generation: int
+    sequence: int
+    request: ProcessedFrameRequest
+    local_flagstart: bool
+    sample_timex: list[float]
+    sample_temp1: list[float]
+    sample_temp2: list[float]
+    sample_delta1: list[float | None]
+    sample_delta2: list[float | None]
+    sample_extratemp1: list[Any]
+    sample_extratemp2: list[Any]
+    length_of_qmc_timex: int
+    tx: float
+    live_frame_curves: list[LiveCurveData]
+    profile_lock_held: bool = True
+
+
 # NOTE: to have pylint to verify proper __slot__ definitions using pylint one has to remove the super class FigureCanvas here temporarily
 #   as this does not has __slot__ definitions and thus __dict__ is contained which suppresses the warnings
 class tgraphcanvas(QObject):
@@ -480,7 +508,7 @@ class tgraphcanvas(QObject):
         'l_eventtype1special_backannos', 'l_eventtype2special_backannos', 'l_eventtype3special_backannos', 'l_eventtype4special_backannos',
         'l_eventtype4annos', 'l_annotations', 'l_background_annotations', 'l_annotations_dict', 'l_annotations_pos_dict', 'l_event_flags_dict',
         'l_eventtype1backannos', 'l_eventtype2backannos', 'l_eventtype3backannos', 'l_eventtype4backannos',
-        'l_event_flags_pos_dict', 'ai', 'timeclock', 'threadserver', 'designerflag', 'designerconnections', 'mousepress', 'indexpoint',
+        'l_event_flags_pos_dict', 'ai', 'timeclock', 'threadserver', '_processed_frame_generation', 'designerflag', 'designerconnections', 'mousepress', 'indexpoint',
         'workingline', 'eventtimecopy', 'etypescopy', 'specialeventsStringscopy', 'specialeventsvaluecopy', 'specialeventstypecopy', 'currentx', 'currenty',
         'designertimeinit', 'BTsplinedegree', 'ETsplinedegree', 'reproducedesigner', 'designertemp1init', 'designertemp2init', 'ax_background_designer', 'designer_timez', 'time_step_size',
         '_designer_orange_mark', '_designer_orange_mark_shown', '_designer_blue_mark', '_designer_blue_mark_shown', 'l_temp1_markers', 'l_temp2_markers',
@@ -2306,6 +2334,30 @@ class tgraphcanvas(QObject):
         ############################  Thread Server #################################################
         #server that spawns a thread dynamically to sample temperature (press button ON to make a thread press OFF button to kill it)
         self.threadserver:Athreadserver = Athreadserver(self.aw)
+
+        # Pure frame decisions run on a dedicated Qt event-loop thread.
+        self._processed_frame_worker_thread = QThread(self)
+        self._processed_frame_worker = ProcessedFrameWorker()
+        self._processed_frame_worker.moveToThread(self._processed_frame_worker_thread)
+        self._processed_frame_request_channel = ProcessedFrameRequestChannel(self)
+        self._processed_frame_request_channel.request.connect(
+            self._processed_frame_worker.process,
+            type=Qt.ConnectionType.QueuedConnection,
+        )
+        self._processed_frame_worker.result_ready.connect(
+            self._processed_frame_result_ready,
+            type=Qt.ConnectionType.QueuedConnection,
+        )
+        self._processed_frame_worker.error.connect(
+            self._processed_frame_error,
+            type=Qt.ConnectionType.QueuedConnection,
+        )
+        self._processed_frame_worker_thread.finished.connect(self._processed_frame_worker.deleteLater)
+        self._processed_frame_pending: _ProcessedFrameContinuation | None = None
+        self._processed_frame_generation = 0
+        self._processed_frame_sequence = 0
+        self._processed_frame_worker_shutdown = False
+        self._processed_frame_worker_thread.start()
 
 
         ##########################     Designer variables       #################################
@@ -4763,11 +4815,398 @@ class tgraphcanvas(QObject):
             _log.exception(e)
             return 0.
 
+    def _submit_processed_frame(self, continuation: _ProcessedFrameContinuation) -> bool:
+        """Queue one frame request; return False when the boundary is unavailable."""
+        if self._processed_frame_worker_shutdown or not self._processed_frame_worker_thread.isRunning():
+            return False
+        if self._processed_frame_pending is not None:
+            _log.debug('processed frame worker is busy; skipping duplicate request')
+            gui_perf_count('canvas.sample_processing.worker_busy')
+            return False
+        self._processed_frame_pending = continuation
+        self._processed_frame_sequence = continuation.sequence
+        self._processed_frame_request_channel.request.emit(
+            continuation.sequence,
+            continuation.request,
+        )
+        gui_perf_count('canvas.sample_processing.worker_submit')
+        return True
+
+    def _invalidate_processed_frame_work(self) -> None:
+        """Cancel a queued frame before roast state or recording mode changes."""
+        self._processed_frame_generation += 1
+        pending = self._processed_frame_pending
+        self._processed_frame_pending = None
+        if pending is not None and pending.profile_lock_held and self.profileDataSemaphore.available() < 1:
+            self.profileDataSemaphore.release(1)
+        if pending is not None:
+            gui_perf_count('canvas.sample_processing.worker_cancel')
+
+    def _apply_processed_frame(
+            self,
+            processed_frame: ProcessedSampleFrame,
+            continuation: _ProcessedFrameContinuation,
+            ) -> None:
+        """Consume a processed frame while retaining GUI-thread ownership."""
+        local_flagstart = continuation.local_flagstart
+        sample_timex = continuation.sample_timex
+        sample_temp1 = continuation.sample_temp1
+        sample_temp2 = continuation.sample_temp2
+        sample_delta1 = continuation.sample_delta1
+        sample_delta2 = continuation.sample_delta2
+        sample_extratemp1 = continuation.sample_extratemp1
+        sample_extratemp2 = continuation.sample_extratemp2
+        length_of_qmc_timex = continuation.length_of_qmc_timex
+        tx = continuation.tx
+        live_frame_curves = continuation.live_frame_curves
+
+        rateofchange1plot = processed_frame.displayed_delta_et
+        rateofchange2plot = processed_frame.displayed_delta_bt
+
+        # Append the display-clamped RoR values only after the worker result is accepted.
+        sample_delta1.append(rateofchange1plot)
+        sample_delta2.append(rateofchange2plot)
+
+        if local_flagstart:
+            if self.DeltaETflag:
+                delta_et_data = windowed_curve_data(
+                    sample_timex,
+                    sample_delta1,
+                    processed_frame.delta_et_window,
+                )
+                live_frame_curves.append(
+                    LiveCurveData(
+                        name='Delta ET',
+                        x=delta_et_data.times,
+                        y=delta_et_data.values,
+                        y_axis='ror',
+                        color=self.palette['deltaet'],
+                        line_style=self.ETdeltalinestyle,
+                        line_width=self.ETdeltalinewidth,
+                    ),
+                )
+            if self.DeltaBTflag:
+                delta_bt_data = windowed_curve_data(
+                    sample_timex,
+                    sample_delta2,
+                    processed_frame.delta_bt_window,
+                )
+                live_frame_curves.append(
+                    LiveCurveData(
+                        name='Delta BT',
+                        x=delta_bt_data.times,
+                        y=delta_bt_data.values,
+                        y_axis='ror',
+                        color=self.palette['deltabt'],
+                        line_style=self.BTdeltalinestyle,
+                        line_width=self.BTdeltalinewidth,
+                    ),
+                )
+            if self.ETprojectFlag or self.BTprojectFlag:
+                self.updateProjection()
+                if self.BTprojectFlag and self.BTcurve:
+                    live_frame_curves.append(
+                        LiveCurveData(
+                            name='BT projection',
+                            x=tuple(self.BTprojection_tx),
+                            y=tuple(self.BTprojection_temp),
+                            color=self.palette['bt'],
+                            line_style='-.',
+                            line_width=4.0,
+                        ),
+                    )
+                if self.ETprojectFlag and self.ETcurve:
+                    live_frame_curves.append(
+                        LiveCurveData(
+                            name='ET projection',
+                            x=tuple(self.ETprojection_tx),
+                            y=tuple(self.ETprojection_temp),
+                            color=self.palette['et'],
+                            line_style='-.',
+                            line_width=4.0,
+                        ),
+                    )
+                if self.projectDeltaFlag and self.BTprojectFlag and self.DeltaBTflag:
+                    live_frame_curves.append(
+                        LiveCurveData(
+                            name='Delta BT projection',
+                            x=tuple(self.DeltaBTprojection_tx),
+                            y=tuple(self.DeltaBTprojection_temp),
+                            y_axis='ror',
+                            color=self.palette['deltabt'],
+                            line_style='-.',
+                            line_width=4.0,
+                        ),
+                    )
+                if self.projectDeltaFlag and self.ETprojectFlag and self.DeltaETflag:
+                    live_frame_curves.append(
+                        LiveCurveData(
+                            name='Delta ET projection',
+                            x=tuple(self.DeltaETprojection_tx),
+                            y=tuple(self.DeltaETprojection_temp),
+                            y_axis='ror',
+                            color=self.palette['deltaet'],
+                            line_style='-.',
+                            line_width=4.0,
+                        ),
+                    )
+            if live_frame_curves:
+                self.apply_live_plot_frame(LivePlotFrame(curves=tuple(live_frame_curves)))
+
+            extended_end = processed_frame.live_x_axis_extension_end
+            if extended_end is not None:
+                self.endofx = extended_end
+                self.xaxistosm()
+
+            if processed_frame.events.charge_candidate:
+                b = self.aw.BTbreak(length_of_qmc_timex - 1,event='CHARGE')
+                if b > 0:
+                    self.autoChargeIdx = length_of_qmc_timex - b
+                    self.markChargeSignal.emit(False)
+            elif processed_frame.events.turning_point_timeout_index is not None:
+                self.TPalarmtimeindex = processed_frame.events.turning_point_timeout_index
+            elif processed_frame.events.turning_point_check_candidate and self.checkTPalarmtime():
+                try:
+                    tp = self.aw.findTP()
+                    if turning_point_temperature_is_valid(self.mode, sample_temp2[tp]):
+                        self.TPalarmtimeindex = tp
+                        self.markTPSignal.emit()
+                except Exception as e: # pylint: disable=broad-except
+                    _log.exception(e)
+
+            if processed_frame.events.drop_candidate:
+                b = self.aw.BTbreak(length_of_qmc_timex - 1,event='DROP')
+                if b > 0:
+                    self.autoDropIdx = length_of_qmc_timex - b
+                    self.markDropSignal.emit(False)
+            phase_events = phase_event_candidates_after_turning_point(
+                self.autoDRYflag,
+                self.autoDRYenabled,
+                self.autoFCsFlag,
+                self.autoFCsenabled,
+                self.TPalarmtimeindex,
+                self.timeindex[0],
+                self.timeindex[1],
+                self.timeindex[2],
+                self.timeindex[3],
+                sample_temp2[-1],
+                self.phases[1],
+                self.phases[2],
+            )
+            if phase_events.dry_candidate:
+                self.markDRYSignal.emit(False)
+            if phase_events.fcs_candidate:
+                self.markFCsSignal.emit(False)
+
+        try:
+            self.aw.process_active_quantifiers()
+        except Exception as e: # pylint: disable=broad-except
+            _log.exception(e)
+
+        if self.flagon:
+            pid_update_target = pid_sv_update_target(
+                sampling=True,
+                device=self.device,
+                fuji_follow_background=self.aw.fujipid.followBackground,
+                recording=self.flagstart,
+            )
+            if pid_update_target is None:
+                pid_update_target = pid_sv_update_target(
+                    sampling=True,
+                    device=self.device,
+                    fuji_follow_background=False,
+                    recording=False,
+                    pid_active=self.aw.pidcontrol.pidActive,
+                    sv_mode=self.aw.pidcontrol.svMode,
+                )
+            if pid_update_target is PidSvUpdateTarget.FUJI:
+                sv = self.aw.fujipid.calcSV(tx)
+                sv_update = pid_set_value_update(sv, self.aw.fujipid.sv)
+                if sv_update is not None:
+                    self.aw.fujipid.setsv(sv_update,silent=True)
+            elif pid_update_target is PidSvUpdateTarget.SOFTWARE:
+                sv = self.aw.pidcontrol.calcSV(tx)
+                sv_update = pid_set_value_update(sv, self.aw.pidcontrol.sv)
+                if sv_update is not None:
+                    self.aw.pidcontrol.setSV(sv_update,init=False)
+
+        post_update_decisions = post_sample_update_decisions(
+            local_flagstart,
+            self.AUCguideFlag,
+            self.timeindex[0],
+            len(sample_timex),
+        )
+        if post_update_decisions.update_auc:
+            try:
+                self.aw.updateAUC()
+                if post_update_decisions.update_auc_guide:
+                    self.aw.updateAUCguide()
+            except Exception as e: # pylint: disable=broad-except
+                _log.exception(e)
+        if post_update_decisions.update_bbp_metrics:
+            try:
+                self.cacheforBbp(copyPrevRoast=True)
+            except Exception as e: # pylint: disable=broad-except
+                _log.exception(e)
+
+        if self.aw.ser.externaloutprogramFlag:
+            try:
+                background_lookup_time = external_program_background_lookup_time(
+                    self.background,
+                    self.timeindex[0],
+                    tx,
+                    sample_timex,
+                )
+                ETB = BTB = -1.0
+                if background_lookup_time is not None:
+                    j = self.backgroundtime2index(background_lookup_time)
+                    ETB = self.temp1B[j]
+                    BTB = self.temp2B[j]
+                self.aw.call_prog_with_args(external_program_output_command(
+                    self.aw.ser.externaloutprogram,
+                    sample_temp1[-1],
+                    sample_temp2[-1],
+                    ETB,
+                    BTB,
+                ))
+            except Exception as e: # pylint: disable=broad-except
+                _log.exception(e)
+
+        # Preserve the synchronous path's lossless alarm semantics. This lock is
+        # independent from profileDataSemaphore, so waiting here cannot block
+        # the queued worker result behind a GUI redraw.
+        self.alarmSemaphore.acquire(1)
+        alarm_lock_acquired = True
+        try:
+            alarm_triggers = evaluate_alarm_triggers(
+                self.alarmflag,
+                self.alarmstate,
+                self.alarmguard,
+                self.alarmnegguard,
+                self.alarmtime,
+                self.alarmoffset,
+                self.alarmsource,
+                self.alarmcond,
+                self.alarmtemperature,
+                local_flagstart,
+                self.timeindex,
+                self.TPalarmtimeindex,
+                self.timeclock.elapsed()/1000.,
+                sample_timex,
+                sample_delta1,
+                sample_delta2,
+                sample_temp1,
+                sample_temp2,
+                sample_extratemp1,
+                sample_extratemp2,
+                len(self.extradevices),
+                len(self.timex) - 1,
+            )
+            for alarm_trigger in alarm_triggers:
+                i = alarm_trigger.alarm_index
+                self.alarmstate[i] = alarm_trigger.state_index
+                alarm_beep = len(self.alarmbeep) > i and self.alarmbeep[i]
+                self.processAlarmSignal.emit(i+1,alarm_beep,self.alarmaction[i],self.alarmstrings[i])
+                _log.debug('alarm %s fired',i+1)
+        except Exception as e: # pylint: disable=broad-except
+            _log.exception(e)
+        finally:
+            if alarm_lock_acquired and self.alarmSemaphore.available() < 1:
+                self.alarmSemaphore.release(1)
+
+    @pyqtSlot(int, object)
+    def _processed_frame_result_ready(self, sequence: int, result: object) -> None:
+        """Apply a worker result in the GUI thread, rejecting stale responses."""
+        continuation = self._processed_frame_pending
+        if (
+                continuation is None or
+                continuation.sequence != sequence or
+                continuation.generation != self._processed_frame_generation or
+                self._processed_frame_worker_shutdown):
+            _log.warning('ignoring stale processed frame result %s', sequence)
+            gui_perf_count('canvas.sample_processing.worker_stale_result')
+            return
+        if not self.profileDataSemaphore.tryAcquire(1, 50):
+            QTimer.singleShot(10, lambda: self._processed_frame_result_ready(sequence, result))
+            gui_perf_count('canvas.sample_processing.worker_result_lock_retry')
+            return
+        self._processed_frame_pending = None
+        if not isinstance(result, ProcessedSampleFrame):
+            _log.error('invalid processed frame result %s', sequence)
+            self._finalize_sample_processing(continuation.local_flagstart, release_profile_lock=True)
+            return
+        try:
+            self._apply_processed_frame(result, continuation)
+        except Exception as e: # pylint: disable=broad-except
+            _log.exception(e)
+            _, _, exc_tb = sys.exc_info()
+            self.adderror((QApplication.translate('Error Message','Exception:') + ' sample() {0}').format(str(e)),getattr(exc_tb, 'tb_lineno', '?'))
+        finally:
+            self._finalize_sample_processing(continuation.local_flagstart)
+
+    @pyqtSlot(int, str)
+    def _processed_frame_error(self, sequence: int, message: str) -> None:
+        """Finish a failed worker request through a guarded GUI fallback."""
+        continuation = self._processed_frame_pending
+        if (
+                continuation is None or
+                continuation.sequence != sequence or
+                continuation.generation != self._processed_frame_generation or
+                self._processed_frame_worker_shutdown):
+            _log.warning('ignoring stale processed frame error %s', sequence)
+            return
+        if not self.profileDataSemaphore.tryAcquire(1, 50):
+            QTimer.singleShot(10, lambda: self._processed_frame_error(sequence, message))
+            gui_perf_count('canvas.sample_processing.worker_error_lock_retry')
+            return
+        self._processed_frame_pending = None
+        _log.error('processed frame worker failed: %s', message)
+        try:
+            fallback = build_live_processed_sample_frame(**continuation.request.as_kwargs())
+            self._apply_processed_frame(fallback, continuation)
+        except Exception as e: # pylint: disable=broad-except
+            _log.exception(e)
+            _, _, exc_tb = sys.exc_info()
+            self.adderror((QApplication.translate('Error Message','Exception:') + ' sample() {0}').format(str(e)),getattr(exc_tb, 'tb_lineno', '?'))
+        finally:
+            self._finalize_sample_processing(continuation.local_flagstart)
+
+    def shutdown_processed_frame_worker(self) -> None:
+        """Stop the frame worker after sampling has stopped."""
+        if self._processed_frame_worker_shutdown:
+            return
+        self._invalidate_processed_frame_work()
+        self._processed_frame_worker_shutdown = True
+        self._processed_frame_worker_thread.quit()
+        if not self._processed_frame_worker_thread.wait(2000):
+            _log.error('processed frame worker did not stop within timeout; waiting for safe shutdown')
+            self._processed_frame_worker_thread.wait()
+
+    def _finalize_sample_processing(self, local_flagstart: bool, release_profile_lock: bool = True) -> None:
+        """Run the common GUI-thread cleanup exactly once per sample transaction."""
+        if release_profile_lock and self.profileDataSemaphore.available() < 1:
+            self.profileDataSemaphore.release(1)
+        try:
+            if local_flagstart and self.backgroundprofile is not None and (self.timeindex[0] > -1 or self.timeindexB[0] < 0):
+                if self.backgroundReproduce or self.backgroundPlaybackEvents:
+                    self.playbackevent()
+                if self.backgroundPlaybackDROP:
+                    self.playbackdrop()
+        except Exception as e: # pylint: disable=broad-except
+            _log.exception(e)
+            _, _, exc_tb = sys.exc_info()
+            self.adderror((QApplication.translate('Error Message','Exception:') + ' sample_processing() {0}').format(str(e)),getattr(exc_tb, 'tb_lineno', '?'))
+        self.updategraphicsSignal.emit()
+
     # sample devices at interval self.delay milliseconds.
     # we can assume within the processing of sample_processing() that flagon=True
     # NOTE: sample_processing is queued to the GUI thread by Athreadserver.createSampleThread().
     @gui_perf_tracked('canvas.sample_processing')
     def sample_processing(self, local_flagstart:bool, temp1_readings:list[float], temp2_readings:list[float], timex_readings:list[float]) -> None: # pyright: ignore [reportGeneralTypeIssues] # Code is too complex to analyze; reduce complexity by refactoring into subroutines or reducing conditional code paths
+        if self._processed_frame_pending is not None:
+            _log.debug('sample_processing(): processed frame continuation pending')
+            gui_perf_count('canvas.sample_processing.worker_pending_skip')
+            return
         ##### (try to) lock resources  #########
         wait_period = 200  # we try to catch a lock within the next 200ms
         if self.delay < 500:
@@ -4777,6 +5216,7 @@ class tgraphcanvas(QObject):
             _log.debug('sample_processing(): failed to get profileDataSemaphore lock')
             gui_perf_count('canvas.sample_processing.lock_skip')
         else:
+            processing_deferred = False
             try:
                 # duplicate system state flag flagstart locally and only refer to this copy within this function to make it behaving uniquely (either append or overwrite mode)
 
@@ -5166,7 +5606,7 @@ class tgraphcanvas(QObject):
                         sample_unfiltereddelta2.append(0.)
                         self.rateofchange1,self.rateofchange2,rateofchange1plot,rateofchange2plot = 0.,0.,0.,0.
 
-                    processed_frame = build_live_processed_sample_frame(
+                    processed_frame_request = ProcessedFrameRequest(
                         timestamp=tx,
                         sample_count=length_of_qmc_timex,
                         latest_et=t1_final,
@@ -5189,7 +5629,7 @@ class tgraphcanvas(QObject):
                         delta_bt_samples=self.deltaBTsamples,
                         fix_max_time=self.fixmaxtime or not local_flagstart,
                         lock_time_x=self.locktimex,
-                        sample_times=sample_timex,
+                        sample_times=tuple(sample_timex),
                         start_of_x=self.startofx,
                         end_of_x=self.endofx,
                         tp_alarm_timeindex=self.TPalarmtimeindex if local_flagstart else None,
@@ -5202,298 +5642,30 @@ class tgraphcanvas(QObject):
                         auto_drop_enabled=self.autoDROPenabled,
                         mode=self.mode,
                     )
-                    rateofchange1plot = processed_frame.displayed_delta_et
-                    rateofchange2plot = processed_frame.displayed_delta_bt
-
-                    # append new data to the rateofchange arrays
-                    sample_delta1.append(rateofchange1plot)
-                    sample_delta2.append(rateofchange2plot)
-
-                    if local_flagstart:
-                        if self.DeltaETflag:
-                            delta_et_data = windowed_curve_data(
-                                sample_timex,
-                                sample_delta1,
-                                processed_frame.delta_et_window,
-                            )
-                            live_frame_curves.append(
-                                LiveCurveData(
-                                    name='Delta ET',
-                                    x=delta_et_data.times,
-                                    y=delta_et_data.values,
-                                    y_axis='ror',
-                                    color=self.palette['deltaet'],
-                                    line_style=self.ETdeltalinestyle,
-                                    line_width=self.ETdeltalinewidth,
-                                ),
-                            )
-                        if self.DeltaBTflag:
-                            delta_bt_data = windowed_curve_data(
-                                sample_timex,
-                                sample_delta2,
-                                processed_frame.delta_bt_window,
-                            )
-                            live_frame_curves.append(
-                                LiveCurveData(
-                                    name='Delta BT',
-                                    x=delta_bt_data.times,
-                                    y=delta_bt_data.values,
-                                    y_axis='ror',
-                                    color=self.palette['deltabt'],
-                                    line_style=self.BTdeltalinestyle,
-                                    line_width=self.BTdeltalinewidth,
-                                ),
-                            )
-                        if self.ETprojectFlag or self.BTprojectFlag:
-                            self.updateProjection()
-                            if self.BTprojectFlag and self.BTcurve:
-                                live_frame_curves.append(
-                                    LiveCurveData(
-                                        name='BT projection',
-                                        x=tuple(self.BTprojection_tx),
-                                        y=tuple(self.BTprojection_temp),
-                                        color=self.palette['bt'],
-                                        line_style='-.',
-                                        line_width=4.0,
-                                    ),
-                                )
-                            if self.ETprojectFlag and self.ETcurve:
-                                live_frame_curves.append(
-                                    LiveCurveData(
-                                        name='ET projection',
-                                        x=tuple(self.ETprojection_tx),
-                                        y=tuple(self.ETprojection_temp),
-                                        color=self.palette['et'],
-                                        line_style='-.',
-                                        line_width=4.0,
-                                    ),
-                                )
-                            if self.projectDeltaFlag and self.BTprojectFlag and self.DeltaBTflag:
-                                live_frame_curves.append(
-                                    LiveCurveData(
-                                        name='Delta BT projection',
-                                        x=tuple(self.DeltaBTprojection_tx),
-                                        y=tuple(self.DeltaBTprojection_temp),
-                                        y_axis='ror',
-                                        color=self.palette['deltabt'],
-                                        line_style='-.',
-                                        line_width=4.0,
-                                    ),
-                                )
-                            if self.projectDeltaFlag and self.ETprojectFlag and self.DeltaETflag:
-                                live_frame_curves.append(
-                                    LiveCurveData(
-                                        name='Delta ET projection',
-                                        x=tuple(self.DeltaETprojection_tx),
-                                        y=tuple(self.DeltaETprojection_temp),
-                                        y_axis='ror',
-                                        color=self.palette['deltaet'],
-                                        line_style='-.',
-                                        line_width=4.0,
-                                    ),
-                                )
-                        if live_frame_curves:
-                            self.apply_live_plot_frame(LivePlotFrame(curves=tuple(live_frame_curves)))
-
-                        #readjust xlimit of plot if needed
-                        extended_end = processed_frame.live_x_axis_extension_end
-                        if extended_end is not None:
-                            self.endofx = extended_end
-                            self.xaxistosm()
-                        # autodetect CHARGE event
-                        # only if BT > 77C/170F
-                        if processed_frame.events.charge_candidate:
-                            b = self.aw.BTbreak(length_of_qmc_timex - 1,event='CHARGE') # call BTbreak with last index
-                            if b > 0:
-                                # we found a BT break at the current index minus b
-                                self.autoChargeIdx = length_of_qmc_timex - b
-                                self.markChargeSignal.emit(False) # this queues an event which forces a realignment/redraw by resetting the cache ax_background and fires the CHARGE action
-
-                        elif processed_frame.events.turning_point_timeout_index is not None:
-                            try:
-                                # if 2:00min (self.TP_max_roasttime) into the roast and TPalarmtimeindex alarmindex not yet set,
-                                # we place the TPalarmtimeindex at the current index to enable in airoasters without TP the autoDRY and autoFCs functions and activate the TP Phases LCDs
-                                self.TPalarmtimeindex = processed_frame.events.turning_point_timeout_index
-                            except Exception as e: # pylint: disable=broad-except
-                                _log.exception(e)
-
-                        # check for TP event if already CHARGEed and not yet recognized (earliest in the next call to sample())
-                        elif processed_frame.events.turning_point_check_candidate and self.checkTPalarmtime():
-                            try:
-                                tp = self.aw.findTP()
-
-                                if turning_point_temperature_is_valid(self.mode, sample_temp2[tp]): # only mark TP if not an error value!
-                                    self.TPalarmtimeindex = tp
-                                    self.markTPSignal.emit() # queued
-                            except Exception as e: # pylint: disable=broad-except
-                                _log.exception(e)
-
-                        # autodetect DROP event
-                        # only if 7min into roast and BT>160C/320F
-                        if processed_frame.events.drop_candidate:
-                            b = self.aw.BTbreak(length_of_qmc_timex - 1,event='DROP') # call BTbreak with last index
-                            if b > 0:
-                                # we found a BT break at the current index minus b
-                                self.autoDropIdx = length_of_qmc_timex - b
-                                self.markDropSignal.emit(False)
-                        phase_events = phase_event_candidates_after_turning_point(
-                            self.autoDRYflag,
-                            self.autoDRYenabled,
-                            self.autoFCsFlag,
-                            self.autoFCsenabled,
-                            self.TPalarmtimeindex,
-                            self.timeindex[0],
-                            self.timeindex[1],
-                            self.timeindex[2],
-                            self.timeindex[3],
-                            sample_temp2[-1],
-                            self.phases[1],
-                            self.phases[2],
-                        )
-                        #check for autoDRY: # only after CHARGE and TP and before FCs if not yet set
-                        if phase_events.dry_candidate:
-                            # if DRY event not yet set check for BT exceeding Dry-max as specified in the phases dialog
-                            self.markDRYSignal.emit(False) # queued
-                        #check for autoFCs: # only after CHARGE and TP and before FCe if not yet set
-                        if phase_events.fcs_candidate:
-                            # after DRY (if FCs event not yet set) check for BT exceeding FC-min as specified in the phases dialog
-                            self.markFCsSignal.emit(False) # queued
-
-                    #process active quantifiers
-                    try:
-                        self.aw.process_active_quantifiers()
-                    except Exception as e: # pylint: disable=broad-except
-                        _log.exception(e)
-
-                    #update SV on Arduino/TC4, Hottop, or MODBUS if in Ramp/Soak or Background Follow mode and PID is active
-                    if self.flagon: # only during sampling
-                        pid_update_target = pid_sv_update_target(
-                            sampling=True,
-                            device=self.device,
-                            fuji_follow_background=self.aw.fujipid.followBackground,
-                            recording=self.flagstart,
-                        )
-                        if pid_update_target is None:
-                            pid_update_target = pid_sv_update_target(
-                                sampling=True,
-                                device=self.device,
-                                fuji_follow_background=False,
-                                recording=False,
-                                pid_active=self.aw.pidcontrol.pidActive,
-                                sv_mode=self.aw.pidcontrol.svMode,
-                            )
-                        #update SV on FujiPIDs
-                        if pid_update_target is PidSvUpdateTarget.FUJI: # no SV updates while not yet recording for Fuji PIDs
-                            # calculate actual SV
-                            sv = self.aw.fujipid.calcSV(tx)
-                            # update SV (if needed)
-                            sv_update = pid_set_value_update(sv, self.aw.fujipid.sv)
-                            if sv_update is not None:
-                                self.aw.fujipid.setsv(sv_update,silent=True) # this is called in updategraphics() within the GUI thread to move the sliders
-                        elif pid_update_target is PidSvUpdateTarget.SOFTWARE:
-                            # in BackgroundFollow mode we update the SV even if not active, just we do not move the SV slider
-                            # calculate actual SV
-                            sv = self.aw.pidcontrol.calcSV(tx)
-                            # update SV (if needed)
-                            sv_update = pid_set_value_update(sv, self.aw.pidcontrol.sv)
-                            if sv_update is not None:
-                                self.aw.pidcontrol.setSV(sv_update,init=False)
-
-                    post_update_decisions = post_sample_update_decisions(
-                        local_flagstart,
-                        self.AUCguideFlag,
-                        self.timeindex[0],
-                        len(sample_timex),
+                    continuation = _ProcessedFrameContinuation(
+                        generation=self._processed_frame_generation,
+                        sequence=self._processed_frame_sequence + 1,
+                        request=processed_frame_request,
+                        local_flagstart=local_flagstart,
+                        sample_timex=sample_timex,
+                        sample_temp1=sample_temp1,
+                        sample_temp2=sample_temp2,
+                        sample_delta1=sample_delta1,
+                        sample_delta2=sample_delta2,
+                        sample_extratemp1=sample_extratemp1,
+                        sample_extratemp2=sample_extratemp2,
+                        length_of_qmc_timex=length_of_qmc_timex,
+                        tx=tx,
+                        live_frame_curves=live_frame_curves,
                     )
-
-                    # update AUC running value
-                    if post_update_decisions.update_auc: # only during recording
-                        try:
-                            self.aw.updateAUC()
-                            if post_update_decisions.update_auc_guide:
-                                self.aw.updateAUCguide()
-                        except Exception as e: # pylint: disable=broad-except
-                            _log.exception(e)
-
-                    # update BBP values
-                    if post_update_decisions.update_bbp_metrics: # only during recording
-                        try:
-                            self.cacheforBbp(copyPrevRoast=True)
-                        except Exception as e: # pylint: disable=broad-except
-                            _log.exception(e)
-
-
-                    #output ET, BT, ETB, BTB to output program
-                    if self.aw.ser.externaloutprogramFlag:
-                        try:
-                            background_lookup_time = external_program_background_lookup_time(
-                                self.background,
-                                self.timeindex[0],
-                                tx,
-                                sample_timex,
-                            )
-                            ETB = BTB = -1.0
-                            if background_lookup_time is not None:
-                                j = self.backgroundtime2index(background_lookup_time)
-                                ETB = self.temp1B[j]
-                                BTB = self.temp2B[j]
-#                            from subprocess import call as subprocesscall# @Reimport
-#                            subprocesscall([self.aw.ser.externaloutprogram,
-#                                f'{sample_temp1[-1]:.1f}',
-#                                f'{sample_temp2[-1]:.1f}',
-#                                f'{ETB:.1f}',
-#                                f'{BTB:.1f}'])
-                            self.aw.call_prog_with_args(external_program_output_command(
-                                self.aw.ser.externaloutprogram,
-                                sample_temp1[-1],
-                                sample_temp2[-1],
-                                ETB,
-                                BTB,
-                            ))
-                        except Exception as e: # pylint: disable=broad-except
-                            _log.exception(e)
-
-                    #check for each alarm that was not yet triggered
-                    try:
-                        self.alarmSemaphore.acquire(1)
-                        alarm_triggers = evaluate_alarm_triggers(
-                            self.alarmflag,
-                            self.alarmstate,
-                            self.alarmguard,
-                            self.alarmnegguard,
-                            self.alarmtime,
-                            self.alarmoffset,
-                            self.alarmsource,
-                            self.alarmcond,
-                            self.alarmtemperature,
-                            local_flagstart,
-                            self.timeindex,
-                            self.TPalarmtimeindex,
-                            self.timeclock.elapsed()/1000.,
-                            sample_timex,
-                            sample_delta1,
-                            sample_delta2,
-                            sample_temp1,
-                            sample_temp2,
-                            sample_extratemp1,
-                            sample_extratemp2,
-                            len(self.extradevices),
-                            len(self.timex) - 1,
-                        )
-                        for alarm_trigger in alarm_triggers:
-                            i = alarm_trigger.alarm_index
-                            self.alarmstate[i] = alarm_trigger.state_index # we have to ensure that alarmstate of triggered alarms is never negative
-                            alarm_beep = len(self.alarmbeep) > i and self.alarmbeep[i] # beep?
-                            alarm_action = self.alarmaction[i]
-                            alarm_string = self.alarmstrings[i]
-                            self.processAlarmSignal.emit(i+1,alarm_beep,alarm_action,alarm_string)
-                            _log.debug('alarm %s fired',i+1)
-                    except Exception as e: # pylint: disable=broad-except
-                        _log.exception(e)
-                    finally:
-                        if self.alarmSemaphore.available() < 1:
-                            self.alarmSemaphore.release(1)
-
+                    if self._submit_processed_frame(continuation):
+                        if self.profileDataSemaphore.available() < 1:
+                            self.profileDataSemaphore.release(1)
+                        continuation.profile_lock_held = False
+                        processing_deferred = True
+                        return
+                    processed_frame = build_live_processed_sample_frame(**processed_frame_request.as_kwargs())
+                    self._apply_processed_frame(processed_frame, continuation)
                 #############    if using DEVICE 18 (no device). Manual mode
                 # temperatures are entered when pressing push buttons like for example at self.markDryEnd()
                 else:
@@ -5527,20 +5699,8 @@ class tgraphcanvas(QObject):
                 _, _, exc_tb = sys.exc_info()
                 self.adderror((QApplication.translate('Error Message','Exception:') + ' sample() {0}').format(str(e)),getattr(exc_tb, 'tb_lineno', '?'))
             finally:
-                if self.profileDataSemaphore.available() < 1:
-                    self.profileDataSemaphore.release(1)
-                try:
-                    if local_flagstart and self.backgroundprofile is not None and (self.timeindex[0] > -1 or self.timeindexB[0] < 0):
-                        if self.backgroundReproduce or self.backgroundPlaybackEvents:
-                            self.playbackevent()
-                        if self.backgroundPlaybackDROP:
-                            self.playbackdrop()
-                except Exception as e: # pylint: disable=broad-except
-                    _log.exception(e)
-                    _, _, exc_tb = sys.exc_info()
-                    self.adderror((QApplication.translate('Error Message','Exception:') + ' sample_processing() {0}').format(str(e)),getattr(exc_tb, 'tb_lineno', '?'))
-                #update screen in main GUI thread
-                self.updategraphicsSignal.emit()
+                if not processing_deferred:
+                    self._finalize_sample_processing(local_flagstart)
 
 
     # idx is the index to be displayed, by default -1 (the last item of each given array)
@@ -6091,6 +6251,9 @@ class tgraphcanvas(QObject):
     @gui_perf_tracked('canvas.updategraphics')
     def updategraphics(self) -> None:
 #        QApplication.processEvents() # without this we see some flickers (canvas redraws) on using multiple button event actions on macOS!?
+        if self._processed_frame_pending is not None:
+            gui_perf_count('canvas.updategraphics.worker_pending_skip')
+            return
         gotlock = self.updateGraphicsSemaphore.tryAcquire(1,300) # we try to catch a lock if available but we do not wait, if we fail we just skip this redraw round (prevents stacking of waiting calls); we maximally wait 300ms which should be enough on modern machines
         if not gotlock:
             _log.info('updategraphics(): failed to get updateGraphicsSemaphore lock')
@@ -8518,6 +8681,7 @@ class tgraphcanvas(QObject):
 
     def clearMeasurements(self, andLCDs:bool=True) -> None:
         try:
+            self._invalidate_processed_frame_work()
             #### lock shared resources #####
             self.profileDataSemaphore.acquire(1)
             self.fileCleanSignal.emit()
@@ -8592,6 +8756,8 @@ class tgraphcanvas(QObject):
 
         if not self.checkSaved():
             return False
+
+        self._invalidate_processed_frame_work()
 
         # restore and clear extra device settings which might have been created on loading a profile with different extra devices settings configuration
         self.aw.restoreExtraDeviceSettingsBackup()
@@ -14493,6 +14659,7 @@ class tgraphcanvas(QObject):
     def OffMonitor(self, respectAlwaysON:bool = True) -> None:
         _log.info('MODE: OFF MONITOR')
         if self.flagon:
+            self._invalidate_processed_frame_work()
             was_recording:bool = self.flagstart
             try:
                 # reset
@@ -15115,6 +15282,7 @@ class tgraphcanvas(QObject):
     def OffRecorder(self, autosave:bool = True, enableButton:bool = True) -> None:
         _log.info('MODE: STOP RECORDING')
         try:
+            self._invalidate_processed_frame_work()
             # mark DROP if not yet set (and DROP not undone), at least 5min roast time and CHARGE is set and either autoDROP is active or DROP button is hidden
             if self.timeindex[6] == 0 and self.timeindex[0] != -1 and self.autoDROPenabled and (self.autoDropFlag or not self.buttonvisibility[6]):
                 start = self.timex[self.timeindex[0]]

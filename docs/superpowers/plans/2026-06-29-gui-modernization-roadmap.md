@@ -56,7 +56,7 @@ Important observations from the code review:
 | 1.27 | Event Value and Renderer-Neutral Curve Style Finish | Closed: 2026-07-23 with compact legacy-configured event markers, canonical curve defaults, and PyQtGraph-aware Lines editor | Dense event values remain readable; Lines edits the active renderer | No dense event-value color blocks; PyQtGraph Lines action no longer opens Matplotlib-only editor |
 | 1.28 | Opt-In PyQtGraph Report Graph Handoff | Closed: 2026-07-23 with guarded report-graph selection, nonblank evidence validation, and Matplotlib fallback | Explicit PyQtGraph report graph renders from the same snapshot contract; default report path remains Matplotlib | Saved-profile report graph is nonblank; simulated export failure falls back to Matplotlib |
 | 2 | Plot Renderer Boundary and PyQtGraph POC | Guarded PyQtGraph main-splitter embed implemented and benchmarked in offscreen/native-window simulator smokes | Read-only plot snapshot model, Matplotlib adapter, PyQtGraph live adapter prototype | POC is benchmarkable before any live renderer swap |
-| 3 | Sampling Post-Processing Decoupling | Phase 3.1 worker boundary closed; live continuation remains Phase 3.2 | Pure data pipeline plus a queued processed-frame worker contract | After Phase 3.2, GUI thread consumes snapshots instead of doing heavy processing inline |
+| 3 | Sampling Post-Processing Decoupling | Phase 3.2 live processed-frame continuation implemented; deeper filtering/RoR migration remains | Pure data pipeline plus a queued processed-frame worker contract | GUI thread consumes immutable frame results; heavier processing moves only after benchmarked equivalence |
 | 4 | Main UI Information Architecture | Closed at IA/policy/status-hint layer | Scenario-oriented Roast Control, QC Analysis, Device Setup, Production, and Expert workspaces | Users can switch task modes without losing existing expert controls |
 | 5 | Local QML Islands | Closed at Workspace Status island level | A limited Qt Quick panel backed by Python state models, renderer status, and workspace action hints | QML proves useful without breaking packaging, translations, or Windows portable build |
 | 6 | Plugin Boundary Exploration | Closed at typed plugin-boundary level | Renderer/report/filter/analyzer/profile-comparison extension categories | Future customization can be isolated without destabilizing upstream sync |
@@ -439,7 +439,19 @@ Important observations from the code review:
 
 **Evidence:** Focused Qt worker tests cover immutable `sample_times`, direct helper equivalence, worker-thread execution, queued GUI-thread result delivery, and sequence identity. No runtime sampling path is switched by this slice.
 
-**Next Boundary:** Phase 3.2 must extract and test the GUI-owned suffix of `sample_processing()` before connecting the worker. It must preserve single-flight ordering, exact semaphore finalization, and shutdown behavior.
+**Next Boundary:** Closed by Phase 3.2. Further migration of filtering, RoR, and PID-input computation remains a separate benchmark-backed Phase 3.3 boundary.
+
+## Phase 3.2: Live Processed-Frame Continuation
+
+**Goal:** Use the Phase 3.1 worker in the real sampling path without moving GUI-owned roast state across threads.
+
+**Tracking Plan:** `docs/superpowers/plans/2026-07-23-gui-modernization-phase-3-2-live-processed-frame-continuation.md`
+
+**Implementation:** `canvas.py` now queues immutable frame requests after the existing GUI-owned input/filter/RoR/PID-input work. `_apply_processed_frame()` owns all post-frame mutation, event/alarm signals, PID SV updates, AUC/BBP updates, external output, and renderer payload application. A single pending continuation prevents out-of-order samples. The profile lock is released while the worker runs and reacquired with bounded retries before GUI application; pending redraws skip instead of deadlocking behind the result.
+
+**Status:** Closed on 2026-07-23 after implementation, independent review, repair, and commit. This slice is intentionally partial Phase 3: heavier filtering/RoR/PID-input computation remains in the GUI transaction until a separate benchmark-backed migration.
+
+**Evidence:** 16-second real main-window WebSocket autorun completed with `30` samples and event indexes `[1, 10, 19, 22, 26, 0, 26, 0]`; state restored and normal finish; screenshot and perf JSONL are non-empty at `/tmp/artisanz-phase32-ws-final-fixed.png` and `/tmp/artisanz-phase32-ws-final-fixed-perf.jsonl`. Final review PASS: `.sisyphus/phase-3-2-live-continuation-final-review.md`.
 
 ## Phase 4: Main UI Information Architecture
 
