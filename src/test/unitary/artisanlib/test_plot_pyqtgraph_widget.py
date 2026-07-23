@@ -316,3 +316,66 @@ def _plot_data_item_count(plot: object) -> int:
     if callable(list_data_items):
         return len(list_data_items())
     return 0
+
+def test_right_click_callback_invoked_when_registered() -> None:
+    # The right-click forwarder should deliver mapped plot coordinates to the
+    # registered callback when _emit_right_click is called (as the installed
+    # eventFilter would do on a real right-button press).
+    target = create_pyqtgraph_plot_target(use_opengl=False, include_ror=True)
+    received: list[tuple[float, float]] = []
+    try:
+        assert target._right_click_callback is None  # noqa: SLF001
+        target.set_right_click_callback(lambda x, y: received.append((x, y)))
+        assert target._right_click_callback is not None  # noqa: SLF001
+
+        target._emit_right_click(123.5, 198.0)  # noqa: SLF001
+
+        assert received == [(123.5, 198.0)]
+    finally:
+        target.close()
+
+
+def test_right_click_emit_is_safe_when_no_callback_registered() -> None:
+    target = create_pyqtgraph_plot_target(use_opengl=False, include_ror=True)
+    try:
+        # no callback set -> emit must be a no-op, not raise
+        target._emit_right_click(1.0, 2.0)  # noqa: SLF001
+    finally:
+        target.close()
+
+
+def test_pyqtgraph_plot_target_installs_right_click_event_filter() -> None:
+    target = create_pyqtgraph_plot_target(use_opengl=False, include_ror=True)
+    try:
+        # the forwarder must be installed and retained so it is not garbage collected
+        assert target._right_click_event_filter is not None  # noqa: SLF001
+    finally:
+        target.close()
+        # close() must detach the filter to avoid leaking it across renderer fallbacks
+        assert target._right_click_event_filter is None  # noqa: SLF001
+
+
+def test_widget_pos_to_plot_coords_maps_central_point() -> None:
+    from artisanlib.plot_pyqtgraph_widget import _widget_pos_to_plot_coords
+    from PyQt6.QtCore import QPointF
+
+    target = create_pyqtgraph_plot_target(use_opengl=False, include_ror=True)
+    try:
+        target.renderer.set_snapshot(_snapshot(include_ror=True))
+        _APPLICATION.processEvents()
+        # resize so the view box has real pixel geometry to map against
+        widget = target.widget
+        widget.resize(400, 300)
+        _APPLICATION.processEvents()
+
+        center = QPointF(widget.width() / 2.0, widget.height() / 2.0)
+        coords = _widget_pos_to_plot_coords(target.temperature_plot, center)
+
+        assert coords is not None
+        xdata, ydata = coords
+        # the mapped point must be finite floats (exact value depends on the view
+        # range the renderer applied; we only assert the mapping succeeds here)
+        import math
+        assert math.isfinite(xdata) and math.isfinite(ydata)
+    finally:
+        target.close()

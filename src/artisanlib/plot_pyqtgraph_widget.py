@@ -15,6 +15,8 @@ from artisanlib.plot_pyqtgraph_overlays import (
 from artisanlib.plot_comparison_overlay import ComparisonOverlay
 
 CursorPositionCallback = Callable[[float, float, float | None], None]
+# right-click event-edit popup: receives (time, value) in plot-data coordinates
+RightClickCallback = Callable[[float, float], None]
 
 
 @dataclass(slots=True)
@@ -37,8 +39,19 @@ class PyQtGraphPlotTarget:
     event_markers: object | None = None
     ror_fill: object | None = None
     comparison_overlay: object | None = None
+    _right_click_callback: RightClickCallback | None = None
+    _right_click_event_filter: object | None = None
 
     def close(self) -> None:
+        # detach the right-click event filter so renderer fallback does not leak it
+        if self._right_click_event_filter is not None:
+            remove_filter = getattr(self.widget, 'removeEventFilter', None)
+            if callable(remove_filter):
+                try:
+                    remove_filter(self._right_click_event_filter)
+                except Exception:  # pylint: disable=broad-except
+                    pass
+            self._right_click_event_filter = None
         close_widget = getattr(self.widget, 'close', None)
         if callable(close_widget):
             close_widget()
@@ -104,6 +117,16 @@ class PyQtGraphPlotTarget:
         """Apply shadow pens to foreground curves. Returns count enhanced."""
         return apply_shadow_pens(self.temperature_plot, self._pyqtgraph)
 
+    def set_right_click_callback(self, callback: RightClickCallback | None) -> None:
+        # Register the handler invoked on a right-click over the temperature plot.
+        # The callback receives plot-data coordinates (time, value) already mapped
+        # from the widget pixel position via the view box scene transform.
+        self._right_click_callback = callback
+
+    def _emit_right_click(self, xdata: float, ydata: float) -> None:
+        if self._right_click_callback is not None:
+            self._right_click_callback(float(xdata), float(ydata))
+
     def init_overlays(self) -> None:
         """Create overlay managers. Call once after the widget is fully set up."""
         self.phase_bands = PhaseBandOverlay(self.temperature_plot, self._pyqtgraph)
@@ -156,6 +179,7 @@ def create_pyqtgraph_plot_target(
         _pyqtgraph=pg,
     )
     _connect_cursor_tracking(target)
+    _install_right_click_filter(target)
     target.init_overlays()
     return target
 
@@ -237,6 +261,75 @@ def _connect_cursor_tracking(target: PyQtGraphPlotTarget) -> None:
 
     target._cursor_mouse_move_handler = on_mouse_moved
     connect(on_mouse_moved)
+
+
+def _install_right_click_filter(target: PyQtGraphPlotTarget) -> None:
+    # Install a Qt event filter on the top-level pyqtgraph widget that forwards
+    # right-button presses to the registered callback in plot-data coordinates.
+    # The filter never consumes the event (returns False), so pyqtgraph pan/zoom
+    # and the crosshair mouse-move tracking keep working unchanged.
+    from PyQt6.QtCore import QEvent, QObject, QPointF
+
+    plot = target.temperature_plot
+    widget = target.widget
+
+    class _RightClickForwarder(QObject):  # type: ignore[misc]
+        def eventFilter(self, obj: object, event: QEvent) -> bool:  # noqa: N802, ARG002
+            if event.type() == QEvent.Type.MouseButtonPress and event.button() == _qt_right_button():
+                try:
+                    pos = event.position()
+                except AttributeError:
+                    pos = QPointF(event.pos())
+                coords = _widget_pos_to_plot_coords(plot, pos)
+                if coords is not None:
+                    target._emit_right_click(coords[0], coords[1])
+            return False
+
+    try:
+        forwarder = _RightClickForwarder()
+        install = getattr(widget, 'installEventFilter', None)
+        if callable(install):
+            install(forwarder)
+            target._right_click_event_filter = forwarder
+    except Exception:  # pylint: disable=broad-except
+        # right-click forwarding is best-effort; never block plot creation
+        pass
+
+
+def _widget_pos_to_plot_coords(
+        plot: object,
+        widget_pos: object) -> tuple[float, float] | None:
+    # Map a widget-pixel position to plot-data (time, value) coordinates using the
+    # same view-box scene transform the crosshair mouse-move handler relies on.
+    view_box = getattr(plot, 'getViewBox', lambda: None)()
+    map_scene_to_view = getattr(view_box, 'mapSceneToView', None)
+    if not callable(map_scene_to_view):
+        return None
+    # pyqtgraph GraphicsLayoutWidget exposes scene().views(); the first QGraphicsView
+    # maps widget coordinates into scene coordinates.
+    scene = getattr(plot, 'scene', lambda: None)()
+    views = getattr(scene, 'views', list)()
+    if not views:
+        return None
+    view = views[0]
+    map_to_scene = getattr(view, 'mapToScene', None)
+    if not callable(map_to_scene):
+        return None
+    try:
+        # QGraphicsView.mapToScene expects a QPoint (integer pixels); mouse events
+        # deliver QPointF, so round to the nearest pixel first.
+        from PyQt6.QtCore import QPoint
+        pixel_pos = QPoint(int(round(float(widget_pos.x()))), int(round(float(widget_pos.y()))))
+        scene_pos = map_to_scene(pixel_pos)
+        point = map_scene_to_view(scene_pos)
+        return float(point.x()), float(point.y())
+    except Exception:  # pylint: disable=broad-except
+        return None
+
+
+def _qt_right_button() -> object:
+    from PyQt6.QtCore import Qt
+    return Qt.MouseButton.RightButton
 
 
 def _plot_scene_contains(plot: object, scene_pos: object) -> bool:

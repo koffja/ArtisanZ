@@ -4324,72 +4324,98 @@ class tgraphcanvas(QObject):
                         # popup not available if pan/zoom or zoom rect is active as it interacts
                         timex = self.time2index(event_xdata)
                         if timex > 0:
-                            # reset the zoom rectangles
-                            menu = QMenu(self.aw) # if we bind this to self, we inherit the background-color: transparent from self.fig
-            #                menu.setStyleSheet("QMenu::item {background-color: palette(window); selection-color: palette(window); selection-background-color: darkBlue;}")
-                            # populate menu
-                            ac = QAction(menu)
-                            bt = self.temp2[timex]
-                            if not self.BTcurve and self.ETcurve:
-                                # we allow click to ET if BT is hidden and ET is shown
-                                bt = self.temp1[timex]
-                            #btdelta = 50 if self.mode == 'C' else 70
-                            if bt != -1: # and abs(bt-event_ydata) < btdelta:
-                                # we suppress the popup if not clicked close enough to the BT curve
-                                if self.timeindex[0] > -1:
-                                    ac.setText(f"{QApplication.translate('Label', 'at')} {stringfromseconds(event_xdata - self.timex[self.timeindex[0]])}")
-                                else:
-                                    ac.setText(f"{QApplication.translate('Label', 'at')} {stringfromseconds(event_xdata)}")
-                                ac.setEnabled(False)
-                                menu.addAction(ac)
-                                for k in [(QApplication.translate('Label','CHARGE'),0),
-                                          (QApplication.translate('Label','DRY END'),1),
-                                          (QApplication.translate('Label','FC START'),2),
-                                          (QApplication.translate('Label','FC END'),3),
-                                          (QApplication.translate('Label','SC START'),4),
-                                          (QApplication.translate('Label','SC END'),5),
-                                          (QApplication.translate('Label','DROP'),6),
-                                          (QApplication.translate('Label','COOL'),7)]:
-                                    idx_before = idx_after = 0
-                                    for i in range(k[1]):
-                                        if self.timeindex[i] and self.timeindex[i] != -1:
-                                            idx_before = self.timeindex[i]
-                                    for i in range(6,k[1],-1) :
-                                        if self.timeindex[i] and self.timeindex[i] != -1:
-                                            idx_after = self.timeindex[i]
-                                    if (((not idx_before) or timex > idx_before) and ((not idx_after) or timex < idx_after) and
-                                        (not self.flagstart or (k[1] == 0) or (k[1] != 0 and self.timeindex[k[1]] != 0))): # only add menu item during recording if already a value is set (via a button); but for CHARGE
-                                        ac = QAction(menu)
-                                        ac.key = (k[1],timex) # type: ignore[attr-defined] # key a custom attribute of QAction which should be defined in a custom subclass
-                                        ac.setText(' ' + k[0])
-                                        menu.addAction(ac)
-                                # add user EVENT entry
-                                try:
-                                    ac = QAction(menu)
-                                    ac.setText(' ' + QApplication.translate('Label', 'EVENT'))
-                                    event_pos_offset = self.eventpositionbars[0]
-                                    event_pos_factor = self.eventpositionbars[1] - self.eventpositionbars[0]
-                                    if self.clampEvents:
-                                        evalue = int(round(event_ydata))
-                                    else:
-                                        evalue = int(round((event_ydata - event_pos_offset) / event_pos_factor))
-                                    ac.key = (-1,timex,self.eventsExternal2InternalValue(evalue))  # type: ignore[attr-defined] # key a custom attribute of QAction which should be defined in a custom subclass
-                                    menu.addAction(ac)
-                                except Exception: # pylint: disable=broad-except
-                                    # int(round()) might fail with "cannot convert float infinity to integer"
-                                    pass
-
-                                # we deactivate all active motion_notify_event_handlers of draggable annotations that might have been connected by this click to
-                                # avoid redraw conflicts between Artisan canvas bitblit caching and the matplotlib internal bitblit caches.
-                                self.disconnect_draggableannotations_motion_notifiers()
-
-                                # show menu
-                                menu.triggered.connect(self.event_popup_action)
-                                menu.popup(QCursor.pos())
+                            self._open_event_marker_popup(event_xdata, event_ydata)
             except Exception as e: # pylint: disable=broad-except
                 _log.exception(e)
                 _, _, exc_tb = sys.exc_info()
                 self.adderror((QApplication.translate('Error Message','Exception:') + ' onclick() {0}').format(str(e)),getattr(exc_tb, 'tb_lineno', '?'))
+
+    def _open_event_marker_popup(self, event_xdata: float, event_ydata: float) -> None:
+        # Build and show the right-click CHARGE/DRY/FC/.../EVENT menu at (event_xdata, event_ydata).
+        # Renderer-agnostic: called both from the matplotlib onclick() handler and from the
+        # pyqtgraph widget right-click forwarder. The caller is responsible for the
+        # comparator / designer / wheel / pan-zoom guards and for ensuring timex > 0.
+        timex = self.time2index(event_xdata)
+        if timex <= 0:
+            return
+        menu = QMenu(self.aw) # if we bind this to self, we inherit the background-color: transparent from self.fig
+#                menu.setStyleSheet("QMenu::item {background-color: palette(window); selection-color: palette(window); selection-background-color: darkBlue;}")
+        # populate menu
+        ac = QAction(menu)
+        bt = self.temp2[timex]
+        if not self.BTcurve and self.ETcurve:
+            # we allow click to ET if BT is hidden and ET is shown
+            bt = self.temp1[timex]
+        #btdelta = 50 if self.mode == 'C' else 70
+        if bt != -1: # and abs(bt-event_ydata) < btdelta:
+            # we suppress the popup if not clicked close enough to the BT curve
+            if self.timeindex[0] > -1:
+                ac.setText(f"{QApplication.translate('Label', 'at')} {stringfromseconds(event_xdata - self.timex[self.timeindex[0]])}")
+            else:
+                ac.setText(f"{QApplication.translate('Label', 'at')} {stringfromseconds(event_xdata)}")
+            ac.setEnabled(False)
+            menu.addAction(ac)
+            for k in [(QApplication.translate('Label','CHARGE'),0),
+                      (QApplication.translate('Label','DRY END'),1),
+                      (QApplication.translate('Label','FC START'),2),
+                      (QApplication.translate('Label','FC END'),3),
+                      (QApplication.translate('Label','SC START'),4),
+                      (QApplication.translate('Label','SC END'),5),
+                      (QApplication.translate('Label','DROP'),6),
+                      (QApplication.translate('Label','COOL'),7)]:
+                idx_before = idx_after = 0
+                for i in range(k[1]):
+                    if self.timeindex[i] and self.timeindex[i] != -1:
+                        idx_before = self.timeindex[i]
+                for i in range(6,k[1],-1) :
+                    if self.timeindex[i] and self.timeindex[i] != -1:
+                        idx_after = self.timeindex[i]
+                if (((not idx_before) or timex > idx_before) and ((not idx_after) or timex < idx_after) and
+                    (not self.flagstart or (k[1] == 0) or (k[1] != 0 and self.timeindex[k[1]] != 0))): # only add menu item during recording if already a value is set (via a button); but for CHARGE
+                    ac = QAction(menu)
+                    ac.key = (k[1],timex) # type: ignore[attr-defined] # key a custom attribute of QAction which should be defined in a custom subclass
+                    ac.setText(' ' + k[0])
+                    menu.addAction(ac)
+            # add user EVENT entry
+            try:
+                ac = QAction(menu)
+                ac.setText(' ' + QApplication.translate('Label', 'EVENT'))
+                event_pos_offset = self.eventpositionbars[0]
+                event_pos_factor = self.eventpositionbars[1] - self.eventpositionbars[0]
+                if self.clampEvents:
+                    evalue = int(round(event_ydata))
+                else:
+                    evalue = int(round((event_ydata - event_pos_offset) / event_pos_factor))
+                ac.key = (-1,timex,self.eventsExternal2InternalValue(evalue))  # type: ignore[attr-defined] # key a custom attribute of QAction which should be defined in a custom subclass
+                menu.addAction(ac)
+            except Exception: # pylint: disable=broad-except
+                # int(round()) might fail with "cannot convert float infinity to integer"
+                pass
+
+            # we deactivate all active motion_notify_event_handlers of draggable annotations that might have been connected by this click to
+            # avoid redraw conflicts between Artisan canvas bitblit caching and the matplotlib internal bitblit caches.
+            self.disconnect_draggableannotations_motion_notifiers()
+
+            # show menu
+            menu.triggered.connect(self.event_popup_action)
+            menu.popup(QCursor.pos())
+
+    def _handle_pyqtgraph_right_click(self, xdata: float, ydata: float) -> None:
+        # Forwarded right-click from the pyqtgraph plot widget. Mirrors the guard
+        # conditions of the matplotlib onclick() right-click branch so behaviour is
+        # identical on both renderers (suppressed during comparator / designer / wheel
+        # / pan-zoom modes, and when the click is not over a valid sample).
+        if self.ax is None or self.designerflag or self.wheelflag:
+            return
+        if bool(self.aw.comparator):
+            return
+        if self.aw.ntb.mode in ['pan/zoom', 'zoom rect']:
+            return
+        timex = self.time2index(xdata)
+        if timex <= 0:
+            return
+        self.aw.setFocus()  # gain focus while the event minieditor is open
+        self._open_event_marker_popup(xdata, ydata)
 
     @pyqtSlot('QAction*')
     def event_popup_action(self, action:QAction) -> None:
@@ -5776,6 +5802,10 @@ class tgraphcanvas(QObject):
                     temperature,
                     ror,
                 ))
+            # forward right-clicks on the pyqtgraph widget to the existing event-edit popup
+            set_right_click_callback = getattr(target, 'set_right_click_callback', None)
+            if callable(set_right_click_callback):
+                set_right_click_callback(self._handle_pyqtgraph_right_click)
             self.plot_display_widget = widget
             self.canvas.setVisible(False)
             self.sync_pyqtgraph_static_overlays_from_canvas()
