@@ -41,6 +41,7 @@ class FakePlotDataItem:
         self.name = name
         self.shadow_pen: object | None = None
         self.visible = True
+        self.z_value: float | None = None
 
     def setData(self, x: tuple[float, ...], y: tuple[float, ...]) -> None:  # noqa: N802
         self.x = x
@@ -54,6 +55,9 @@ class FakePlotDataItem:
 
     def setVisible(self, visible: bool) -> None:  # noqa: N802
         self.visible = visible
+
+    def setZValue(self, value: float) -> None:  # noqa: N802
+        self.z_value = value
 
 
 class FakeEventItem:
@@ -294,6 +298,78 @@ def test_set_snapshot_populates_legend_with_temperature_and_ror_curves() -> None
     ))
 
     assert [label for _, label in legend.items] == ['ET', 'BT', 'ΔET', 'ΔBT']
+
+
+def test_projection_curves_preserve_style_visibility_routing_z_order_and_legend_exclusion() -> None:
+    temperature_plot = FakePlot()
+    ror_plot = FakePlot()
+    legend = FakeLegend()
+
+    def projection_pen_factory(curve: CurveSnapshot) -> dict[str, object]:
+        return {
+            'color': curve.color,
+            'width': curve.line_width,
+            'style': curve.line_style,
+            'opacity': curve.opacity,
+        }
+
+    renderer = PyQtGraphSnapshotRenderer(
+        temperature_plot=temperature_plot,
+        ror_plot=ror_plot,
+        legend_item=legend,
+        pen_factory=projection_pen_factory,
+    )
+    renderer.set_snapshot(_snapshot(
+        CurveSnapshot.from_sequences(
+            name='ET projection',
+            x=[0, 1],
+            y=[150, 152],
+            color='#B5644F',
+            line_style='-.',
+            line_width=8.0,
+            opacity=0.3,
+        ),
+        CurveSnapshot.from_sequences(
+            name='Delta ET projection',
+            x=[0, 1],
+            y=[3.5, 4.0],
+            color='#B98A4B',
+            y_axis='ror',
+            line_style='-.',
+            line_width=8.0,
+            opacity=0.3,
+        ),
+        CurveSnapshot.from_sequences(
+            name='BT projection',
+            x=[0, 1],
+            y=[140, 142],
+            color='#4E7180',
+            line_style='-.',
+            line_width=8.0,
+            opacity=0.3,
+        ),
+        CurveSnapshot.from_sequences(
+            name='Delta BT projection',
+            x=[0, 1],
+            y=[5.5, 5.0],
+            color='#78905D',
+            y_axis='ror',
+            line_style='-.',
+            line_width=8.0,
+            opacity=0.3,
+            visible=False,
+        ),
+    ))
+
+    assert [item.name for item in temperature_plot.items] == ['ET projection', 'BT projection']
+    assert [item.name for item in ror_plot.items] == ['Delta ET projection', 'Delta BT projection']
+    for item in temperature_plot.items + ror_plot.items:
+        assert item.pen['style'] == '-.'
+        assert item.pen['width'] == 8.0
+        assert item.pen['opacity'] == pytest.approx(0.3)
+        assert item.z_value == 45
+    assert ror_plot.items[1].visible is False
+    assert legend.items == []
 
 
 def test_default_pen_factory_keeps_bt_visibly_stronger_than_secondary_curves() -> None:

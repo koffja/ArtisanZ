@@ -236,6 +236,8 @@ Phase 1.6 analysis-overlay decision: PyQtGraph now consumes renderer-neutral ana
 
 2026-07-24 saved-profile visual evidence: `src/test/data/profile1.alog` rendered through the PyQtGraph snapshot export with runtime analysis state layered on top. `/tmp/artisanz-phase16-analysis-overlay.png` is `1440x820`, with `temperature_item_count=32`, `ror_item_count=2`, `renderer_event_item_count=40`, `renderer_event_value_item_count=10`, `renderer_guide_item_count=4`, `renderer_area_item_count=1`, and `sampled_non_background_pixel_count=37570`. The saved `.alog` does not persist live analysis result text, so the evidence intentionally validates the production runtime contract separately from profile serialization.
 
+2026-07-24 projection parity: PyQtGraph projection curves now match the legacy Matplotlib projection contract (`-.`, width `8.0`, opacity `0.3`), route Delta BT/ET projections to the linked RoR plot only when the RoR axis exists, render projections above the main curves at z-order `45`, and keep them out of the compact legend. Evidence: `/tmp/artisanz-phase16-projection.png`; independent review: `.sisyphus/phase-projection-parity-review.md` (`PASS`).
+
 ## Capture Troubleshooting
 
 - If no metrics appear, confirm Artisan was launched from `src/` with `ARTISANZ_GUI_PERF=1`.

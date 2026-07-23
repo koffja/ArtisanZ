@@ -420,7 +420,8 @@ def _projection_curves(source: object) -> tuple[CurveSnapshot, ...]:
             visible=bool(
                 getattr(source, 'BTprojectFlag', False) and
                 getattr(source, 'projectDeltaFlag', False) and
-                getattr(source, 'DeltaBTflag', False)),
+                getattr(source, 'DeltaBTflag', False) and
+                getattr(source, 'delta_ax', None) is not None),
             y_axis='ror'),
         _projection_curve(
             source,
@@ -431,7 +432,8 @@ def _projection_curves(source: object) -> tuple[CurveSnapshot, ...]:
             visible=bool(
                 getattr(source, 'ETprojectFlag', False) and
                 getattr(source, 'projectDeltaFlag', False) and
-                getattr(source, 'DeltaETflag', False)),
+                getattr(source, 'DeltaETflag', False) and
+                getattr(source, 'delta_ax', None) is not None),
             y_axis='ror'),
     ) if curve is not None)
 
@@ -458,8 +460,8 @@ def _projection_curve(
         visible=visible,
         y_axis=y_axis,
         line_style='-.',
-        line_width=4.0,
-        opacity=0.35,
+        line_width=8.0,
+        opacity=0.3,
     )
 
 

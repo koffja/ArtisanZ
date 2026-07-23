@@ -400,6 +400,39 @@ def test_build_roast_plot_snapshot_keeps_extra_delta_on_temperature_axis_without
     assert curves['Background XT'].y_axis == 'temperature'
 
 
+def test_projection_curves_match_matplotlib_style_and_delta_axis_visibility() -> None:
+    class AllProjectionCanvas(FakeOverlayCanvas):
+        DeltaETflag = True
+
+    snapshot = build_roast_plot_snapshot(AllProjectionCanvas())
+    projections = {curve.name: curve for curve in snapshot.curves if 'projection' in curve.name.lower()}
+
+    assert set(projections) == {
+        'BT projection',
+        'ET projection',
+        'Delta BT projection',
+        'Delta ET projection',
+    }
+    assert projections['BT projection'].y_axis == 'temperature'
+    assert projections['ET projection'].y_axis == 'temperature'
+    assert projections['Delta BT projection'].y_axis == 'ror'
+    assert projections['Delta ET projection'].y_axis == 'ror'
+    for curve in projections.values():
+        assert curve.visible is True
+        assert curve.line_style == '-.'
+        assert curve.line_width == 8.0
+        assert curve.opacity == pytest.approx(0.3)
+
+    class NoDeltaAxisCanvas(AllProjectionCanvas):
+        delta_ax = None
+
+    no_delta_axis = build_roast_plot_snapshot(NoDeltaAxisCanvas())
+    assert [curve.name for curve in no_delta_axis.curves if 'projection' in curve.name.lower()] == [
+        'BT projection',
+        'ET projection',
+    ]
+
+
 def test_build_roast_plot_static_overlay_snapshot_keeps_static_curve_payload() -> None:
     static_snapshot = build_roast_plot_static_overlay_snapshot(
         FakeOverlayCanvas(),

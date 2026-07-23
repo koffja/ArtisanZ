@@ -263,7 +263,10 @@ class PyQtGraphSnapshotRenderer:
     def _create_item(self, curve: CurveSnapshot) -> object:
         plot = self._plot_for_curve(curve)
         item = plot.plot(curve.x, _pyqtgraph_y_values(curve.y), pen=self._pen_factory(curve), name=curve.name)
-        _call_if_available(item, 'setZValue', 45 if curve.y_axis == 'ror' else 10)
+        if curve.y_axis == 'ror' or 'projection' in curve.name.lower():
+            _call_if_available(item, 'setZValue', 45)
+        else:
+            _call_if_available(item, 'setZValue', 10)
         return item
 
     def _plot_for_curve(self, curve: CurveSnapshot) -> Any:
