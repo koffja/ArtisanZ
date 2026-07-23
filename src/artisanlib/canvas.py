@@ -372,6 +372,17 @@ class _ProcessedFrameContinuation:
     profile_lock_held: bool = True
 
 
+@dataclass(slots=True)
+class _DeferredSampleInput:
+    """Latest raw sample retained while a processed frame is in flight."""
+
+    generation: int
+    local_flagstart: bool
+    temp1_readings: list[float]
+    temp2_readings: list[float]
+    timex_readings: list[float]
+
+
 # NOTE: to have pylint to verify proper __slot__ definitions using pylint one has to remove the super class FigureCanvas here temporarily
 #   as this does not has __slot__ definitions and thus __dict__ is contained which suppresses the warnings
 class tgraphcanvas(QObject):
@@ -508,7 +519,7 @@ class tgraphcanvas(QObject):
         'l_eventtype1special_backannos', 'l_eventtype2special_backannos', 'l_eventtype3special_backannos', 'l_eventtype4special_backannos',
         'l_eventtype4annos', 'l_annotations', 'l_background_annotations', 'l_annotations_dict', 'l_annotations_pos_dict', 'l_event_flags_dict',
         'l_eventtype1backannos', 'l_eventtype2backannos', 'l_eventtype3backannos', 'l_eventtype4backannos',
-        'l_event_flags_pos_dict', 'ai', 'timeclock', 'threadserver', '_processed_frame_generation', 'designerflag', 'designerconnections', 'mousepress', 'indexpoint',
+        'l_event_flags_pos_dict', 'ai', 'timeclock', 'threadserver', '_deferred_sample_input', '_deferred_sample_retry_scheduled', '_processed_frame_generation', 'designerflag', 'designerconnections', 'mousepress', 'indexpoint',
         'workingline', 'eventtimecopy', 'etypescopy', 'specialeventsStringscopy', 'specialeventsvaluecopy', 'specialeventstypecopy', 'currentx', 'currenty',
         'designertimeinit', 'BTsplinedegree', 'ETsplinedegree', 'reproducedesigner', 'designertemp1init', 'designertemp2init', 'ax_background_designer', 'designer_timez', 'time_step_size',
         '_designer_orange_mark', '_designer_orange_mark_shown', '_designer_blue_mark', '_designer_blue_mark_shown', 'l_temp1_markers', 'l_temp2_markers',
@@ -2354,6 +2365,8 @@ class tgraphcanvas(QObject):
         )
         self._processed_frame_worker_thread.finished.connect(self._processed_frame_worker.deleteLater)
         self._processed_frame_pending: _ProcessedFrameContinuation | None = None
+        self._deferred_sample_input: _DeferredSampleInput | None = None
+        self._deferred_sample_retry_scheduled = False
         self._processed_frame_generation = 0
         self._processed_frame_sequence = 0
         self._processed_frame_worker_shutdown = False
@@ -4837,10 +4850,51 @@ class tgraphcanvas(QObject):
         self._processed_frame_generation += 1
         pending = self._processed_frame_pending
         self._processed_frame_pending = None
+        self._deferred_sample_input = None
+        self._deferred_sample_retry_scheduled = False
         if pending is not None and pending.profile_lock_held and self.profileDataSemaphore.available() < 1:
             self.profileDataSemaphore.release(1)
         if pending is not None:
             gui_perf_count('canvas.sample_processing.worker_cancel')
+
+    def _schedule_deferred_sample_resume(self) -> None:
+        if self._deferred_sample_input is None or self._deferred_sample_retry_scheduled:
+            return
+        self._deferred_sample_retry_scheduled = True
+        QTimer.singleShot(10, self._resume_deferred_sample_input)
+
+    def _queue_latest_sample_input(
+            self,
+            local_flagstart: bool,
+            temp1_readings: list[float],
+            temp2_readings: list[float],
+            timex_readings: list[float]) -> None:
+        """Coalesce sampling callbacks without dropping the newest device read."""
+        self._deferred_sample_input = _DeferredSampleInput(
+            generation=self._processed_frame_generation,
+            local_flagstart=local_flagstart,
+            temp1_readings=list(temp1_readings),
+            temp2_readings=list(temp2_readings),
+            timex_readings=list(timex_readings),
+        )
+        gui_perf_count('canvas.sample_processing.worker_pending_coalesced')
+
+    def _resume_deferred_sample_input(self) -> None:
+        self._deferred_sample_retry_scheduled = False
+        deferred = self._deferred_sample_input
+        if (
+                deferred is None or
+                deferred.generation != self._processed_frame_generation or
+                self._processed_frame_worker_shutdown):
+            self._deferred_sample_input = None
+            return
+        self.sample_processing(
+            deferred.local_flagstart,
+            deferred.temp1_readings,
+            deferred.temp2_readings,
+            deferred.timex_readings,
+            deferred_batch=deferred,
+        )
 
     def _apply_processed_frame(
             self,
@@ -5197,15 +5251,38 @@ class tgraphcanvas(QObject):
             _, _, exc_tb = sys.exc_info()
             self.adderror((QApplication.translate('Error Message','Exception:') + ' sample_processing() {0}').format(str(e)),getattr(exc_tb, 'tb_lineno', '?'))
         self.updategraphicsSignal.emit()
+        if self._deferred_sample_input is not None:
+            self._schedule_deferred_sample_resume()
 
     # sample devices at interval self.delay milliseconds.
     # we can assume within the processing of sample_processing() that flagon=True
     # NOTE: sample_processing is queued to the GUI thread by Athreadserver.createSampleThread().
     @gui_perf_tracked('canvas.sample_processing')
-    def sample_processing(self, local_flagstart:bool, temp1_readings:list[float], temp2_readings:list[float], timex_readings:list[float]) -> None: # pyright: ignore [reportGeneralTypeIssues] # Code is too complex to analyze; reduce complexity by refactoring into subroutines or reducing conditional code paths
+    def sample_processing(self, local_flagstart:bool, temp1_readings:list[float], temp2_readings:list[float], timex_readings:list[float], deferred_batch:_DeferredSampleInput|None = None) -> None: # pyright: ignore [reportGeneralTypeIssues] # Code is too complex to analyze; reduce complexity by refactoring into subroutines or reducing conditional code paths
+        deferred = self._deferred_sample_input
+        if deferred_batch is None and deferred is not None:
+            if deferred.generation != self._processed_frame_generation:
+                self._deferred_sample_input = None
+            elif self._processed_frame_pending is None:
+                queued = deferred
+                self._deferred_sample_input = _DeferredSampleInput(
+                    generation=self._processed_frame_generation,
+                    local_flagstart=local_flagstart,
+                    temp1_readings=list(temp1_readings),
+                    temp2_readings=list(temp2_readings),
+                    timex_readings=list(timex_readings),
+                )
+                self.sample_processing(
+                    queued.local_flagstart,
+                    queued.temp1_readings,
+                    queued.temp2_readings,
+                    queued.timex_readings,
+                    deferred_batch=queued,
+                )
+                return
         if self._processed_frame_pending is not None:
-            _log.debug('sample_processing(): processed frame continuation pending')
-            gui_perf_count('canvas.sample_processing.worker_pending_skip')
+            _log.debug('sample_processing(): queueing newest input while frame continuation is pending')
+            self._queue_latest_sample_input(local_flagstart, temp1_readings, temp2_readings, timex_readings)
             return
         ##### (try to) lock resources  #########
         wait_period = 200  # we try to catch a lock within the next 200ms
@@ -5215,7 +5292,11 @@ class tgraphcanvas(QObject):
         if not gotlock:
             _log.debug('sample_processing(): failed to get profileDataSemaphore lock')
             gui_perf_count('canvas.sample_processing.lock_skip')
+            if deferred_batch is not None and self._deferred_sample_input is deferred_batch:
+                self._schedule_deferred_sample_resume()
         else:
+            if deferred_batch is not None and self._deferred_sample_input is deferred_batch:
+                self._deferred_sample_input = None
             processing_deferred = False
             try:
                 # duplicate system state flag flagstart locally and only refer to this copy within this function to make it behaving uniquely (either append or overwrite mode)
