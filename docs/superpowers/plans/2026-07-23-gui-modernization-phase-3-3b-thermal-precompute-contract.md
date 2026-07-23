@@ -2,7 +2,7 @@
 
 **Parent roadmap:** `docs/superpowers/plans/2026-06-29-gui-modernization-roadmap.md`
 
-**Status:** Closed on 2026-07-23 after runtime handoff, fallback repair, multi-rate WebSocket validation, review, and commit.
+**Status:** Closed on 2026-07-23 after runtime handoff, fallback repair, multi-rate WebSocket validation, 60-second soak, review, and commit.
 
 ## Goal
 
@@ -48,8 +48,9 @@ Define an immutable, worker-ready boundary for ET/BT smoothing, pure raw RoR cal
 - Runtime report: `/tmp/artisanz-phase33b-runtime-perf.jsonl`; `canvas.sample_processing` average `0.693 ms`, maximum `1.350 ms`.
 - Multi-rate WebSocket smokes: 1 Hz produced `16/16` samples with `0.650 ms` average processing; 5 Hz produced `75` samples with `0.799 ms` average processing; 10 Hz produced `140` samples with `0.758 ms` average processing. All runs restored state normally with no stale/error counters.
 - Multi-rate artifacts: `/tmp/artisanz-phase33b-1hz-status.txt`, `/tmp/artisanz-phase33b-5hz-status.txt`, `/tmp/artisanz-phase33b-10hz-status.txt` and matching perf JSONL files.
+- 60-second 10 Hz soak: `582` samples, `583` thermal/frame submissions, `5` latest-value coalesces, no stale/error counters, state restored normally. `canvas.sample_processing` averaged `1.628 ms`, maximum `15.496 ms`; artifacts: `/tmp/artisanz-phase33b-10hz-soak-status.txt`, `/tmp/artisanz-phase33b-10hz-soak-perf.jsonl`, `/tmp/artisanz-phase33b-10hz-soak.png`.
 - Final review: `.sisyphus/phase-3-3b-thermal-runtime-review.md`, PASS.
 
 ## Next Boundary
 
-Long-duration and hardware-representative benchmarks remain before claiming device-wide performance gains. Phase 4 can proceed after that evidence gate.
+The long-duration simulator soak is complete. A real hardware-representative baseline remains before claiming device-wide performance gains. Phase 4 can proceed; hardware validation stays an explicit release gate.
