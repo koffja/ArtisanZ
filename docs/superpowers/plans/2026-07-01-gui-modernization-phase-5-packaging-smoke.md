@@ -34,7 +34,7 @@ git diff --check
 
 - Smoke command output confirmed `PyInstaller 6.20.0`.
 - Smoke command imported `PyQt6.QtQml`, `PyQt6.QtQuick`, and `PyQt6.QtQuickWidgets` from the active `.venv`.
-- Smoke command loaded the Workspace Status QML widget successfully at `320x132`.
+- Smoke command loaded the Workspace Status QML widget successfully at `320x220`.
 - Related focused tests passed: `69 passed`.
 - A same-process test version exposed a local QtQuickWidgets segfault when multiple `QQuickWidget` instances were created by separate tests. The final test runs the real widget smoke in a subprocess, which is the safer pattern for future QtQuick packaging checks.
 - Code review found that raw substring matching could let `PyQt6.QtQuickWidgets` satisfy the required `PyQt6.QtQuick` check, and that the subprocess test inherited a fragile caller cwd. Both were fixed with exact quoted-string matching and an explicit `cwd=src` subprocess run.
