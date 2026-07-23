@@ -126,8 +126,10 @@ def _polish_dialog_layout_tree(layout: Any, *, margin: int, spacing: int) -> Non
         if child_layout is not None:
             _polish_dialog_layout_tree(
                 child_layout,
-                margin=max(10, margin - 2),
-                spacing=max(6, spacing - 2),
+                # Keep row layouts' existing margins. Applying panel margins
+                # at every nesting level can compress labels to a few pixels.
+                margin=0,
+                spacing=0,
             )
 
 

@@ -1,6 +1,7 @@
 import sys
 from collections.abc import Generator
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -249,6 +250,103 @@ def test_apply_modern_dialog_polish_preserves_table_cell_layouts(qapp: QApplicat
     assert cell_layout.contentsMargins().left() == 0
     assert cell_layout.contentsMargins().top() == 0
     assert cell_layout.spacing() == 0
+
+
+def test_apply_modern_dialog_polish_preserves_nested_row_margins(
+        qapp: QApplication, # noqa: ARG001
+) -> None:
+    dialog = QDialog()
+    dialog.setProperty('modernDialog', True)
+    outer_layout = QVBoxLayout(dialog)
+    outer_layout.setContentsMargins(0, 0, 0, 0)
+    row_layout = QVBoxLayout()
+    row_layout.setContentsMargins(0, 0, 0, 0)
+    row_layout.setSpacing(3)
+    row_layout.addWidget(QLineEdit())
+    outer_layout.addLayout(row_layout)
+
+    apply_modern_dialog_polish(dialog)
+
+    assert outer_layout.contentsMargins().left() >= 14
+    assert row_layout.contentsMargins().left() == 0
+    assert row_layout.contentsMargins().top() == 0
+    assert row_layout.spacing() == 3
+
+
+def test_axes_time_step_combo_expands_for_flat_theme(qapp: QApplication) -> None:
+    from artisanlib.axis import WindowsDlg
+
+    qmc = SimpleNamespace(
+        time_grid=True,
+        temp_grid=True,
+        time_axis_label_mode='minutes',
+        gridlinestyle=0,
+        gridthickness=1,
+        gridalpha=0.2,
+        step100temp=None,
+        xgrid=120,
+        ygrid=10,
+        zgrid=5,
+        zlimit=25,
+        zlimit_min=-15,
+        legendloc=4,
+        resetmaxtime=0,
+        chargemintime=-90,
+        fixmaxtime=False,
+        locktimex=False,
+        autotimex=True,
+        autotimexMode=0,
+        autodeltaxET=False,
+        autodeltaxBT=False,
+        loadaxisfromprofile=False,
+        startofx=-90,
+        endofx=600,
+        locktimex_start=-90,
+        locktimex_end=600,
+        ylimit=275,
+        ylimit_min=70,
+        ylimit_min_max=-999,
+        ylimit_max=999,
+        zlimit_min_max=-999,
+        zlimit_max=999,
+        timeindex=[-1],
+        timex=[],
+        flagon=False,
+        backgroundpath=None,
+        crossmarker=False,
+        endofx_default=600,
+        startofx_default=-90,
+        xgrid_default=120,
+        mode='C',
+        ygrid_C_default=10,
+        ylimit_C_default=275,
+        ylimit_min_C_default=70,
+        zlimit_C_default=25,
+        zlimit_min_C_default=-15,
+        zgrid_C_default=5,
+        redraw=lambda **_kwargs: None,
+    )
+    aw = SimpleNamespace(
+        qmc=qmc,
+        comparator=None,
+        curFile=None,
+        app=qapp,
+        sendmessage=lambda *_args: None,
+    )
+    dialog = WindowsDlg(None, aw)
+    original_stylesheet = qapp.styleSheet()
+    qapp.setStyleSheet(modern_application_stylesheet())
+    try:
+        dialog.show()
+        qapp.processEvents()
+        combo = dialog.xaxislencombobox
+        assert combo.itemText(2) == '2 minutes'
+        assert combo.property('modernExpandValueControl') is True
+        assert combo.width() >= combo.fontMetrics().horizontalAdvance('2 minutes') + 40
+        assert combo.maximumWidth() > combo.minimumWidth()
+    finally:
+        dialog.close()
+        qapp.setStyleSheet(original_stylesheet)
 
 
 @pytest.mark.parametrize('dialog_role', ['devices', 'roast_properties'])

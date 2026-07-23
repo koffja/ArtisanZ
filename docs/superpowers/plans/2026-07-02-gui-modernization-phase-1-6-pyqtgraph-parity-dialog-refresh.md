@@ -6,7 +6,7 @@
 
 **Architecture:** Keep the existing PyQt6 Widgets runtime. Improve PyQtGraph through the existing snapshot/widget adapter boundary, not by mutating Matplotlib state from the new renderer. Improve dialogs first through theme tokens and safe selectors, then by targeted per-dialog layout work.
 
-> **2026-07-24 implementation update:** Extra-device background curve extraction, fixed-width dialog control hardening, and roast-analysis mask/statistics/guide parity are implemented and independently reviewed. The remaining `[ ]` items are: (1) long-Chinese-label screenshot capture, (2) Config > Axes/Curves dialog screenshot capture, (3) draggable/editable analysis result boxes, (4) charge-target annotation text/callout parity (handled by Task Group C of `docs/superpowers/plans/2026-07-04-phase-1-6-closure-workspace-switcher-charge-target-annotation.md`), (5) projection line BT/RoR visual differentiation, (6) anti-nested-card enforcement rule, (7) Config > Axes/Curves layout-internals restructuring.
+> **2026-07-24 implementation update:** Extra-device background curve extraction, fixed-width dialog control hardening, nested-layout margin preservation, and roast-analysis mask/statistics/guide parity are implemented and independently reviewed. Real themed screenshots now cover long Chinese LCD labels and Config > Axes/Curves. The remaining `[ ]` items are: (1) draggable/editable analysis result boxes, (2) charge-target annotation text/callout parity (handled by Task Group C of `docs/superpowers/plans/2026-07-04-phase-1-6-closure-workspace-switcher-charge-target-annotation.md`), (3) projection line BT/RoR visual differentiation, (4) anti-nested-card enforcement rule, (5) Config > Axes/Curves layout-internals restructuring.
 
 ---
 
@@ -58,7 +58,7 @@
 - [x] Keep label/value padding inside the fixed-width telemetry column.
 - [x] Draw a self-contained value surface so it cannot detach from a parent rounded rectangle.
 - [x] Add/update selector tests for transparent `lcdSurface` and `telemetryCard` containers.
-- [ ] Capture a long-Chinese-label screenshot proving the telemetry column stays fixed and visually aligned.
+- [x] Capture a long-Chinese-label screenshot proving the telemetry column stays fixed and visually aligned.
 
 ## Task 3: Dialog Base Refresh
 
@@ -69,7 +69,7 @@
 - [x] Add light Morandi dialog background tokens.
 - [x] Apply flatter styling to `QDialog`, `QMessageBox`, `QFileDialog`, and dialog buttons.
 - [x] Add tests that assert the dialog selectors exist in the modern stylesheet.
-- [ ] Capture Config > Axes and Config > Curves screenshots.
+- [x] Capture Config > Axes and Config > Curves screenshots.
 
 ## Task 4: Remaining PyQtGraph Overlay Parity
 
@@ -113,7 +113,7 @@
 - [x] Focused tests cover event value rails, guide extraction/rendering, analysis masks/statistics, scoped dialog properties/selectors, workspace action hints, and typed plugin categories.
 - [x] Current parity/dialog slice verification: `120 passed, 1 skipped`; final independent review: `.sisyphus/phase-1-6-1-12-final-review.md` (P0/P1/P2/P3 all zero).
 - [x] Analysis-overlay slice verification: `350 passed, 1 skipped, 2 warnings`; final independent review: `.sisyphus/phase-analysis-overlay-review-pass.md` (P0/P1/P2/P3 all zero).
-- [ ] Screenshot evidence for profile, live simulator, background profile, event-heavy profile, analysis overlays, long Chinese LCD labels, Config > Axes, and Config > Curves.
+- [x] Screenshot evidence for profile, live simulator, background profile, event-heavy profile, analysis overlays, long Chinese LCD labels, Config > Axes, and Config > Curves.
 
 ## Evidence
 
@@ -121,6 +121,7 @@
 - Explicit PyQtGraph grid/phase screenshot: `/tmp/artisanz-phase16-grid-unit.png`
 - Main-window profile redraw metrics from `/tmp/artisanz-phase16-grid-phase-v2.jsonl`: `redraw max=87.658ms avg=53.171ms`, `updateBackground max=30.605ms avg=24.606ms`, `updategraphics max=0.006ms avg=0.003ms`.
 - Closure code evidence: `GuideLineSnapshot`, `EventValueSnapshot`, scoped dialog roles, workspace `actionHint`, and typed plugin categories are covered by focused unit tests. Export/report compatibility remains intentionally Matplotlib-backed.
+- Dialog visual evidence: `/tmp/artisanz-phase16-long-lcd-column.png`, `/tmp/artisanz-phase16-axes-dialog-final.png`, and `/tmp/artisanz-phase16-curves-dialog-final.png` were captured from real `ApplicationWindow` dialogs with `modern_application_stylesheet()`. Focused theme/dialog result: `39 passed, 1 skipped`. Nested row margins now remain intact; the Axes time-step combo no longer uses the macOS native width cap.
 
 ## Exit Gate
 

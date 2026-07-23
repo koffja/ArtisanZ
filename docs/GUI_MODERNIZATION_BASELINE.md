@@ -238,6 +238,8 @@ Phase 1.6 analysis-overlay decision: PyQtGraph now consumes renderer-neutral ana
 
 2026-07-24 projection parity: PyQtGraph projection curves now match the legacy Matplotlib projection contract (`-.`, width `8.0`, opacity `0.3`), route Delta BT/ET projections to the linked RoR plot only when the RoR axis exists, render projections above the main curves at z-order `45`, and keep them out of the compact legend. Evidence: `/tmp/artisanz-phase16-projection.png`; independent review: `.sisyphus/phase-projection-parity-review.md` (`PASS`).
 
+2026-07-24 dialog visual validation: production-themed offscreen screenshots confirmed fixed-width LCD telemetry with long Chinese labels, readable Axes time-step and numeric controls, and readable Curves symbolic-assignment labels. The root cause of the clipped Curves labels was nested layout polishing that added panel margins to every row; inner row margins now remain intact. The macOS-only native combo width cap was removed from the Axes time-step control so the flat theme can display translated values such as `2 minutes` without clipping. Evidence: `/tmp/artisanz-phase16-long-lcd-column.png`, `/tmp/artisanz-phase16-axes-dialog-final.png`, `/tmp/artisanz-phase16-curves-dialog-final.png`. Focused verification: `39 passed, 1 skipped` for theme/dialog tests.
+
 ## Capture Troubleshooting
 
 - If no metrics appear, confirm Artisan was launched from `src/` with `ARTISANZ_GUI_PERF=1`.

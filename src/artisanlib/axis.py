@@ -223,8 +223,10 @@ class WindowsDlg(ArtisanDialog):
         self.xaxislencombobox.setMinimumContentsLength(6)
         width = self.xaxislencombobox.minimumSizeHint().width()
         self.xaxislencombobox.setMinimumWidth(width)
-        if platform.system() == 'Darwin':
-            self.xaxislencombobox.setMaximumWidth(width)
+        # The old macOS cap was based on the native combo hint and clips
+        # translated values such as "2 minutes" after the flat theme adds
+        # padding and a custom arrow.
+        self.xaxislencombobox.setProperty('modernExpandValueControl', True)
 #        self.xaxislencombobox.setMaximumWidth(120)
 
         self.timeconversion = [0,60,120,180,240,300,600,1800,3600,86400]
