@@ -234,6 +234,8 @@ Phase 1.26 decision: toolbar geometry should be specified as product UI metrics 
 
 Phase 1.6 analysis-overlay decision: PyQtGraph now consumes renderer-neutral analysis interval masks, top/bottom interval edge bands, translated interval guides, and segment/analysis statistics boxes. State is written before the redraw that publishes the first result frame, and reset/profile/background-clear paths remove all analysis handoff state. Result boxes preserve the legacy z-order contract (`segment=30`, `analysis=31`). Dragging/editing those boxes and native-window screenshot evidence remain separate visual QA work.
 
+2026-07-24 saved-profile visual evidence: `src/test/data/profile1.alog` rendered through the PyQtGraph snapshot export with runtime analysis state layered on top. `/tmp/artisanz-phase16-analysis-overlay.png` is `1440x820`, with `temperature_item_count=32`, `ror_item_count=2`, `renderer_event_item_count=40`, `renderer_event_value_item_count=10`, `renderer_guide_item_count=4`, `renderer_area_item_count=1`, and `sampled_non_background_pixel_count=37570`. The saved `.alog` does not persist live analysis result text, so the evidence intentionally validates the production runtime contract separately from profile serialization.
+
 ## Capture Troubleshooting
 
 - If no metrics appear, confirm Artisan was launched from `src/` with `ARTISANZ_GUI_PERF=1`.

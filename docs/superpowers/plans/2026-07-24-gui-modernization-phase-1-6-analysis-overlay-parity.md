@@ -27,6 +27,13 @@
 - `git diff --check` passed.
 - Independent review: `.sisyphus/phase-analysis-overlay-review-pass.md` (`PASS`, P0/P1/P2/P3 all zero).
 
+## Visual Evidence
+
+- Saved profile source: `src/test/data/profile1.alog`.
+- Rendered evidence: `/tmp/artisanz-phase16-analysis-overlay.png` at `1440x820`.
+- PyQtGraph result: `temperature_item_count=32`, `ror_item_count=2`, `renderer_event_item_count=40`, `renderer_event_value_item_count=10`, `renderer_guide_item_count=4`, `renderer_area_item_count=1`, `sampled_non_background_pixel_count=37570`.
+- The `.alog` stores curve/event data but not live `analysisShowResults()` text. Validation therefore layered representative runtime analysis state onto the saved profile snapshot; the production path was separately verified through `analysisShowResults()` state ordering and unit coverage.
+
 ## Remaining Follow-up
 
 - Matplotlib-style draggable/editable analysis result boxes are not part of this bounded renderer parity slice.
