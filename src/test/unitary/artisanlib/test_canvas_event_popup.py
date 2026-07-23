@@ -10,6 +10,7 @@ full Artisan application window.
 from __future__ import annotations
 
 import os
+from types import SimpleNamespace
 
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 
@@ -183,3 +184,49 @@ def test_handle_pyqtgraph_right_click_respects_pan_zoom_mode() -> None:
     finally:
         QMenu.popup = real_popup  # type: ignore[method-assign]
     assert captured == []
+
+
+def test_handle_pyqtgraph_event_drag_updates_foreground_event_time() -> None:
+    from artisanlib.canvas import tgraphcanvas
+    from artisanlib.plot_snapshot import EventMarkerSnapshot
+
+    stub = _make_stub_canvas(bt_value=200.0)
+    stub._handle_pyqtgraph_event_drag = tgraphcanvas._handle_pyqtgraph_event_drag.__get__(stub)  # type: ignore[attr-defined]
+    stub.flagon = False  # type: ignore[attr-defined]
+    stub.specialevents = [2]  # type: ignore[attr-defined]
+    stub.specialeventstype = [3]  # type: ignore[attr-defined]
+    stub.specialeventsStrings = ['test']  # type: ignore[attr-defined]
+    stub.specialeventsvalue = [0.0]  # type: ignore[attr-defined]
+    stub.designerflag = False  # type: ignore[attr-defined]
+    stub.redraw_calls = 0  # type: ignore[attr-defined]
+    stub.dirty_calls = 0  # type: ignore[attr-defined]
+
+    def set_event(index, event_time_idx, event_type, description, value):  # noqa: ANN001
+        stub.specialevents[index] = event_time_idx  # type: ignore[attr-defined]
+        stub.specialeventstype[index] = event_type  # type: ignore[attr-defined]
+        stub.specialeventsStrings[index] = description  # type: ignore[attr-defined]
+        stub.specialeventsvalue[index] = value  # type: ignore[attr-defined]
+
+    class _Signal:
+        def emit(self_inner) -> None:
+            stub.dirty_calls += 1  # type: ignore[attr-defined]
+
+    stub.setEvent = set_event  # type: ignore[attr-defined]
+    stub.redraw_keep_view = lambda **_kwargs: setattr(stub, 'redraw_calls', stub.redraw_calls + 1)  # type: ignore[attr-defined]
+    stub.fileDirtySignal = _Signal()  # type: ignore[attr-defined]
+    stub.aw = SimpleNamespace(orderEvents=lambda **_kwargs: None)  # type: ignore[attr-defined]
+
+    stub._handle_pyqtgraph_event_drag(  # type: ignore[attr-defined]
+        EventMarkerSnapshot(
+            time=90.0,
+            label='EVENT',
+            event_type=3,
+            color='#5E6B6E',
+            kind='special',
+        ),
+        150.0,
+    )
+
+    assert stub.specialevents == [3]  # type: ignore[attr-defined]
+    assert stub.redraw_calls == 1  # type: ignore[attr-defined]
+    assert stub.dirty_calls == 1  # type: ignore[attr-defined]

@@ -32,6 +32,7 @@ class EventMarkerSnapshot:
     temperature: float | None = None
     kind: EventMarkerKind = 'special'
     y_position: float | None = None
+    source_index: int | None = None
 
 
 @dataclass(frozen=True, slots=True)

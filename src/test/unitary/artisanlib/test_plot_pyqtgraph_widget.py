@@ -17,6 +17,7 @@ from artisanlib.plot_snapshot import (
     EventMarkerSnapshot,
     PhaseBandSnapshot,
     RoastPlotSnapshot,
+    StatisticsBackgroundSnapshot,
     TimeRangeSnapshot,
 )
 
@@ -156,6 +157,61 @@ def test_create_pyqtgraph_plot_target_renders_main_event_as_original_annotation_
 
         assert target.renderer.event_item_count() == 6
         assert [item.zValue() for item in target.renderer._event_items[:4]] == pytest.approx([20.0, 24.0, 23.0, 32.0])
+    finally:
+        target.close()
+
+
+def test_foreground_event_line_emits_drag_callback_after_release() -> None:
+    target = create_pyqtgraph_plot_target(use_opengl=False, include_ror=True)
+    received: list[tuple[int, float]] = []
+    try:
+        event = EventMarkerSnapshot(
+            time=120.0,
+            label='EVENT',
+            event_type=3,
+            color='#5E6B6E',
+            kind='special',
+        )
+        target.renderer.set_snapshot(replace(
+            _snapshot(),
+            events=(event,),
+        ))
+        target.set_event_drag_callback(
+            lambda marker, new_time: received.append((marker.event_type, new_time)))
+        _APPLICATION.processEvents()
+
+        line = next(item for item in target.renderer._event_items if item.__class__.__name__ == 'InfiniteLine')
+        assert line.movable is True
+        line.setValue(180.0)
+        line.sigPositionChangeFinished.emit(line)
+
+        assert received == [(3, 180.0)]
+    finally:
+        target.close()
+
+
+def test_statistics_background_drag_callback_can_be_bound_after_snapshot() -> None:
+    target = create_pyqtgraph_plot_target(use_opengl=False, include_ror=True)
+    received: list[tuple[str, float, float]] = []
+    try:
+        background = StatisticsBackgroundSnapshot(
+            text='analysis',
+            position=(0.5, 0.5),
+            color='#FFFDF8',
+            text_color='#20272B',
+        )
+        target.renderer.set_snapshot(replace(
+            _snapshot(),
+            statistics_backgrounds=(background,),
+        ))
+        target.set_statistics_background_drag_callback(
+            lambda item, x, y: received.append((item.kind, x, y)))
+        _APPLICATION.processEvents()
+
+        item = target.renderer._statistics_background_items[0]
+        item._drag_callback(123.0, 176.0)  # type: ignore[attr-defined]
+
+        assert received == [('analysis', 123.0, 176.0)]
     finally:
         target.close()
 

@@ -249,8 +249,8 @@ def test_build_roast_plot_snapshot_extracts_foreground_event_markers() -> None:
     snapshot = build_roast_plot_snapshot(FakeCanvas())
 
     assert snapshot.events == (
-        EventMarkerSnapshot(time=1.0, label='power up', event_type=1, color='#222222', value=55.0),
-        EventMarkerSnapshot(time=2.0, label='Fan', event_type=2, color='#333333', value=25.0),
+        EventMarkerSnapshot(time=1.0, label='power up', event_type=1, color='#222222', value=55.0, source_index=0),
+        EventMarkerSnapshot(time=2.0, label='Fan', event_type=2, color='#333333', value=25.0, source_index=1),
     )
     assert snapshot.event_values == (
         EventValueSnapshot(time=1.0, value=55.0, event_type=1, color='#222222', label='power up', marker='s', marker_size=5.0, line_width=1.5),

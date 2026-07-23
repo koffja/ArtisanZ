@@ -696,6 +696,7 @@ def _foreground_event_markers(source: object) -> tuple[EventMarkerSnapshot, ...]
             color=_event_color(source, event_type),
             value=None if event_values[i] is None else float(event_values[i]),
             kind='special',
+            source_index=i,
         ))
     return tuple(markers)
 

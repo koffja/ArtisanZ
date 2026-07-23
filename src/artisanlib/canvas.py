@@ -120,7 +120,12 @@ from artisanlib.plot_live_frame import (
     live_frame_to_snapshot,
     merge_static_plot_overlays,
 )
-from artisanlib.plot_snapshot import AxisSnapshot, RendererViewState
+from artisanlib.plot_snapshot import (
+    AxisSnapshot,
+    EventMarkerSnapshot,
+    RendererViewState,
+    StatisticsBackgroundSnapshot,
+)
 from artisanlib.plot_snapshot_extractor import (
     DEFAULT_BACKGROUND_OPACITY,
     build_roast_plot_snapshot,
@@ -4535,6 +4540,78 @@ class tgraphcanvas(QObject):
         self.aw.setFocus()  # gain focus while the event minieditor is open
         self._open_event_marker_popup(xdata, ydata)
 
+    def _handle_pyqtgraph_event_drag(self, event: EventMarkerSnapshot, new_time: float) -> None:
+        """Commit a dragged foreground event through the existing event API."""
+        if event.kind != 'special' or self.flagon or self.designerflag:
+            if event.kind == 'special' and (self.flagon or self.designerflag):
+                self.redraw_keep_view(recomputeAllDeltas=False)
+            return
+        limit = min(
+            len(self.specialevents),
+            len(self.specialeventstype),
+            len(self.specialeventsStrings),
+            len(self.specialeventsvalue),
+            len(self.timex),
+        )
+        if limit == 0:
+            return
+        candidates = [
+            index for index in range(limit)
+            if 0 <= int(self.specialevents[index]) < len(self.timex)
+            and int(self.specialeventstype[index]) == int(event.event_type)
+        ]
+        if not candidates:
+            return
+        event_index = event.source_index if event.source_index in candidates else min(
+            candidates,
+            key=lambda index: abs(float(self.timex[self.specialevents[index]]) - event.time),
+        )
+        new_index = max(0, min(len(self.timex) - 1, self.time2index(float(new_time))))
+        if new_index == self.specialevents[event_index]:
+            return
+        self.setEvent(
+            event_index,
+            new_index,
+            self.specialeventstype[event_index],
+            self.specialeventsStrings[event_index],
+            self.specialeventsvalue[event_index],
+        )
+        self.aw.orderEvents(force_update=False)
+        self.redraw_keep_view(recomputeAllDeltas=False)
+        if not self.flagon:
+            self.fileDirtySignal.emit()
+
+    def _handle_pyqtgraph_statistics_drag(
+            self,
+            background: StatisticsBackgroundSnapshot,
+            x_position: float,
+            y_position: float,
+    ) -> None:
+        """Persist a dragged analysis/segment result box in axes fractions."""
+        if self.flagon or self.designerflag:
+            self.redraw_keep_view(recomputeAllDeltas=False)
+            return
+        target = self.plot_pyqtgraph_target
+        renderer = getattr(target, 'renderer', None) if target is not None else None
+        view_state = getattr(renderer, 'export_view_state', lambda: None)()
+        if view_state is None:
+            return
+        x_span = view_state.time_axis.maximum - view_state.time_axis.minimum
+        y_span = view_state.temperature_axis.maximum - view_state.temperature_axis.minimum
+        if x_span <= 0 or y_span <= 0:
+            return
+        x_fraction = max(0.02, min(0.98, (x_position - view_state.time_axis.minimum) / x_span))
+        y_fraction = max(0.02, min(0.98, (y_position - view_state.temperature_axis.minimum) / y_span))
+        if background.kind == 'analysis':
+            self.analysisresultsloc = (x_fraction, y_fraction)
+        elif background.kind == 'segment':
+            self.segmentresultsloc = (x_fraction, y_fraction)
+        else:
+            return
+        self.redraw_keep_view(recomputeAllDeltas=False)
+        if not self.flagon:
+            self.fileDirtySignal.emit()
+
     @pyqtSlot('QAction*')
     def event_popup_action(self, action:QAction) -> None:
         if action.key[0] >= 0:  # type: ignore[attr-defined] # "QAction" has no attribute "key"
@@ -6226,6 +6303,12 @@ class tgraphcanvas(QObject):
             set_right_click_callback = getattr(target, 'set_right_click_callback', None)
             if callable(set_right_click_callback):
                 set_right_click_callback(self._handle_pyqtgraph_right_click)
+            set_event_drag_callback = getattr(target, 'set_event_drag_callback', None)
+            if callable(set_event_drag_callback):
+                set_event_drag_callback(self._handle_pyqtgraph_event_drag)
+            set_statistics_drag_callback = getattr(target, 'set_statistics_background_drag_callback', None)
+            if callable(set_statistics_drag_callback):
+                set_statistics_drag_callback(self._handle_pyqtgraph_statistics_drag)
             self.plot_display_widget = widget
             self.canvas.setVisible(False)
             self.sync_pyqtgraph_static_overlays_from_canvas()

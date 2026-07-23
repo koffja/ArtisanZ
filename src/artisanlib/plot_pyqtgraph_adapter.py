@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+import logging
 import math
 from typing import Any
 
@@ -26,6 +27,8 @@ from artisanlib.plot_snapshot import (
 
 EventItemFactory = Callable[[EventMarkerSnapshot, RoastPlotSnapshot], object | tuple[object, ...] | None]
 EventValueItemFactory = Callable[[EventValueSnapshot, RoastPlotSnapshot], object | None]
+EventDragCallback = Callable[[EventMarkerSnapshot, float], None]
+StatisticsBackgroundDragCallback = Callable[[StatisticsBackgroundSnapshot, float, float], None]
 GuideItemFactory = Callable[[GuideLineSnapshot, RoastPlotSnapshot], object | None]
 PhaseItemFactory = Callable[[PhaseBandSnapshot, RoastPlotSnapshot], object | None]
 TimeRangeItemFactory = Callable[[TimeRangeSnapshot, RoastPlotSnapshot], object | tuple[object, ...] | None]
@@ -48,6 +51,8 @@ RoRFlickAnnotationItemFactory = Callable[
     object | tuple[object, ...] | None,
 ]
 CurvePenFactory = Callable[[CurveSnapshot], object]
+
+_log = logging.getLogger(__name__)
 
 
 _BT_GRADIENT_ENABLED_DEFAULT = False
@@ -88,6 +93,8 @@ class PyQtGraphSnapshotRenderer:
             event_line_factory: EventItemFactory | None = None,
             event_label_factory: EventItemFactory | None = None,
             event_value_factory: EventValueItemFactory | None = None,
+            event_drag_callback: EventDragCallback | None = None,
+            statistics_background_drag_callback: StatisticsBackgroundDragCallback | None = None,
             guide_item_factory: GuideItemFactory | None = None,
             phase_item_factory: PhaseItemFactory | None = None,
             time_range_factory: TimeRangeItemFactory | None = None,
@@ -104,6 +111,8 @@ class PyQtGraphSnapshotRenderer:
         self._event_line_factory = event_line_factory or _default_event_line_factory
         self._event_label_factory = event_label_factory or _default_event_label_factory
         self._event_value_factory = event_value_factory or _default_event_value_factory
+        self._event_drag_callback = event_drag_callback
+        self._statistics_background_drag_callback = statistics_background_drag_callback
         self._guide_item_factory = guide_item_factory or _default_guide_item_factory
         self._phase_item_factory = phase_item_factory or _default_phase_item_factory
         self._time_range_factory = time_range_factory or _default_time_range_item_factory
@@ -194,6 +203,17 @@ class PyQtGraphSnapshotRenderer:
 
     def rorflick_annotation_item_count(self) -> int:
         return len(self._rorflick_annotation_items)
+
+    def set_event_drag_callback(self, callback: EventDragCallback | None) -> None:
+        """Set the callback used when a foreground event line is released."""
+        self._event_drag_callback = callback
+
+    def set_statistics_background_drag_callback(
+            self,
+            callback: StatisticsBackgroundDragCallback | None,
+    ) -> None:
+        """Set the callback used when an analysis result box is released."""
+        self._statistics_background_drag_callback = callback
 
     def _apply_static_overlays(self, snapshot: RoastPlotSnapshot, *, force: bool) -> None:
         signature = _static_overlay_signature(snapshot)
@@ -347,6 +367,7 @@ class PyQtGraphSnapshotRenderer:
             item = self._statistics_background_factory(background, snapshot)
             if item is None:
                 continue
+            self._connect_statistics_background_drag(item, background)
             _call_if_available(self._temperature_plot, 'addItem', item)
             self._statistics_background_items.append(item)
 
@@ -374,9 +395,75 @@ class PyQtGraphSnapshotRenderer:
 
     def _create_event_items(self, event: EventMarkerSnapshot, snapshot: RoastPlotSnapshot) -> list[object]:
         items: list[object] = []
-        items.extend(_as_items(self._event_line_factory(event, snapshot)))
+        line_items = _as_items(self._event_line_factory(event, snapshot))
+        self._connect_event_drag(event, line_items)
+        items.extend(line_items)
         items.extend(_as_items(self._event_label_factory(event, snapshot)))
         return items
+
+    def _connect_event_drag(self, event: EventMarkerSnapshot, items: tuple[object, ...]) -> None:
+        if event.kind != 'special':
+            return
+        for item in items:
+            signal = getattr(item, 'sigPositionChangeFinished', None)
+            connect = getattr(signal, 'connect', None)
+            value = getattr(item, 'value', None)
+            if not callable(connect) or not callable(value):
+                continue
+
+            def _on_finished(
+                    *_args: object,
+                    event_marker: EventMarkerSnapshot = event,
+                    value_method: Callable[[], object] = value,
+            ) -> None:
+                try:
+                    new_time = float(value_method())
+                except (TypeError, ValueError):
+                    return
+                callback = self._event_drag_callback
+                if callback is not None:
+                    try:
+                        callback(event_marker, new_time)
+                    except Exception:  # pylint: disable=broad-except
+                        _log.warning('event drag callback failed', exc_info=True)
+
+            connect(_on_finished)
+            _call_if_available(item, 'setCursor', QtCore.Qt.CursorShape.SizeHorCursor)
+            break
+
+    def _connect_statistics_background_drag(
+            self,
+            item: object,
+            background: StatisticsBackgroundSnapshot,
+    ) -> None:
+        set_callback = getattr(item, 'set_drag_callback', None)
+        set_plot = getattr(item, 'set_drag_plot', None)
+        if not callable(set_callback) or not callable(set_plot):
+            return
+        set_plot(self._temperature_plot)
+        def _on_drag(x: object, y: object, background_snapshot: StatisticsBackgroundSnapshot = background) -> None:
+            try:
+                x_position = float(x)
+                y_position = float(y)
+            except (TypeError, ValueError):
+                return
+            self._emit_statistics_background_drag(background_snapshot, x_position, y_position)
+
+        set_callback(_on_drag)
+
+    def _emit_statistics_background_drag(
+            self,
+            background: StatisticsBackgroundSnapshot,
+            x_position: float,
+            y_position: float,
+    ) -> None:
+        callback = self._statistics_background_drag_callback
+        if callback is None:
+            return
+        try:
+            callback(background, x_position, y_position)
+        except Exception:  # pylint: disable=broad-except
+            _log.warning('statistics background drag callback failed', exc_info=True)
 
     def _apply_event_values(self, snapshot: RoastPlotSnapshot) -> None:
         self._clear_event_value_items()
@@ -604,7 +691,7 @@ def _default_event_line_factory(
                 width=1.1,
                 style=QtCore.Qt.PenStyle.DashLine,
             ),
-            movable=False,
+            movable=event.kind == 'special',
         )
         point = pg.ScatterPlotItem(
             [event.time],
@@ -637,7 +724,7 @@ def _default_event_line_factory(
         pos=event.time,
         angle=90,
         pen=pg.mkPen(color=_color_with_alpha(pg, event.color, opacity), width=width),
-        movable=False,
+        movable=event.kind == 'special',
     )
     _call_if_available(item, 'setZValue', 20)
     return item
@@ -852,6 +939,105 @@ def _default_analysis_mask_item_factory(
     return tuple(items) or None
 
 
+def _draggable_statistics_text_item(
+        pg: Any,
+        *,
+        text: str,
+        color: str,
+        fill: object,
+        border: object,
+) -> object:
+    """Create a TextItem that reports its released plot position.
+
+    Matplotlib analysis annotations are draggable in the legacy canvas. Keep
+    that interaction in the PyQtGraph item itself so the renderer does not
+    need to know about Qt mouse events or canvas-owned state.
+    """
+    from PyQt6.QtCore import Qt
+
+    class DraggableStatisticsTextItem(pg.TextItem):  # type: ignore[misc]
+        def __init__(self) -> None:
+            super().__init__(text=text, color=color, anchor=(0.0, 0.5), fill=fill, border=border)
+            self._drag_callback: Callable[[float, float], None] | None = None
+            self._drag_plot: object | None = None
+            self._dragging = False
+            self._drag_moved = False
+            self._drag_start_scene: object | None = None
+            self._drag_start_data: object | None = None
+            self.setAcceptedMouseButtons(Qt.MouseButton.LeftButton)
+            self.setCursor(Qt.CursorShape.SizeAllCursor)
+
+        def set_drag_callback(self, callback: Callable[[float, float], None]) -> None:
+            self._drag_callback = callback
+
+        def set_drag_plot(self, plot: object) -> None:
+            self._drag_plot = plot
+
+        def mousePressEvent(self, event: object) -> None:  # noqa: N802
+            button = getattr(event, 'button', lambda: None)()
+            if button == Qt.MouseButton.LeftButton:
+                self._dragging = True
+                self._drag_start_scene = getattr(event, 'scenePos', lambda: None)()
+                self._drag_start_data = self._scene_to_data(self._drag_start_scene)
+                self._drag_moved = False
+                _call_if_available(event, 'accept')
+                return
+            super().mousePressEvent(event)
+
+        def mouseMoveEvent(self, event: object) -> None:  # noqa: N802
+            if self._dragging and self._drag_start_scene is not None:
+                scene_pos = getattr(event, 'scenePos', lambda: None)()
+                if scene_pos is not None:
+                    try:
+                        self._drag_moved = self._drag_moved or float(
+                            (scene_pos - self._drag_start_scene).manhattanLength()) > 1.0
+                    except (AttributeError, TypeError, ValueError):
+                        self._drag_moved = True
+                    data_point = self._scene_to_data(scene_pos)
+                    if data_point is not None:
+                        self.setPos(data_point)
+                _call_if_available(event, 'accept')
+                return
+            super().mouseMoveEvent(event)
+
+        def mouseReleaseEvent(self, event: object) -> None:  # noqa: N802
+            was_dragging = self._dragging
+            self._dragging = False
+            if was_dragging and self._drag_moved:
+                self._emit_drag_position()
+                _call_if_available(event, 'accept')
+                return
+            super().mouseReleaseEvent(event)
+
+        def _emit_drag_position(self) -> None:
+            callback = self._drag_callback
+            plot = self._drag_plot
+            if callback is None or plot is None:
+                return
+            view_box = getattr(plot, 'getViewBox', lambda: None)()
+            map_scene_to_view = getattr(view_box, 'mapSceneToView', None)
+            if not callable(map_scene_to_view):
+                return
+            point = map_scene_to_view(self.scenePos())
+            try:
+                callback(float(point.x()), float(point.y()))
+            except (TypeError, ValueError):
+                return
+            except Exception:  # pylint: disable=broad-except
+                _log.warning('statistics text drag callback failed', exc_info=True)
+
+        def _scene_to_data(self, scene_pos: object | None) -> object | None:
+            if scene_pos is None or self._drag_plot is None:
+                return None
+            view_box = getattr(self._drag_plot, 'getViewBox', lambda: None)()
+            map_scene_to_view = getattr(view_box, 'mapSceneToView', None)
+            if not callable(map_scene_to_view):
+                return None
+            return map_scene_to_view(scene_pos)
+
+    return DraggableStatisticsTextItem()
+
+
 def _default_statistics_background_item_factory(
         background: StatisticsBackgroundSnapshot,
         snapshot: RoastPlotSnapshot) -> object | None:
@@ -868,10 +1054,10 @@ def _default_statistics_background_item_factory(
     y_span = snapshot.temperature_axis.maximum - snapshot.temperature_axis.minimum
     if x_span <= 0 or y_span <= 0:
         return None
-    item = pg.TextItem(
+    item = _draggable_statistics_text_item(
+        pg,
         text=background.text,
         color=background.text_color,
-        anchor=(0.0, 0.5),
         fill=pg.mkBrush(_color_with_alpha(pg, background.color, background.opacity)),
         border=pg.mkPen(
             color=_color_with_alpha(pg, background.color, min(1.0, background.opacity + 0.15)),

@@ -13,10 +13,13 @@ from artisanlib.plot_pyqtgraph_overlays import (
     RORFillOverlay,
 )
 from artisanlib.plot_comparison_overlay import ComparisonOverlay
+from artisanlib.plot_snapshot import EventMarkerSnapshot, StatisticsBackgroundSnapshot
 
 CursorPositionCallback = Callable[[float, float, float | None], None]
 # right-click event-edit popup: receives (time, value) in plot-data coordinates
 RightClickCallback = Callable[[float, float], None]
+EventDragCallback = Callable[[EventMarkerSnapshot, float], None]
+StatisticsBackgroundDragCallback = Callable[[StatisticsBackgroundSnapshot, float, float], None]
 
 
 @dataclass(slots=True)
@@ -122,6 +125,15 @@ class PyQtGraphPlotTarget:
         # The callback receives plot-data coordinates (time, value) already mapped
         # from the widget pixel position via the view box scene transform.
         self._right_click_callback = callback
+
+    def set_event_drag_callback(self, callback: EventDragCallback | None) -> None:
+        self.renderer.set_event_drag_callback(callback)
+
+    def set_statistics_background_drag_callback(
+            self,
+            callback: StatisticsBackgroundDragCallback | None,
+    ) -> None:
+        self.renderer.set_statistics_background_drag_callback(callback)
 
     def _emit_right_click(self, xdata: float, ydata: float) -> None:
         if self._right_click_callback is not None:

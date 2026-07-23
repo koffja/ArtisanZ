@@ -132,19 +132,21 @@ Important observations from the code review:
 **High-Value PyQtGraph Parity Backlog:**
 
 - Background profile parity beyond the currently extracted ET/BT/Delta background curves: background event value rails and background annotation details. Extra-device background curves were added on 2026-07-24 with legacy selection, masking, styling, and axis-routing parity.
-- Event parity beyond current marker lines/labels: event value bars for the existing event graph modes, richer label placement, overlap avoidance, clustered labels, and drag/edit affordances where Matplotlib currently supports interaction.
-- Analysis overlays: AUC guide/area visuals, analysis masks, statistics result boxes, charge-target annotations, and roast-analysis guide marks are now carried through the snapshot/runtime path (2026-07-24). Draggable/editable result-box parity remains.
-- Projection/guide polish: distinguish forecast/projection lines visually, preserve original line styles more completely, and verify RoR projection placement against legacy behavior.
+- Event parity beyond current marker lines/labels: event value markers, richer label placement, overlap avoidance, clustered labels, and foreground custom-event drag/edit affordances are implemented. Main events retain the existing right-click edit popup.
+- Analysis overlays: AUC guide/area visuals, analysis masks, draggable statistics result boxes, charge-target annotations, and roast-analysis guide marks are carried through the snapshot/runtime path (2026-07-24).
+- Projection/guide polish: forecast/projection line styles and RoR-axis placement are implemented and covered by the Phase 1.6 projection review.
 - Legend/export parity: keep Matplotlib for report/export until PyQtGraph can provide compatible view-state/export handoff or a deliberate export adapter.
 - Visual QA: capture historical profile, live simulator, event-heavy, background-profile, long Chinese labels, Config > Axes, Config > Curves, Events, Devices, and Alarms screens.
 
 **Remaining Visual Backlog:**
 
 - Continue deeper per-panel simplification for hardware-specific Devices sections after the shared and dense-dialog polish layers.
-- Add event drag/edit parity and draggable/editable analysis result boxes.
+- Event drag/edit parity and draggable/editable analysis result boxes are now implemented in the active PyQtGraph path; native pointer automation remains a QA gate.
 - Keep Matplotlib as the export/report compatibility path until a deliberate PyQtGraph export adapter exists.
 - Avoid nested cards, oversized rounded rectangles, and dark gray default widget wells.
 - Preserve existing translations, shortcuts, validation, and settings persistence.
+
+**2026-07-24 Interaction Update:** Foreground custom-event lines now support release-to-commit dragging through the existing `setEvent()`/`orderEvents()` path. Analysis and segment result boxes now support drag release and persist axes-fraction positions through `analysisresultsloc` / `segmentresultsloc`. Main event markers remain intentionally non-movable and retain the existing right-click event popup, matching the legacy distinction between event buttons and custom event editing. Invalid legacy event indexes are ignored safely. Final verification: `251 passed, 1 skipped, 2 warnings`; interaction subset `117 passed, 2 warnings`; `ruff`, `py_compile`, and `git diff --check` passed. Independent interaction re-review: PASS, P0/P1/P2/P3 all zero.
 
 **2026-07-04 Update:** Five stale `[ ]` items in the Phase 1.6 plan were flipped to `[x]` with cross-references to Phases 1.9, 1.10, 1.12, 1.17, 1.18 (documentation-only back-fill — see `docs/superpowers/plans/2026-07-04-phase-1-6-closure-workspace-switcher-charge-target-annotation.md` Task Group A). The Workspace Status dock now exposes 5 clickable workspace switcher buttons (Task Group B) via a QML Repeater bound to the existing `setWorkspaceModeValue` slot, with the active mode highlighted by `accentColor`. The charge-target annotation text/callout now renders in the PyQtGraph path via `ChargeTargetAnnotationSnapshot` (`plot_snapshot.py`) + `_charge_target_annotations` extractor (`plot_snapshot_extractor.py`) + `_default_charge_target_annotation_factory` (`plot_pyqtgraph_adapter.py`, following the phase-summary multi-item tuple pattern), closing the critical ArtisanZ-specific gap noted in the Phase 1.6 audit. Charged state renders a static top-left card; active state renders a dynamic callout with dashed connector line to the current (time, temp) point. Rectangular bbox is used instead of Matplotlib's `boxstyle=round` (PyQtGraph limitation); rounded corners are a future visual-parity follow-up.
 

@@ -1080,6 +1080,8 @@ def test_analysis_overlay_factories_preserve_axis_color_and_opacity() -> None:
     assert item.pos().x() == pytest.approx(25.0)
     assert item.pos().y() == pytest.approx(250.0)
     assert item.fill.color().alphaF() == pytest.approx(0.6, abs=0.01)
+    assert callable(getattr(item, 'set_drag_callback', None))
+    assert callable(getattr(item, 'set_drag_plot', None))
 
 
 def test_analysis_overlay_factories_skip_disabled_or_empty_items() -> None:

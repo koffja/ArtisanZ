@@ -1,6 +1,6 @@
 # GUI Modernization Phase 1.6 Analysis Overlay Parity Plan
 
-**Status:** Implemented, reviewed, and regression-tested 2026-07-24
+**Status:** Implemented, reviewed, and regression-tested 2026-07-24; interaction follow-up closed 2026-07-24
 
 **Goal:** Restore roast-analysis visuals lost during the PyQtGraph migration without coupling the new renderer to Matplotlib objects.
 
@@ -20,12 +20,21 @@
 - `canvas.py`: owns the new state in `__slots__` and initializes/clears it with the canvas lifecycle.
 - `main.py`: writes all analysis state before the PyQtGraph redraw so the first result frame is complete.
 
+## Interaction Follow-up
+
+- Foreground custom-event `InfiniteLine` items are movable in the active PyQtGraph renderer.
+- Release callbacks resolve the snapshot event back to the existing `specialevents` arrays, call `setEvent()`/`orderEvents()`, redraw while preserving view, and mark historical profiles dirty.
+- Main event markers retain their original non-movable visual annotation; their existing right-click event popup remains the edit path.
+- Analysis and segment result boxes use a small draggable `TextItem` subclass. Release positions convert back to axes fractions and update `analysisresultsloc` or `segmentresultsloc` through the existing canvas state.
+- Recording/designer mode ignores drag commits, preventing accidental edits during live control or design workflows.
+
 ## Verification
 
-- Focused GUI suite: `350 passed, 1 skipped, 2 warnings`.
+- Focused GUI suite: `251 passed, 1 skipped, 2 warnings`; interaction subset: `117 passed, 2 warnings`.
 - `py_compile` passed for all touched runtime modules.
 - `git diff --check` passed.
 - Independent review: `.sisyphus/phase-analysis-overlay-review-pass.md` (`PASS`, P0/P1/P2/P3 all zero).
+- Interaction re-review: `PASS`, P0/P1/P2/P3 all zero after fixing scene/data drag mapping, callback rebinding, guarded-mode redraw, and invalid event-index handling.
 
 ## Visual Evidence
 
@@ -36,6 +45,6 @@
 
 ## Remaining Follow-up
 
-- Matplotlib-style draggable/editable analysis result boxes are not part of this bounded renderer parity slice.
 - Native-window screenshot evidence for saved-profile analysis and long translated result text remains a visual QA gate.
+- Interactive drag behavior is covered by renderer/widget/canvas unit tests; native pointer automation remains a visual QA gate.
 - Report/export remains Matplotlib-backed by design.
