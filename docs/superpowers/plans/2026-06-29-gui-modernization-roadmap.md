@@ -54,6 +54,7 @@ Important observations from the code review:
 | 1.23 | PyQtGraph Cursor, i18n, and Theme Parity | Closed: toolbar cursor readout, translated labels, Morandi default palette | Cursor time/temp/RoR callback, i18n event labels, wider inputs, flat theme preservation | The default renderer restores key interaction feedback and theme consistency |
 | 1.24 | Cotrix Toolbar and Cursor Fit Pass | Closed: Cotrix brand entry, compact toolbar, unclipped cursor text | Cotrix SVG assets, hidden empty subscription action, single-line cursor readout | Toolbar no longer carries obvious Artisan Plus leftovers or clipped telemetry |
 | 1.27 | Event Value and Renderer-Neutral Curve Style Finish | Closed: 2026-07-23 with compact legacy-configured event markers, canonical curve defaults, and PyQtGraph-aware Lines editor | Dense event values remain readable; Lines edits the active renderer | No dense event-value color blocks; PyQtGraph Lines action no longer opens Matplotlib-only editor |
+| 1.28 | Opt-In PyQtGraph Report Graph Handoff | Closed: 2026-07-23 with guarded report-graph selection, nonblank evidence validation, and Matplotlib fallback | Explicit PyQtGraph report graph renders from the same snapshot contract; default report path remains Matplotlib | Saved-profile report graph is nonblank; simulated export failure falls back to Matplotlib |
 | 2 | Plot Renderer Boundary and PyQtGraph POC | Guarded PyQtGraph main-splitter embed implemented and benchmarked in offscreen/native-window simulator smokes | Read-only plot snapshot model, Matplotlib adapter, PyQtGraph live adapter prototype | POC is benchmarkable before any live renderer swap |
 | 3 | Sampling Post-Processing Decoupling | Pure helper extraction surface audited; remaining work is orchestration/renderer payload | Pure data pipeline for filtering, RoR, PID inputs, alarm/event decisions | GUI thread consumes snapshots instead of doing heavy processing inline |
 | 4 | Main UI Information Architecture | Closed at IA/policy/status-hint layer | Scenario-oriented Roast Control, QC Analysis, Device Setup, Production, and Expert workspaces | Users can switch task modes without losing existing expert controls |
@@ -360,6 +361,18 @@ Important observations from the code review:
 **Closed:** 2026-07-23 after final independent review PASS. Legacy event marker shapes (`*`, `H`, and `None`), configured size/width, canonical Artisan curve colors, and existing Simplified Chinese translation contexts are preserved.
 
 **Evidence:** Focused suite produced `108 passed`; event-heavy WebSocket smoke produced a nonblank 1280x720 screenshot with `2` event-value items, `9` event items, and `2` RoR items. `py_compile`, targeted `ruff check`, and `git diff --check` passed. Final review: `.sisyphus/phase-1-visual-parity-final-review-2.md`.
+
+## Phase 1.28: Opt-In PyQtGraph Report Graph Handoff
+
+**Goal:** Validate the renderer-neutral PyQtGraph snapshot path inside the real roast HTML/PDF report flow without changing the default compatibility path.
+
+**Tracking Plan:** `docs/superpowers/plans/2026-07-23-gui-modernization-phase-1-28-report-graph-handoff.md`
+
+**Implementation:** Pending validation and review. `ARTISANZ_REPORT_GRAPH_RENDERER=pyqtgraph` selects a PyQtGraph PNG for the main report graph; all other values keep the Matplotlib SVG path.
+
+**Closed:** 2026-07-23 after independent review PASS. `roastReport()` now uses the shared renderer selector and guarded PyQtGraph PNG export for explicit opt-in only. Blank or failed PyQtGraph output falls back to the existing Matplotlib SVG asset; flavor chart and report template remain unchanged.
+
+**Evidence:** Focused report/export suite produced `18 passed`. Saved `tmp/TEST012.alog` exported a nonblank PyQtGraph report graph with `3,139` sampled non-background pixels, `18` temperature items, `2` RoR items, and `29` event items. Final review: `.sisyphus/phase-1-28-report-graph-review-2.md`.
 
 ## Phase 2: Plot Renderer Boundary and PyQtGraph POC
 

@@ -24377,7 +24377,38 @@ class ApplicationWindow(QMainWindow):
                 self.qmc.patheffects = 0
             self.qmc.redraw(recomputeAllDeltas=False)
 
-            self.qmc.fig.savefig(graph_image,transparent=True)
+            try:
+                from artisanlib.plot_report_renderer import render_report_graph
+
+                def _save_matplotlib_report_graph(path: str) -> None:
+                    try:
+                        os.remove(path)
+                    except OSError:
+                        pass
+                    self.qmc.fig.savefig(path, transparent=True)
+
+                report_result = render_report_graph(
+                    self.qmc,
+                    tmpdir,
+                    matplotlib_export=_save_matplotlib_report_graph,
+                    width=1280,
+                    height=720,
+                    use_opengl=False,
+                )
+                graph_image = report_result.path
+                if report_result.fallback_reason is not None:
+                    _log.warning(
+                        'PyQtGraph report graph failed; using Matplotlib fallback: %s',
+                        report_result.fallback_reason,
+                    )
+            except ImportError:
+                graph_image = str(QDir.cleanPath(QDir(tmpdir).absoluteFilePath('roastlog-graph.svg')))
+                try:
+                    os.remove(graph_image)
+                except OSError:
+                    pass
+                self.qmc.fig.savefig(graph_image,transparent=True)
+
             #add some random number to force HTML reloading
             graph_image = path2url(graph_image)
             graph_image = graph_image + '?dummy=' + str(int(libtime.time()))
