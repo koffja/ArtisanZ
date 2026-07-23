@@ -13543,6 +13543,11 @@ Keyboard Shortcuts must be disabled (ENTER)</source>
         <translation>梅纳反应</translation>
     </message>
     <message>
+        <location filename="../artisanlib/plot_snapshot_extractor.py" line="797" />
+        <source>Development</source>
+        <translation>发展期</translation>
+    </message>
+    <message>
         <location filename="../artisanlib/transposer.py" line="1029" />
         <location filename="../artisanlib/statistics.py" line="224" />
         <location filename="../artisanlib/phases.py" line="48" />

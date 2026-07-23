@@ -6,6 +6,7 @@ from types import SimpleNamespace
 import pytest
 
 from artisanlib.plot_snapshot import (
+    AnalysisMaskSnapshot,
     AreaFillSnapshot,
     AxisSnapshot,
     EventMarkerSnapshot,
@@ -14,6 +15,7 @@ from artisanlib.plot_snapshot import (
     PhaseBandSnapshot,
     PhaseSummarySnapshot,
     RoRFlickAnnotationSnapshot,
+    StatisticsBackgroundSnapshot,
     TimeRangeSnapshot,
 )
 from artisanlib import plot_snapshot_extractor
@@ -189,6 +191,25 @@ class FakeCompletedRoastCanvas(FakeOverlayCanvas):
         'roastphase1': '#DDE8E0',
         'roastphase2': '#E7DEC9',
         'roastphase3': '#F4F2EC',
+    }
+
+
+class FakeAnalysisCanvas(FakeCompletedRoastCanvas):
+    analysisresultsstr = 'Fit result'
+    segmentresultstr = 'Segment result'
+    analysisresultsloc = (0.25, 0.60)
+    segmentresultsloc = (0.50, 0.40)
+    curvefit_starttime = 120.0
+    curvefit_endtime = 600.0
+    analysis_starttime = 240.0
+    analysis_endtime = 600.0
+    alpha = {'analysismask': 0.4, 'statsanalysisbkgnd': 0.75}
+    phase_labels = {'drying': '烘焙前段', 'maillard': '梅拉德', 'development': '发展段'}
+    palette = {
+        **FakeCompletedRoastCanvas.palette,
+        'analysismask': '#D6D1C6',
+        'statsanalysisbkgnd': '#FFFDF8',
+        'text': '#20272B',
     }
 
 
@@ -501,6 +522,160 @@ def test_build_roast_plot_snapshot_extracts_completed_phase_summary_and_developm
             color='#F4F2EC',
         ),
     )
+
+
+def test_build_roast_plot_snapshot_extracts_analysis_masks_backgrounds_and_guides() -> None:
+    snapshot = build_roast_plot_snapshot(FakeAnalysisCanvas())
+
+    assert snapshot.analysis_masks == (
+        AnalysisMaskSnapshot(
+            curvefit_start=120.0,
+            curvefit_end=600.0,
+            analysis_start=240.0,
+            analysis_end=600.0,
+            color='#D6D1C6',
+            opacity=0.2,
+        ),
+    )
+    assert snapshot.statistics_backgrounds == (
+        StatisticsBackgroundSnapshot(
+            text='Segment result',
+            position=(0.50, 0.40),
+            color='#FFFDF8',
+            text_color='#20272B',
+            opacity=0.75,
+            kind='segment',
+            z_value=30.0,
+        ),
+        StatisticsBackgroundSnapshot(
+            text='Fit result',
+            position=(0.25, 0.60),
+            color='#FFFDF8',
+            text_color='#20272B',
+            opacity=0.75,
+            kind='analysis',
+            z_value=31.0,
+        ),
+    )
+    assert [guide.position for guide in snapshot.guides if guide.kind == 'analysis'] == [
+        120.0, 600.0, 240.0, 600.0,
+    ]
+
+
+def test_build_roast_plot_snapshot_skips_empty_and_invalid_analysis_overlays() -> None:
+    empty = build_roast_plot_snapshot(FakeCanvas())
+    assert empty.analysis_masks == ()
+    assert empty.statistics_backgrounds == ()
+    assert all(guide.kind != 'analysis' for guide in empty.guides)
+
+    class InvalidAnalysisCanvas(FakeAnalysisCanvas):
+        curvefit_starttime = float('nan')
+        curvefit_endtime = -1
+        analysis_starttime = 700.0
+        analysis_endtime = 600.0
+
+    invalid = build_roast_plot_snapshot(InvalidAnalysisCanvas())
+    assert invalid.analysis_masks == ()
+    assert all(guide.kind != 'analysis' for guide in invalid.guides)
+    assert len(invalid.statistics_backgrounds) == 2
+
+
+def test_build_roast_plot_snapshot_rejects_invalid_phase_indexes_and_times() -> None:
+    class InvalidPhaseIndexCanvas(FakeCompletedRoastCanvas):
+        timeindex = [0, 99, 7, 0, 0, 0, 10, 0]
+
+    invalid_index = build_roast_plot_snapshot(InvalidPhaseIndexCanvas())
+    assert invalid_index.phase_summaries == ()
+    assert invalid_index.time_ranges == ()
+
+    class InvalidPhaseTimeCanvas(FakeCompletedRoastCanvas):
+        timex = [0.0, 60.0, 120.0, 180.0, 240.0, 300.0, 360.0, float('nan'), 480.0, 540.0, 600.0]
+
+    invalid_time = build_roast_plot_snapshot(InvalidPhaseTimeCanvas())
+    assert invalid_time.phase_summaries == ()
+    assert invalid_time.time_ranges == ()
+
+
+def test_analysis_overlay_opacity_rejects_nonfinite_values() -> None:
+    class NonfiniteAlphaCanvas(FakeAnalysisCanvas):
+        alpha = {'analysismask': float('nan'), 'statsanalysisbkgnd': float('inf')}
+
+    snapshot = build_roast_plot_snapshot(NonfiniteAlphaCanvas())
+    assert snapshot.analysis_masks[0].opacity == pytest.approx(0.2)
+    assert all(background.opacity == pytest.approx(1.0) for background in snapshot.statistics_backgrounds)
+
+
+def test_statistics_backgrounds_do_not_read_stale_matplotlib_annotations() -> None:
+    class StaleAnnotation:
+        @staticmethod
+        def get_text() -> str:
+            return 'stale result'
+
+    class StaleAnnotationCanvas(FakeCompletedRoastCanvas):
+        aw = SimpleNamespace(
+            findTP=lambda: 2,
+            analysisresultsanno=StaleAnnotation(),
+            segmentresultsanno=StaleAnnotation(),
+        )
+
+    snapshot = build_roast_plot_snapshot(StaleAnnotationCanvas())
+    assert snapshot.statistics_backgrounds == ()
+
+
+def test_phase_summary_uses_label_i18n_for_development(monkeypatch: pytest.MonkeyPatch) -> None:
+    translations = {('Label', 'Development'): '发展期'}
+
+    def translate(context: str, text: str) -> str:
+        return translations.get((context, text), text)
+
+    monkeypatch.setattr(
+        plot_snapshot_extractor,
+        'QApplication',
+        SimpleNamespace(translate=translate),
+        raising=False,
+    )
+    summaries = build_roast_plot_snapshot(FakeCompletedRoastCanvas()).phase_summaries
+    assert summaries[-1].label == '发展期'
+
+
+def test_phase_summary_reuses_existing_snapshot_with_source_visibility_and_labels() -> None:
+    class ConfiguredPhaseCanvas(FakeCompletedRoastCanvas):
+        statisticsflags = [False, True, True, True]
+        aw = SimpleNamespace(findTP=lambda: 2, percent_decimals=0)
+        phase_labels = {'drying': '烘焙前段', 'maillard': '梅拉德', 'development': '发展段'}
+
+    summaries = build_roast_plot_snapshot(ConfiguredPhaseCanvas()).phase_summaries
+
+    assert len(summaries) == 3
+    assert [summary.label for summary in summaries] == ['烘焙前段', '梅拉德', '发展段']
+    assert all(summary.bar_visible for summary in summaries)
+    assert all(not summary.label_visible for summary in summaries)
+    assert summaries[0].percent_text.endswith('%')
+
+
+def test_phase_summary_visibility_flags_are_independent() -> None:
+    class HiddenLabelsAndDelta(FakeCompletedRoastCanvas):
+        statisticsflags = [False, True, True, True, False, False, False]
+
+    hidden = build_roast_plot_snapshot(HiddenLabelsAndDelta()).phase_summaries
+    assert all(summary.bar_visible for summary in hidden)
+    assert all(not summary.label_visible for summary in hidden)
+    assert all(not summary.delta_visible for summary in hidden)
+
+    class HiddenBarsOnly(FakeCompletedRoastCanvas):
+        statisticsflags = [True, False, True, True, False, False, True]
+
+    bars_hidden = build_roast_plot_snapshot(HiddenBarsOnly()).phase_summaries
+    assert all(not summary.bar_visible for summary in bars_hidden)
+    assert all(summary.label_visible for summary in bars_hidden)
+    assert all(summary.delta_visible for summary in bars_hidden)
+
+
+def test_phase_summary_respects_statistics_summary_master_switch() -> None:
+    class SummaryDisabledCanvas(FakeCompletedRoastCanvas):
+        statssummary = False
+
+    assert build_roast_plot_snapshot(SummaryDisabledCanvas()).phase_summaries == ()
 
 
 def test_build_roast_plot_snapshot_extracts_turning_point_marker() -> None:

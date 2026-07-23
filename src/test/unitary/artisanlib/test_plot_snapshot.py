@@ -1,12 +1,16 @@
+import dataclasses
+
 import pytest
 
 from artisanlib.plot_snapshot import (
+    AnalysisMaskSnapshot,
     AreaFillSnapshot,
     AxisSnapshot,
     CurveSnapshot,
     EventValueSnapshot,
     GuideLineSnapshot,
     RoastPlotSnapshot,
+    StatisticsBackgroundSnapshot,
 )
 
 
@@ -102,6 +106,35 @@ def test_roast_plot_snapshot_carries_overlay_contracts() -> None:
     assert snapshot.event_values == (event_value,)
     assert snapshot.guides == (guide,)
     assert snapshot.areas == (area,)
+
+
+def test_analysis_overlay_snapshots_are_renderer_neutral_and_immutable() -> None:
+    mask = AnalysisMaskSnapshot(
+        curvefit_start=10.0,
+        curvefit_end=80.0,
+        analysis_start=20.0,
+        analysis_end=90.0,
+        color='#D6D1C6',
+        opacity=0.2,
+    )
+    background = StatisticsBackgroundSnapshot(
+        text='分析结果',
+        position=(0.49, 0.5),
+        color='#FFFDF8',
+        text_color='#20272B',
+    )
+    snapshot = RoastPlotSnapshot(
+        curves=(),
+        temperature_axis=AxisSnapshot(minimum=70.0, maximum=270.0),
+        time_axis=AxisSnapshot(minimum=0.0, maximum=120.0),
+        analysis_masks=(mask,),
+        statistics_backgrounds=(background,),
+    )
+
+    assert snapshot.analysis_masks == (mask,)
+    assert snapshot.statistics_backgrounds == (background,)
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        mask.opacity = 0.5  # type: ignore[misc]
 
 
 def test_charge_target_annotation_snapshot_charged_state() -> None:

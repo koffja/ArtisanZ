@@ -7,12 +7,15 @@ import pytest
 
 from artisanlib.plot_pyqtgraph_adapter import (
     PyQtGraphSnapshotRenderer,
+    _default_analysis_mask_item_factory,
     _default_pen_factory,
+    _default_statistics_background_item_factory,
     _event_label_anchor,
     _event_label_y_position,
     _visible_phase_band_opacity,
 )
 from artisanlib.plot_snapshot import (
+    AnalysisMaskSnapshot,
     AreaFillSnapshot,
     AxisSnapshot,
     ChargeTargetAnnotationSnapshot,
@@ -25,6 +28,7 @@ from artisanlib.plot_snapshot import (
     RendererViewState,
     RoastPlotSnapshot,
     RoRFlickAnnotationSnapshot,
+    StatisticsBackgroundSnapshot,
     TimeRangeSnapshot,
 )
 
@@ -122,6 +126,8 @@ def _snapshot(
         time_ranges: tuple[TimeRangeSnapshot, ...] = (),
         phase_summaries: tuple[PhaseSummarySnapshot, ...] = (),
         areas: tuple[AreaFillSnapshot, ...] = (),
+        analysis_masks: tuple[AnalysisMaskSnapshot, ...] = (),
+        statistics_backgrounds: tuple[StatisticsBackgroundSnapshot, ...] = (),
         guides: tuple[GuideLineSnapshot, ...] = (),
         rorflick_annotations: tuple[RoRFlickAnnotationSnapshot, ...] = ()) -> RoastPlotSnapshot:
     return RoastPlotSnapshot(
@@ -132,6 +138,8 @@ def _snapshot(
         time_ranges=time_ranges,
         phase_summaries=phase_summaries,
         areas=areas,
+        analysis_masks=analysis_masks,
+        statistics_backgrounds=statistics_backgrounds,
         guides=guides,
         rorflick_annotations=rorflick_annotations,
         time_axis=AxisSnapshot(minimum=-1.0, maximum=12.0, label='Time'),
@@ -937,6 +945,111 @@ def test_phase_summary_uses_light_thin_bar_and_includes_label() -> None:
     label_item = item_tuple[1]
     text = label_item.toPlainText() if hasattr(label_item, 'toPlainText') else label_item.text
     assert 'Drying' in text, f'phase label missing from text: {text!r}'
+
+
+def test_analysis_overlay_factories_preserve_axis_color_and_opacity() -> None:
+    from PyQt6.QtWidgets import QApplication
+
+    _app = QApplication.instance() or QApplication([])
+    snapshot = RoastPlotSnapshot(
+        curves=(),
+        time_axis=AxisSnapshot(minimum=0.0, maximum=100.0, label='Time'),
+        temperature_axis=AxisSnapshot(minimum=100.0, maximum=300.0, label='Temperature'),
+    )
+    mask = AnalysisMaskSnapshot(
+        curvefit_start=20.0,
+        curvefit_end=80.0,
+        analysis_start=30.0,
+        analysis_end=70.0,
+        color='#123456',
+        opacity=0.24,
+    )
+    mask_items = _default_analysis_mask_item_factory(mask, snapshot)
+    assert mask_items is not None
+    assert len(mask_items) == 8
+    assert all(item.__class__.__name__ in {'LinearRegionItem', 'PlotDataItem'} for item in mask_items)
+    assert mask_items[0].brush.color().name() == '#123456'
+    assert mask_items[0].brush.color().alphaF() == pytest.approx(0.24, abs=0.01)
+
+    background = StatisticsBackgroundSnapshot(
+        text='结果文本',
+        position=(0.25, 0.75),
+        color='#FFFDF8',
+        text_color='#20272B',
+        opacity=0.6,
+    )
+    item = _default_statistics_background_item_factory(background, snapshot)
+    assert item is not None
+    assert item.toPlainText() == '结果文本'
+    assert item.pos().x() == pytest.approx(25.0)
+    assert item.pos().y() == pytest.approx(250.0)
+    assert item.fill.color().alphaF() == pytest.approx(0.6, abs=0.01)
+
+
+def test_analysis_overlay_factories_skip_disabled_or_empty_items() -> None:
+    from PyQt6.QtWidgets import QApplication
+
+    _app = QApplication.instance() or QApplication([])
+    snapshot = _snapshot()
+    disabled_mask = AnalysisMaskSnapshot(
+        curvefit_start=1.0,
+        curvefit_end=2.0,
+        analysis_start=1.0,
+        analysis_end=2.0,
+        color='#123456',
+        enabled=False,
+    )
+    assert _default_analysis_mask_item_factory(disabled_mask, snapshot) is None
+    assert _default_statistics_background_item_factory(
+        StatisticsBackgroundSnapshot(
+            text='',
+            position=(0.5, 0.5),
+            color='#FFFDF8',
+            text_color='#20272B',
+        ),
+        snapshot,
+    ) is None
+
+
+def test_renderer_replaces_analysis_overlay_items_and_clears_them() -> None:
+    temperature_plot = FakePlot()
+
+    def mask_factory(mask: AnalysisMaskSnapshot, _: RoastPlotSnapshot) -> FakeEventItem:
+        return FakeEventItem('analysis-mask', str(mask.curvefit_start), mask.color)
+
+    def background_factory(
+            background: StatisticsBackgroundSnapshot,
+            _: RoastPlotSnapshot) -> FakeEventItem:
+        return FakeEventItem('statistics-background', background.text, background.color)
+
+    renderer = PyQtGraphSnapshotRenderer(
+        temperature_plot=temperature_plot,
+        analysis_mask_factory=mask_factory,
+        statistics_background_factory=background_factory,
+        pen_factory=_fake_pen_factory,
+    )
+    mask = AnalysisMaskSnapshot(
+        curvefit_start=10.0,
+        curvefit_end=80.0,
+        analysis_start=20.0,
+        analysis_end=70.0,
+        color='#123456',
+    )
+    background = StatisticsBackgroundSnapshot(
+        text='analysis',
+        position=(0.5, 0.5),
+        color='#FFFDF8',
+        text_color='#20272B',
+    )
+    renderer.set_snapshot(_snapshot(analysis_masks=(mask,), statistics_backgrounds=(background,)))
+
+    assert renderer.analysis_mask_item_count() == 1
+    assert renderer.statistics_background_item_count() == 1
+    old_items = temperature_plot.added_items[:]
+    renderer.set_snapshot(_snapshot())
+    assert renderer.analysis_mask_item_count() == 0
+    assert renderer.statistics_background_item_count() == 0
+    assert temperature_plot.removed_items == old_items
 
 
 def test_event_values_use_compact_markers_instead_of_full_height_stems() -> None:

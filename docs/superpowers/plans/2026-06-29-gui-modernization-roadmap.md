@@ -49,7 +49,7 @@ Important observations from the code review:
 | 1.18 | Report Graph Export Comparison | Closed: report-ready graph asset comparison added | Matplotlib/PyQtGraph report graph image assets with file URLs | Future report replacement can compare backend assets before changing `roastReport()` |
 | 1.19 | PyQtGraph Grid and Phase Live Parity | Closed: live/static overlay merge restores visible grid and phase bands | Static overlay snapshot merge, grid visibility floor, phase-band visibility floor | Default live PyQtGraph no longer drops grid/phase backgrounds |
 | 1.20 | PyQtGraph Major Grid and Dialog Controls | Closed: major-only grid and wider flat dialog controls | Major-grid item, Axes dialog spin/combo width and chrome fixes | Grid is readable without visual noise; key controls do not clip values |
-| 1.21 | PyQtGraph Roast-Analysis Parity | Closed: legend, phase summary, development highlight, event values | Analysis overlays and legend in PyQtGraph | Completed roast analysis keeps the core legacy visual semantics |
+| 1.21 | PyQtGraph Roast-Analysis Parity | Closed: legend, phase summary, development highlight, event values, analysis masks/statistics/guide overlays | Analysis overlays and legend in PyQtGraph | Completed roast analysis keeps the core legacy visual semantics; draggable result-box editing remains follow-up |
 | 1.22 | PyQtGraph Original Annotation and RoR Pass | Closed: original-style event annotations, TP, visible RoR overlay | Event points/leaders/value labels, TP marker, thicker phase bars | PyQtGraph annotations are no longer reduced to vertical-line labels |
 | 1.23 | PyQtGraph Cursor, i18n, and Theme Parity | Closed: toolbar cursor readout, translated labels, Morandi default palette | Cursor time/temp/RoR callback, i18n event labels, wider inputs, flat theme preservation | The default renderer restores key interaction feedback and theme consistency |
 | 1.24 | Cotrix Toolbar and Cursor Fit Pass | Closed: Cotrix brand entry, compact toolbar, unclipped cursor text | Cotrix SVG assets, hidden empty subscription action, single-line cursor readout | Toolbar no longer carries obvious Artisan Plus leftovers or clipped telemetry |
@@ -119,7 +119,7 @@ Important observations from the code review:
 
 **Evidence:** Default PyQtGraph screenshot `/tmp/artisanz-phase15-default-pyqtgraph.png`; Matplotlib override screenshot `/tmp/artisanz-phase15-matplotlib-override.png`; axis/LCD follow-up screenshot `/tmp/artisanz-pyqtgraph-axis-fixes.png`; latest focused GUI/PyQtGraph subset `252 passed, 1 skipped, 2 warnings`.
 
-**Remaining Follow-up:** PyQtGraph still has lower overlay parity than Matplotlib for rich annotations, background analysis overlays, and export/report paths. Keep Matplotlib as the compatibility/export path while the PyQtGraph snapshot extractor gains more overlay coverage. Track the detailed parity backlog in Phase 1.6.
+**Remaining Follow-up:** PyQtGraph still differs from Matplotlib for deep annotation interaction/editing, export/report paths, and native-window visual evidence. Keep Matplotlib as the compatibility/export path while the detailed parity backlog in Phase 1.6 closes those gates.
 
 ## Phase 1.6: PyQtGraph Visual Parity and Dialog Refresh
 
@@ -133,7 +133,7 @@ Important observations from the code review:
 
 - Background profile parity beyond the currently extracted ET/BT/Delta background curves: background event value rails and background annotation details. Extra-device background curves were added on 2026-07-24 with legacy selection, masking, styling, and axis-routing parity.
 - Event parity beyond current marker lines/labels: event value bars for the existing event graph modes, richer label placement, overlap avoidance, clustered labels, and drag/edit affordances where Matplotlib currently supports interaction.
-- Analysis overlays: AUC guide/area visuals, MET/analysis masks, statistics overlays, charge-target annotations, and other roast-analysis guide marks.
+- Analysis overlays: AUC guide/area visuals, analysis masks, statistics result boxes, charge-target annotations, and roast-analysis guide marks are now carried through the snapshot/runtime path (2026-07-24). Draggable/editable result-box parity remains.
 - Projection/guide polish: distinguish forecast/projection lines visually, preserve original line styles more completely, and verify RoR projection placement against legacy behavior.
 - Legend/export parity: keep Matplotlib for report/export until PyQtGraph can provide compatible view-state/export handoff or a deliberate export adapter.
 - Visual QA: capture historical profile, live simulator, event-heavy, background-profile, long Chinese labels, Config > Axes, Config > Curves, Events, Devices, and Alarms screens.
@@ -141,7 +141,7 @@ Important observations from the code review:
 **Remaining Visual Backlog:**
 
 - Continue deeper per-panel simplification for hardware-specific Devices sections after the shared and dense-dialog polish layers.
-- Add event drag/edit parity and deep analysis masks/statistics overlays.
+- Add event drag/edit parity and draggable/editable analysis result boxes.
 - Keep Matplotlib as the export/report compatibility path until a deliberate PyQtGraph export adapter exists.
 - Avoid nested cards, oversized rounded rectangles, and dark gray default widget wells.
 - Preserve existing translations, shortcuts, validation, and settings persistence.
@@ -182,7 +182,7 @@ Important observations from the code review:
 
 **Evidence:** Focused snapshot/extractor/adapter/widget/WebSocket smoke tests produced `39 passed`. Static validation passed for `py_compile`, `ruff check`, and `git diff --check` on touched modules. Code-review follow-up fixed AUC base-index parity with legacy `-1` samples and removed the dense event-label row wraparound.
 
-**Remaining Gate:** This does not implement event drag/edit parity, report/export handoff, analysis masks, or statistics overlays; those remain in the deep PyQtGraph parity backlog.
+**Remaining Gate:** This does not implement event drag/edit parity or report/export handoff. Analysis masks and statistics overlays are now covered by the 2026-07-24 analysis-overlay parity slice; draggable result-box editing remains in the deep PyQtGraph parity backlog.
 
 ## Phase 1.10: WebSocket Event/AUC Visual Validation
 

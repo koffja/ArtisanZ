@@ -11,6 +11,7 @@ except ImportError:  # pragma: no cover - PyQt6 is a runtime dependency in norma
     QSettings = None  # type: ignore[assignment]
 
 from artisanlib.plot_snapshot import (
+    AnalysisMaskSnapshot,
     AreaFillSnapshot,
     AxisSnapshot,
     ChargeTargetAnnotationSnapshot,
@@ -22,6 +23,7 @@ from artisanlib.plot_snapshot import (
     PhaseSummarySnapshot,
     RoastPlotSnapshot,
     RoRFlickAnnotationSnapshot,
+    StatisticsBackgroundSnapshot,
     TimeRangeSnapshot,
     YAxisName,
 )
@@ -120,6 +122,8 @@ def build_roast_plot_snapshot(source: object) -> RoastPlotSnapshot:
         time_ranges=_time_ranges(source),
         phase_summaries=_phase_summaries(source),
         guides=_guide_lines(source),
+        analysis_masks=_analysis_masks(source),
+        statistics_backgrounds=_statistics_backgrounds(source),
         charge_target_annotations=_charge_target_annotations(
             source,
             time_axis=time_axis,
@@ -152,6 +156,8 @@ def build_roast_plot_static_overlay_snapshot(
         time_ranges=_time_ranges(source),
         phase_summaries=_phase_summaries(source),
         guides=_guide_lines(source),
+        analysis_masks=_analysis_masks(source),
+        statistics_backgrounds=_statistics_backgrounds(source),
         charge_target_annotations=_charge_target_annotations(
             source,
             time_axis=time_axis,
@@ -763,12 +769,17 @@ def _time_ranges(source: object) -> tuple[TimeRangeSnapshot, ...]:
 
 
 def _phase_summaries(source: object) -> tuple[PhaseSummarySnapshot, ...]:
+    if not _statistics_summary_enabled(source):
+        return ()
     phase_times = _phase_event_times(source)
     phase_indexes = _phase_event_indexes(source)
     if phase_times is None or phase_indexes is None:
         return ()
     charge, dry, first_crack_start, drop = phase_times
     charge_index, dry_index, first_crack_index, drop_index = phase_indexes
+    statistics_times = _statistics_phase_times(source, charge)
+    if statistics_times is not None:
+        _, dry, first_crack_start, drop = statistics_times
     if not (charge < dry < first_crack_start < drop):
         return ()
     total_duration = drop - charge
@@ -785,19 +796,108 @@ def _phase_summaries(source: object) -> tuple[PhaseSummarySnapshot, ...]:
         ('Maillard', dry, first_crack_start, dry_index, first_crack_index, 'roastphase2', '#F5F0E1'),
         ('Development', first_crack_start, drop, first_crack_index, drop_index, 'roastphase3', '#F4F2EC'),
     )
+    bar_visible = _statistics_flag(source, 1, True)
+    label_visible = _statistics_flag(source, 0, True)
+    delta_visible = _statistics_flag(source, 6, True)
+    percent_decimals = _percent_decimals(source)
     summaries: list[PhaseSummarySnapshot] = []
-    for label, start, end, start_index, end_index, color_key, default_color in phase_specs:
+    for label_key, start, end, start_index, end_index, color_key, default_color in phase_specs:
         duration = end - start
         summaries.append(PhaseSummarySnapshot(
             start=start,
             end=end,
-            label=label,
+            label=_phase_label(source, label_key),
             duration_text=_format_seconds_as_minsec(duration),
-            percent_text=f'{duration / total_duration * 100.0:.1f}%',
+            percent_text=f'{duration / total_duration * 100.0:.{percent_decimals}f}%',
             delta_text=_temperature_delta_text(source, start_index, end_index),
             color=_palette_color_with_default(source, color_key, default_color),
+            bar_visible=bar_visible,
+            label_visible=label_visible,
+            delta_visible=delta_visible,
         ))
     return tuple(summaries)
+
+
+def _statistics_summary_enabled(source: object) -> bool:
+    value = getattr(source, 'statssummary', None)
+    if value is None:
+        return True
+    if isinstance(value, str):
+        return value.strip().lower() not in {'0', 'false', 'no', 'off'}
+    return bool(value)
+
+
+def _statistics_flag(source: object, index: int, default: bool) -> bool:
+    flags = getattr(source, 'statisticsflags', None)
+    if flags is None:
+        return default
+    try:
+        value = flags[index]
+    except (IndexError, KeyError, TypeError):
+        return default
+    if value is None:
+        return default
+    if isinstance(value, str):
+        return value.strip().lower() not in {'0', 'false', 'no', 'off'}
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return bool(value)
+    return not math.isnan(number) and bool(number)
+
+
+def _percent_decimals(source: object) -> int:
+    owner = getattr(source, 'aw', source)
+    value = getattr(owner, 'percent_decimals', getattr(source, 'percent_decimals', 1))
+    try:
+        return max(0, min(6, int(value)))
+    except (TypeError, ValueError):
+        return 1
+
+
+def _phase_label(source: object, default: str) -> str:
+    containers = (source, getattr(source, 'aw', None))
+    mapping_names = ('phase_labels', 'statistics_phase_labels', 'phaseLabels')
+    key = default.lower()
+    for container in containers:
+        if container is None:
+            continue
+        for mapping_name in mapping_names:
+            mapping = getattr(container, mapping_name, None)
+            if isinstance(mapping, dict):
+                value = mapping.get(default, mapping.get(key))
+                if isinstance(value, str) and value.strip():
+                    return value.strip()
+        for attr_name in (f'{key}_label', f'{key}Label'):
+            value = getattr(container, attr_name, None)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+    if QApplication is not None:
+        for context in ('Label', 'Button', 'ComboBox'):
+            translated = QApplication.translate(context, default)
+            if isinstance(translated, str) and translated and translated != default:
+                return translated
+    return default
+
+
+def _statistics_phase_times(source: object, charge: float) -> tuple[float, float, float, float] | None:
+    values = _sequence(source, 'statisticstimes')
+    if len(values) < 4:
+        return None
+    try:
+        total, drying, mid, development = (float(values[index]) for index in range(4))
+    except (TypeError, ValueError):
+        return None
+    if not all(math.isfinite(value) for value in (total, drying, mid, development)):
+        return None
+    if total <= 0 or min(drying, mid, development) <= 0:
+        return None
+    if abs((drying + mid + development) - total) > max(1.0, total * 0.05):
+        return None
+    dry = charge + drying
+    first_crack_start = dry + mid
+    drop = first_crack_start + development
+    return charge, dry, first_crack_start, drop
 
 
 def _phase_event_times(source: object) -> tuple[float, float, float, float] | None:
@@ -805,15 +905,17 @@ def _phase_event_times(source: object) -> tuple[float, float, float, float] | No
     if indexes is None:
         return None
     timex = _sequence(source, 'timex')
-    charge_index, dry_index, first_crack_index, drop_index = indexes
-    if drop_index >= len(timex):
+    if any(index < 0 or index >= len(timex) for index in indexes):
         return None
-    return (
-        float(timex[charge_index]),
-        float(timex[dry_index]),
-        float(timex[first_crack_index]),
-        float(timex[drop_index]),
-    )
+    try:
+        values = tuple(float(timex[index]) for index in indexes)
+    except (IndexError, TypeError, ValueError, OverflowError):
+        return None
+    if not all(math.isfinite(value) for value in values):
+        return None
+    if not (values[0] < values[1] < values[2] < values[3]):
+        return None
+    return values
 
 
 def _phase_event_indexes(source: object) -> tuple[int, int, int, int] | None:
@@ -825,7 +927,7 @@ def _phase_event_indexes(source: object) -> tuple[int, int, int, int] | None:
         dry_index = int(timeindex[1])
         first_crack_index = int(timeindex[2])
         drop_index = int(timeindex[6])
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return None
     if charge_index < 0 or dry_index <= 0 or first_crack_index <= 0 or drop_index <= 0:
         return None
@@ -860,7 +962,194 @@ def _guide_lines(source: object) -> tuple[GuideLineSnapshot, ...]:
     charge_target_guide = _charge_target_guide(source)
     if charge_target_guide is not None:
         guides.append(charge_target_guide)
+    guides.extend(_analysis_guides(source))
     return tuple(guides)
+
+
+def _analysis_guides(source: object) -> tuple[GuideLineSnapshot, ...]:
+    intervals = _analysis_intervals(source)
+    if intervals is None:
+        return ()
+    curvefit_start, curvefit_end, analysis_start, analysis_end = intervals
+    color = _palette_color_with_default(source, 'analysismask', '#D6D1C6')
+    opacity = _palette_opacity(source, 'analysismask', 0.4)
+    labels = {
+        'curvefit_start': _text_attr(source, ('curvefit_start_label', 'curvefitStartLabel'), ''),
+        'curvefit_end': _text_attr(source, ('curvefit_end_label', 'curvefitEndLabel'), ''),
+        'analysis_start': _text_attr(source, ('analysis_start_label', 'analysisStartLabel'), ''),
+        'analysis_end': _text_attr(source, ('analysis_end_label', 'analysisEndLabel'), ''),
+    }
+    return tuple(
+        GuideLineSnapshot(
+            position=position,
+            label=labels[key],
+            color=color,
+            orientation='vertical',
+            line_style=':',
+            opacity=min(1.0, opacity + 0.15),
+            kind='analysis',
+        )
+        for key, position in (
+            ('curvefit_start', curvefit_start),
+            ('curvefit_end', curvefit_end),
+            ('analysis_start', analysis_start),
+            ('analysis_end', analysis_end),
+        )
+    )
+
+
+def _analysis_masks(source: object) -> tuple[AnalysisMaskSnapshot, ...]:
+    intervals = _analysis_intervals(source)
+    if intervals is None:
+        return ()
+    curvefit_start, curvefit_end, analysis_start, analysis_end = intervals
+    color = _palette_color_with_default(source, 'analysismask', '#D6D1C6')
+    return (AnalysisMaskSnapshot(
+        curvefit_start=curvefit_start,
+        curvefit_end=curvefit_end,
+        analysis_start=analysis_start,
+        analysis_end=analysis_end,
+        color=color,
+        opacity=_palette_opacity(source, 'analysismask', 0.4) / 2.0,
+    ),)
+
+
+def _statistics_backgrounds(source: object) -> tuple[StatisticsBackgroundSnapshot, ...]:
+    color = _palette_color_with_default(source, 'statsanalysisbkgnd', '#FFFDF8')
+    text_color = _statistics_text_color(source, color)
+    opacity = _palette_opacity(source, 'statsanalysisbkgnd', 1.0)
+    backgrounds: list[StatisticsBackgroundSnapshot] = []
+    for kind, text_names, position_names, default_position in (
+        ('segment', ('segmentresultsstr', 'segmentresultstr'), ('segmentresultsloc',), (0.5, 0.5)),
+        ('analysis', ('analysisresultsstr', 'analysisresultstr'), ('analysisresultsloc',), (0.49, 0.5)),
+    ):
+        text = _text_attr(source, text_names, '')
+        if not text:
+            continue
+        position = _axes_position(source, position_names, default_position)
+        backgrounds.append(StatisticsBackgroundSnapshot(
+            text=text,
+            position=position,
+            color=color,
+            text_color=text_color,
+            opacity=opacity,
+            kind=kind,
+            z_value=31.0 if kind == 'analysis' else 30.0,
+        ))
+    return tuple(backgrounds)
+
+
+def _analysis_intervals(source: object) -> tuple[float, float, float, float] | None:
+    names = {
+        'curvefit_start': ('curvefit_starttime', 'curvefit_start_time', 'curvefitStartTime'),
+        'curvefit_end': ('curvefit_endtime', 'curvefit_end_time', 'curvefitEndTime'),
+        'analysis_start': ('analysis_starttime', 'analysis_start_time', 'analysisStartTime'),
+        'analysis_end': ('analysis_endtime', 'analysis_end_time', 'analysisEndTime'),
+    }
+    direct = {key: _first_numeric_attr(source, aliases) for key, aliases in names.items()}
+    has_direct_value = any(value is not None and value != -1 for value in direct.values())
+    active = has_direct_value or bool(getattr(source, 'analysis_active', False))
+    if not active:
+        active = bool(_text_attr(source, ('analysisresultsstr', 'analysisresultstr'), ''))
+        active = active or bool(_text_attr(source, ('segmentresultsstr', 'segmentresultstr'), ''))
+    if not active:
+        return None
+
+    phase_times = _phase_event_times(source)
+    if phase_times is None:
+        return None
+    charge, dry, first_crack_start, drop = phase_times
+    if direct['curvefit_start'] is None or direct['curvefit_start'] == -1:
+        direct['curvefit_start'] = _analysis_choice_start(
+            source, 'curvefit', charge, dry, first_crack_start,
+        )
+    if direct['analysis_start'] is None or direct['analysis_start'] == -1:
+        direct['analysis_start'] = _analysis_choice_start(
+            source, 'analysis', charge, dry, first_crack_start,
+        )
+    if direct['curvefit_end'] is None or direct['curvefit_end'] == -1:
+        direct['curvefit_end'] = drop
+    if direct['analysis_end'] is None or direct['analysis_end'] == -1:
+        direct['analysis_end'] = drop
+    values = tuple(direct[key] for key in ('curvefit_start', 'curvefit_end', 'analysis_start', 'analysis_end'))
+    if any(value is None or value == -1 or not math.isfinite(value) for value in values):
+        return None
+    curvefit_start, curvefit_end, analysis_start, analysis_end = values
+    if curvefit_start >= curvefit_end or analysis_start >= analysis_end:
+        return None
+    return float(curvefit_start), float(curvefit_end), float(analysis_start), float(analysis_end)
+
+
+def _analysis_choice_start(
+        source: object,
+        prefix: str,
+        charge: float,
+        dry: float,
+        first_crack_start: float) -> float:
+    choice = _integer_attr(source, f'{prefix}startchoice', 0)
+    if choice == 1:
+        return first_crack_start - 120.0
+    if choice == 2:
+        offset = _first_numeric_attr(source, (f'{prefix}offset', f'{prefix}_offset'))
+        return charge + (offset if offset is not None and math.isfinite(offset) else 0.0)
+    return dry
+
+
+def _statistics_text_color(source: object, background_color: str) -> str:
+    for owner in (getattr(source, 'aw', None), source):
+        label_bor_w = getattr(owner, 'labelBorW', None)
+        if callable(label_bor_w):
+            try:
+                color = label_bor_w(background_color)
+            except (TypeError, ValueError):
+                color = None
+            if isinstance(color, str) and color:
+                return color
+    return _palette_color_with_default(source, 'text', '#20272B')
+
+
+def _text_attr(source: object, attr_names: tuple[str, ...], default: str) -> str:
+    for container in (source, getattr(source, 'aw', None)):
+        if container is None:
+            continue
+        for attr_name in attr_names:
+            value = getattr(container, attr_name, None)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+    return default
+
+
+def _axes_position(source: object, attr_names: tuple[str, ...], default: tuple[float, float]) -> tuple[float, float]:
+    value: object = None
+    for container in (source, getattr(source, 'aw', None)):
+        if container is None:
+            continue
+        for attr_name in attr_names:
+            candidate = getattr(container, attr_name, None)
+            if candidate is not None:
+                value = candidate
+                break
+        if value is not None:
+            break
+    try:
+        x, y = float(value[0]), float(value[1])  # type: ignore[index]
+    except (IndexError, TypeError, ValueError):
+        return default
+    if not all(math.isfinite(item) for item in (x, y)) or not (0.0 < x < 1.0 and 0.0 < y < 1.0):
+        return default
+    return x, y
+
+
+def _palette_opacity(source: object, key: str, default: float) -> float:
+    alpha = getattr(source, 'alpha', None)
+    value = alpha.get(key, default) if isinstance(alpha, dict) else default
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return default
+    if not math.isfinite(numeric):
+        return default
+    return max(0.0, min(1.0, numeric))
 
 
 def _area_fills(source: object) -> tuple[AreaFillSnapshot, ...]:

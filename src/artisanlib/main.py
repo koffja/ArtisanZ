@@ -14839,8 +14839,14 @@ class ApplicationWindow(QMainWindow):
                 # delete background annotation positions
                 self.qmc.deleteAnnoPositions(foreground=False, background=True)
 
-                #remove the analysis results annotation if it exists
+                # clear analysis overlays before loading a new profile
+                self.qmc.curvefit_starttime = 0.0
+                self.qmc.curvefit_endtime = 0.0
+                self.qmc.analysis_starttime = 0.0
+                self.qmc.analysis_endtime = 0.0
+                self.qmc.segmentresultstr = ''
                 self.qmc.analysisresultsstr = ''
+                self.qmc.analysis_active = False
 
                 if 'mode' in profile:
                     m = str(profile['mode'])
@@ -26276,7 +26282,13 @@ class ApplicationWindow(QMainWindow):
         self.qmc.TP_time_B_loaded = None
         self.qmc.AUCbackground = -1
         self.qmc.l_background_annotations = []
+        self.qmc.curvefit_starttime = 0.0
+        self.qmc.curvefit_endtime = 0.0
+        self.qmc.analysis_starttime = 0.0
+        self.qmc.analysis_endtime = 0.0
+        self.qmc.segmentresultstr = ''
         self.qmc.analysisresultsstr = ''
+        self.qmc.analysis_active = False
         self.qmc.resetlinecountcaches()
         self.qmc.deleteAnnoPositions(foreground=False, background=True)
         self.sendmessage(QApplication.translate('Message', 'Background profile removed'))
@@ -28079,6 +28091,13 @@ class ApplicationWindow(QMainWindow):
             self.qmc.fig.canvas.mpl_disconnect(self.qmc.analyzer_connect_id)
         self.segmentresultsanno = None
         self.analysisresultsanno = None
+        self.qmc.curvefit_starttime = 0.0
+        self.qmc.curvefit_endtime = 0.0
+        self.qmc.analysis_starttime = 0.0
+        self.qmc.analysis_endtime = 0.0
+        self.qmc.segmentresultstr = ''
+        self.qmc.analysisresultsstr = ''
+        self.qmc.analysis_active = False
         self.redrawOnResize = True
         self.autoAdjustAxis()
         self.qmc.redraw(recomputeAllDeltas=True)
@@ -28350,12 +28369,16 @@ class ApplicationWindow(QMainWindow):
             curvefit_endtime:float = 0, analysis_starttime:float = 0, analysis_endtime:float = 0) -> None:
         if self.qmc.ax is None:
             return
-        self.qmc.redraw(recomputeAllDeltas = True)
-
-        if len(resultstr) == 0:
+        if not resultstr:
             resultstr = self.qmc.analysisresultsstr
-        else:
-            self.qmc.analysisresultsstr = resultstr
+        self.qmc.curvefit_starttime = curvefit_starttime
+        self.qmc.curvefit_endtime = curvefit_endtime
+        self.qmc.analysis_starttime = analysis_starttime
+        self.qmc.analysis_endtime = analysis_endtime
+        self.qmc.segmentresultstr = str(cfr.get('segmentresultstr', ''))
+        self.qmc.analysisresultsstr = resultstr
+        self.qmc.analysis_active = bool(resultstr or self.qmc.segmentresultstr)
+        self.qmc.redraw(recomputeAllDeltas = True)
         try:
             # draw analysis mask
             a = self.qmc.alpha['analysismask']/2

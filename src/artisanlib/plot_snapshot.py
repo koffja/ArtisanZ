@@ -7,8 +7,10 @@ from typing import Literal, Protocol
 YAxisName = Literal['temperature', 'ror']
 EventMarkerKind = Literal['main', 'special', 'background']
 GuideOrientation = Literal['vertical', 'horizontal']
-GuideKind = Literal['auc', 'bbp', 'charge_target', 'time', 'custom']
+GuideKind = Literal['auc', 'bbp', 'charge_target', 'time', 'analysis', 'custom']
 AreaFillKind = Literal['auc', 'custom']
+AnalysisMaskKind = Literal['curve_fit', 'analysis']
+StatisticsBackgroundKind = Literal['analysis', 'segment', 'summary']
 ChargeAnnotationColor = Literal['gray', 'blue', 'green', 'red']
 RoRFlickSeverity = Literal['soft', 'moderate', 'hard']
 
@@ -89,6 +91,37 @@ class PhaseSummarySnapshot:
     delta_text: str
     color: str = '#C9D2D4'
     opacity: float = 0.38
+    bar_visible: bool = True
+    label_visible: bool = True
+    delta_visible: bool = True
+
+
+@dataclass(frozen=True, slots=True)
+class AnalysisMaskSnapshot:
+    """Analysis interval mask expressed in plot data coordinates."""
+    curvefit_start: float
+    curvefit_end: float
+    analysis_start: float
+    analysis_end: float
+    color: str
+    opacity: float = 0.2
+    kind: AnalysisMaskKind = 'analysis'
+    y_axis: YAxisName = 'temperature'
+    z_value: float = 20.0
+    enabled: bool = True
+
+
+@dataclass(frozen=True, slots=True)
+class StatisticsBackgroundSnapshot:
+    """A renderer-neutral analysis/statistics result text box."""
+    text: str
+    position: tuple[float, float]
+    color: str
+    text_color: str
+    opacity: float = 1.0
+    kind: StatisticsBackgroundKind = 'analysis'
+    z_value: float = 30.0
+    enabled: bool = True
 
 
 @dataclass(frozen=True, slots=True)
@@ -225,6 +258,8 @@ class RoastPlotSnapshot:
     phase_summaries: tuple[PhaseSummarySnapshot, ...] = ()
     guides: tuple[GuideLineSnapshot, ...] = ()
     areas: tuple[AreaFillSnapshot, ...] = ()
+    analysis_masks: tuple[AnalysisMaskSnapshot, ...] = ()
+    statistics_backgrounds: tuple[StatisticsBackgroundSnapshot, ...] = ()
     charge_target_annotations: tuple[ChargeTargetAnnotationSnapshot, ...] = ()
     rorflick_annotations: tuple[RoRFlickAnnotationSnapshot, ...] = ()
 
@@ -254,6 +289,8 @@ class LivePlotRenderer(Protocol):
 
 
 __all__ = [
+    'AnalysisMaskKind',
+    'AnalysisMaskSnapshot',
     'AreaFillKind',
     'AreaFillSnapshot',
     'AxisSnapshot',
@@ -273,6 +310,8 @@ __all__ = [
     'RoastPlotSnapshot',
     'RoRFlickAnnotationSnapshot',
     'RoRFlickSeverity',
+    'StatisticsBackgroundKind',
+    'StatisticsBackgroundSnapshot',
     'TimeRangeSnapshot',
     'YAxisName',
 ]

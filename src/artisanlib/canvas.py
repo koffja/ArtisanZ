@@ -582,7 +582,7 @@ class tgraphcanvas(QObject):
         'loadevent_hundpcts', 'preheatDuration', 'preheatenergies', 'betweenbatchDuration', 'betweenbatchenergies', 'coolingDuration', 'coolingenergies',
         'betweenbatch_after_preheat', 'electricEnergyMix', 'gasMix', 'baseX', 'baseY', 'base_horizontalcrossline', 'base_verticalcrossline',
         'base_messagevisible', 'colorDifferenceThreshold', 'handles', 'labels', 'legend_lines', 'eventmessage', 'backgroundeventmessage',
-        'eventmessagetimer', 'resizeredrawing', 'logoimg', 'analysisresultsloc_default', 'analysisresultsloc', 'analysispickflag', 'analysisresultsstr',
+        'eventmessagetimer', 'resizeredrawing', 'logoimg', 'analysisresultsloc_default', 'analysisresultsloc', 'analysispickflag', 'analysisresultsstr', 'curvefit_starttime', 'curvefit_endtime', 'analysis_starttime', 'analysis_endtime', 'segmentresultstr', 'analysis_active',
         'analysisstartchoice', 'analysisoffset', 'curvefitstartchoice', 'curvefitoffset', 'segmentresultsloc_default', 'segmentresultsloc',
         'segmentpickflag', 'segmentdeltathreshold', 'segmentsamplesthreshold', 'stats_summary_rect', 'title_text', 'title_artist', 'title_width',
         'background_title_width', 'xlabel_text', 'xlabel_artist', 'xlabel_width', 'mathdictionary_base',
@@ -2816,6 +2816,14 @@ class tgraphcanvas(QObject):
         self.analysisresultsloc:tuple[float, float] = self.analysisresultsloc_default
         self.analysispickflag:bool = False
         self.analysisresultsstr:str = ''
+        # Renderer-neutral analysis overlay state. The analysis controller
+        # writes the intervals before redraw so PyQtGraph can consume them.
+        self.curvefit_starttime:float = 0.0
+        self.curvefit_endtime:float = 0.0
+        self.analysis_starttime:float = 0.0
+        self.analysis_endtime:float = 0.0
+        self.segmentresultstr:str = ''
+        self.analysis_active:bool = False
         self.analysisstartchoice:int = 1
         self.analysisoffset:int = 180
         self.curvefitstartchoice:int = 0
@@ -9286,8 +9294,14 @@ class tgraphcanvas(QObject):
             if self.crossmarker:
                 self.togglecrosslines()
 
-            #remove the analysis results annotation if it exists
+            # remove all analysis overlays and their renderer handoff state
+            self.curvefit_starttime = 0.0
+            self.curvefit_endtime = 0.0
+            self.analysis_starttime = 0.0
+            self.analysis_endtime = 0.0
+            self.segmentresultstr = ''
             self.analysisresultsstr = ''
+            self.analysis_active = False
 
             #autodetected CHARGE and DROP index
             self.autoChargeIdx = 0

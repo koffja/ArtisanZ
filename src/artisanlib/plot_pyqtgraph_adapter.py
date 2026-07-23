@@ -7,6 +7,7 @@ from typing import Any
 from PyQt6 import QtCore
 
 from artisanlib.plot_snapshot import (
+    AnalysisMaskSnapshot,
     AreaFillSnapshot,
     AxisSnapshot,
     ChargeTargetAnnotationSnapshot,
@@ -19,6 +20,7 @@ from artisanlib.plot_snapshot import (
     RendererViewState,
     RoastPlotSnapshot,
     RoRFlickAnnotationSnapshot,
+    StatisticsBackgroundSnapshot,
     TimeRangeSnapshot,
 )
 
@@ -29,6 +31,14 @@ PhaseItemFactory = Callable[[PhaseBandSnapshot, RoastPlotSnapshot], object | Non
 TimeRangeItemFactory = Callable[[TimeRangeSnapshot, RoastPlotSnapshot], object | tuple[object, ...] | None]
 PhaseSummaryItemFactory = Callable[[PhaseSummarySnapshot, RoastPlotSnapshot], object | tuple[object, ...] | None]
 AreaItemFactory = Callable[[AreaFillSnapshot, RoastPlotSnapshot], object | None]
+AnalysisMaskItemFactory = Callable[
+    [AnalysisMaskSnapshot, RoastPlotSnapshot],
+    object | tuple[object, ...] | None,
+]
+StatisticsBackgroundItemFactory = Callable[
+    [StatisticsBackgroundSnapshot, RoastPlotSnapshot],
+    object | None,
+]
 ChargeTargetAnnotationItemFactory = Callable[
     [ChargeTargetAnnotationSnapshot, RoastPlotSnapshot],
     object | tuple[object, ...] | None,
@@ -79,6 +89,8 @@ class PyQtGraphSnapshotRenderer:
             time_range_factory: TimeRangeItemFactory | None = None,
             phase_summary_factory: PhaseSummaryItemFactory | None = None,
             area_item_factory: AreaItemFactory | None = None,
+            analysis_mask_factory: AnalysisMaskItemFactory | None = None,
+            statistics_background_factory: StatisticsBackgroundItemFactory | None = None,
             charge_target_annotation_factory: ChargeTargetAnnotationItemFactory | None = None,
             rorflick_annotation_factory: RoRFlickAnnotationItemFactory | None = None,
             pen_factory: CurvePenFactory | None = None) -> None:
@@ -93,6 +105,10 @@ class PyQtGraphSnapshotRenderer:
         self._time_range_factory = time_range_factory or _default_time_range_item_factory
         self._phase_summary_factory = phase_summary_factory or _default_phase_summary_item_factory
         self._area_item_factory = area_item_factory or _default_area_item_factory
+        self._analysis_mask_factory = analysis_mask_factory or _default_analysis_mask_item_factory
+        self._statistics_background_factory = (
+            statistics_background_factory or _default_statistics_background_item_factory
+        )
         self._charge_target_annotation_factory = (
             charge_target_annotation_factory or _default_charge_target_annotation_factory
         )
@@ -103,6 +119,8 @@ class PyQtGraphSnapshotRenderer:
         self._time_range_items: list[object] = []
         self._phase_summary_items: list[object] = []
         self._area_items: list[tuple[object, object]] = []
+        self._analysis_mask_items: list[tuple[object, object]] = []
+        self._statistics_background_items: list[object] = []
         self._event_items: list[object] = []
         self._event_value_items: list[tuple[object, object]] = []
         self._guide_items: list[tuple[object, object]] = []
@@ -161,6 +179,12 @@ class PyQtGraphSnapshotRenderer:
     def area_item_count(self) -> int:
         return len(self._area_items)
 
+    def analysis_mask_item_count(self) -> int:
+        return len(self._analysis_mask_items)
+
+    def statistics_background_item_count(self) -> int:
+        return len(self._statistics_background_items)
+
     def charge_target_annotation_item_count(self) -> int:
         return len(self._charge_target_annotation_items)
 
@@ -175,6 +199,8 @@ class PyQtGraphSnapshotRenderer:
         self._apply_time_ranges(snapshot)
         self._apply_phase_summaries(snapshot)
         self._apply_areas(snapshot)
+        self._apply_analysis_masks(snapshot)
+        self._apply_statistics_backgrounds(snapshot)
         self._apply_event_values(snapshot)
         self._apply_events(snapshot)
         self._apply_guides(snapshot)
@@ -296,6 +322,32 @@ class PyQtGraphSnapshotRenderer:
     def _clear_area_items(self) -> None:
         _clear_item_pairs(self._area_items)
 
+    def _apply_analysis_masks(self, snapshot: RoastPlotSnapshot) -> None:
+        self._clear_analysis_mask_items()
+        for mask in snapshot.analysis_masks:
+            plot = self._ror_plot if mask.y_axis == 'ror' and self._ror_plot is not None else self._temperature_plot
+            for item in _as_items(self._analysis_mask_factory(mask, snapshot)):
+                _call_if_available(plot, 'addItem', item)
+                self._analysis_mask_items.append((plot, item))
+
+    def _clear_analysis_mask_items(self) -> None:
+        _clear_item_pairs(self._analysis_mask_items)
+        self._analysis_mask_items.clear()
+
+    def _apply_statistics_backgrounds(self, snapshot: RoastPlotSnapshot) -> None:
+        self._clear_statistics_background_items()
+        for background in snapshot.statistics_backgrounds:
+            item = self._statistics_background_factory(background, snapshot)
+            if item is None:
+                continue
+            _call_if_available(self._temperature_plot, 'addItem', item)
+            self._statistics_background_items.append(item)
+
+    def _clear_statistics_background_items(self) -> None:
+        for item in self._statistics_background_items:
+            _call_if_available(self._temperature_plot, 'removeItem', item)
+        self._statistics_background_items.clear()
+
     def _plot_for_area(self, area: AreaFillSnapshot) -> object:
         if area.y_axis == 'ror' and self._ror_plot is not None:
             return self._ror_plot
@@ -392,6 +444,8 @@ def _static_overlay_signature(snapshot: RoastPlotSnapshot) -> tuple[object, ...]
         snapshot.time_ranges,
         snapshot.phase_summaries,
         snapshot.areas,
+        snapshot.analysis_masks,
+        snapshot.statistics_backgrounds,
         snapshot.event_values,
         snapshot.events,
         snapshot.guides,
@@ -713,6 +767,104 @@ def _default_area_item_factory(area: AreaFillSnapshot, _: RoastPlotSnapshot) -> 
     return item
 
 
+def _default_analysis_mask_item_factory(
+        mask: AnalysisMaskSnapshot,
+        snapshot: RoastPlotSnapshot) -> tuple[object, ...] | None:
+    try:
+        import pyqtgraph as pg  # type: ignore[import-not-found,unused-ignore]
+    except ImportError:
+        return None
+    if not mask.enabled:
+        return None
+    x_min = snapshot.time_axis.minimum
+    x_max = snapshot.time_axis.maximum
+    y_axis = snapshot.temperature_axis if mask.y_axis == 'temperature' else snapshot.ror_axis
+    if y_axis is None or x_max <= x_min or y_axis.maximum <= y_axis.minimum:
+        return None
+    items: list[object] = []
+    brush = pg.mkBrush(_color_with_alpha(pg, mask.color, mask.opacity))
+    for start, end in (
+        (x_min, min(x_max, mask.curvefit_start)),
+        (max(x_min, mask.curvefit_end), x_max),
+        (x_min, min(x_max, mask.analysis_start)),
+        (max(x_min, mask.analysis_end), x_max),
+    ):
+        if end <= start:
+            continue
+        try:
+            item = pg.LinearRegionItem(
+                values=(start, end),
+                orientation='vertical',
+                movable=False,
+                brush=brush,
+            )
+        except TypeError:
+            continue
+        _call_if_available(item, 'setZValue', mask.z_value)
+        for line in getattr(item, 'lines', []):
+            _call_if_available(line, 'setPen', pg.mkPen(color=_color_with_alpha(pg, mask.color, 0.0), width=0))
+        items.append(item)
+
+    y_min = y_axis.minimum
+    y_max = y_axis.maximum
+    y_span = y_max - y_min
+    edge = 0.025
+    for start, end in (
+        (max(x_min, mask.curvefit_start), min(x_max, mask.curvefit_end)),
+        (max(x_min, mask.analysis_start), min(x_max, mask.analysis_end)),
+    ):
+        if end <= start:
+            continue
+        for y_value, fill_level in (
+            (y_min + y_span * edge, y_min),
+            (y_max - y_span * edge, y_max),
+        ):
+            item = pg.PlotDataItem(
+                [start, end],
+                [y_value, y_value],
+                pen=pg.mkPen(color=_color_with_alpha(pg, mask.color, 0.0), width=0),
+                fillLevel=fill_level,
+                brush=brush,
+            )
+            _call_if_available(item, 'setZValue', mask.z_value)
+            items.append(item)
+    return tuple(items) or None
+
+
+def _default_statistics_background_item_factory(
+        background: StatisticsBackgroundSnapshot,
+        snapshot: RoastPlotSnapshot) -> object | None:
+    try:
+        import pyqtgraph as pg  # type: ignore[import-not-found,unused-ignore]
+    except ImportError:
+        return None
+    if not background.enabled or not background.text:
+        return None
+    x_fraction, y_fraction = background.position
+    if not (0.0 < x_fraction < 1.0 and 0.0 < y_fraction < 1.0):
+        return None
+    x_span = snapshot.time_axis.maximum - snapshot.time_axis.minimum
+    y_span = snapshot.temperature_axis.maximum - snapshot.temperature_axis.minimum
+    if x_span <= 0 or y_span <= 0:
+        return None
+    item = pg.TextItem(
+        text=background.text,
+        color=background.text_color,
+        anchor=(0.0, 0.5),
+        fill=pg.mkBrush(_color_with_alpha(pg, background.color, background.opacity)),
+        border=pg.mkPen(
+            color=_color_with_alpha(pg, background.color, min(1.0, background.opacity + 0.15)),
+            width=1,
+        ),
+    )
+    item.setPos(
+        snapshot.time_axis.minimum + x_span * x_fraction,
+        snapshot.temperature_axis.minimum + y_span * y_fraction,
+    )
+    _call_if_available(item, 'setZValue', background.z_value)
+    return item
+
+
 def _default_guide_item_factory(guide: GuideLineSnapshot, _: RoastPlotSnapshot) -> object | None:
     try:
         import pyqtgraph as pg  # type: ignore[import-not-found,unused-ignore]
@@ -791,31 +943,42 @@ def _default_phase_summary_item_factory(
     y_bar = y_top - span * 0.10
     y_text = y_top - span * 0.035
     x_mid = (summary.start + summary.end) / 2.0
-    bar = pg.PlotDataItem(
-        [summary.start, summary.end],
-        [y_bar, y_bar],
-        pen=pg.mkPen(color=_color_with_alpha(pg, _PHASE_SUMMARY_BAR_COLORS.get(summary.label, summary.color), 0.68), width=10),
-    )
-    _call_if_available(bar, 'setZValue', 12)
-    if _settings_bool(('phaseSummaryLabels', 'phase_summary_labels'), True):
+    items: list[object] = []
+    if summary.bar_visible:
+        bar = pg.PlotDataItem(
+            [summary.start, summary.end],
+            [y_bar, y_bar],
+            pen=pg.mkPen(
+                color=_color_with_alpha(
+                    pg,
+                    _PHASE_SUMMARY_BAR_COLORS.get(summary.label, summary.color),
+                    0.68,
+                ),
+                width=10,
+            ),
+        )
+        _call_if_available(bar, 'setZValue', 12)
+        items.append(bar)
+    if summary.label_visible and _settings_bool(('phaseSummaryLabels', 'phase_summary_labels'), True):
         label_text = f'{summary.label}\n{summary.duration_text}  {summary.percent_text}'
-    else:
-        label_text = f'{summary.duration_text}  {summary.percent_text}'
-    label = pg.TextItem(
-        text=label_text,
-        color='#20272B',
-        anchor=(0.5, 0.5),
-    )
-    label.setPos(x_mid, y_text)
-    _call_if_available(label, 'setZValue', 34)
-    delta = pg.TextItem(
-        text=summary.delta_text,
-        color='#20272B',
-        anchor=(0.5, 0.5),
-    )
-    delta.setPos(x_mid, y_top - span * 0.135)
-    _call_if_available(delta, 'setZValue', 34)
-    return bar, label, delta
+        label = pg.TextItem(
+            text=label_text,
+            color='#20272B',
+            anchor=(0.5, 0.5),
+        )
+        label.setPos(x_mid, y_text)
+        _call_if_available(label, 'setZValue', 34)
+        items.append(label)
+    if summary.delta_visible and summary.delta_text:
+        delta = pg.TextItem(
+            text=summary.delta_text,
+            color='#20272B',
+            anchor=(0.5, 0.5),
+        )
+        delta.setPos(x_mid, y_top - span * 0.135)
+        _call_if_available(delta, 'setZValue', 34)
+        items.append(delta)
+    return tuple(items) or None
 
 
 _CHARGE_CARD_X_MARGIN_RATIO = 0.02

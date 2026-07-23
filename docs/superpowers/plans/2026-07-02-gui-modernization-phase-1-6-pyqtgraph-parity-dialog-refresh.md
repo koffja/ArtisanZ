@@ -6,7 +6,7 @@
 
 **Architecture:** Keep the existing PyQt6 Widgets runtime. Improve PyQtGraph through the existing snapshot/widget adapter boundary, not by mutating Matplotlib state from the new renderer. Improve dialogs first through theme tokens and safe selectors, then by targeted per-dialog layout work.
 
-> **2026-07-24 implementation update:** Extra-device background curve extraction and fixed-width dialog control hardening are now implemented and independently reviewed. The remaining `[ ]` items are: (1) long-Chinese-label screenshot capture, (2) Config > Axes/Curves dialog screenshot capture, (3) roast-analysis masks/statistics overlays, (4) charge-target annotation text/callout parity (handled by Task Group C of `docs/superpowers/plans/2026-07-04-phase-1-6-closure-workspace-switcher-charge-target-annotation.md`), (5) projection line BT/RoR visual differentiation, (6) anti-nested-card enforcement rule, (7) Config > Axes/Curves layout-internals restructuring.
+> **2026-07-24 implementation update:** Extra-device background curve extraction, fixed-width dialog control hardening, and roast-analysis mask/statistics/guide parity are implemented and independently reviewed. The remaining `[ ]` items are: (1) long-Chinese-label screenshot capture, (2) Config > Axes/Curves dialog screenshot capture, (3) draggable/editable analysis result boxes, (4) charge-target annotation text/callout parity (handled by Task Group C of `docs/superpowers/plans/2026-07-04-phase-1-6-closure-workspace-switcher-charge-target-annotation.md`), (5) projection line BT/RoR visual differentiation, (6) anti-nested-card enforcement rule, (7) Config > Axes/Curves layout-internals restructuring.
 
 ---
 
@@ -86,8 +86,8 @@
 - [x] Add AUC guide line visuals when `AUCguideFlag` and `AUCguideTime` are active.
 - [x] Add AUC area fill visuals. Closed by Phase 1.9 AreaFillSnapshot. Evidence: `AreaFillSnapshot` `src/artisanlib/plot_snapshot.py:90`, `_auc_area_fill` `src/artisanlib/plot_snapshot_extractor.py:688`, `_default_area_item_factory` `src/artisanlib/plot_pyqtgraph_adapter.py:580` with `PlotDataItem(fillLevel=area.baseline, brush=...)`.
 - [x] Add BBP and charge-target guide line visuals when source data exists.
-- [ ] Add roast-analysis overlays that still exist only in the Matplotlib path, including masks/statistics/guide marks.
-- [ ] Add full charge-target annotation text/callout parity; current PyQtGraph parity is a target guide line only.
+- [x] Add roast-analysis masks, analysis interval guides, and statistics result boxes through the renderer-neutral snapshot path. Full draggable/editable box parity remains follow-up. Tracking: `docs/superpowers/plans/2026-07-24-gui-modernization-phase-1-6-analysis-overlay-parity.md`.
+- [x] Add full charge-target annotation text/callout parity. Closed by Task Group C of `docs/superpowers/plans/2026-07-04-phase-1-6-closure-workspace-switcher-charge-target-annotation.md`; rounded-corner and deeper interaction polish remain follow-up.
 - [ ] Improve projection line visual differentiation and verify RoR projection placement.
 - [x] Define the export/report compatibility decision: explicit hybrid. Matplotlib stays default for `roastReport()` and PDF/SVG/PNG/JPEG Save Graph; PyQtGraph PNG is opt-in via `File > Save Graph > PyQtGraph PNG...` (Phase 1.17 `src/artisanlib/plot_user_export.py`); `plot_report_export.py` provides report-image comparison (Phase 1.18). See closure plan `docs/superpowers/plans/2026-07-02-gui-modernization-phase-1-6-4-6-closure.md` Task 1 line 46.
 
@@ -110,9 +110,10 @@
 - [x] `ruff check` for touched files.
 - [x] PyQtGraph smoke for nonblank rendering.
 - [x] Screenshot evidence for main-window phase bands and explicit PyQtGraph grid/phase rendering.
-- [x] Focused tests cover event value rails, guide extraction/rendering, scoped dialog properties/selectors, workspace action hints, and typed plugin categories.
+- [x] Focused tests cover event value rails, guide extraction/rendering, analysis masks/statistics, scoped dialog properties/selectors, workspace action hints, and typed plugin categories.
 - [x] Current parity/dialog slice verification: `120 passed, 1 skipped`; final independent review: `.sisyphus/phase-1-6-1-12-final-review.md` (P0/P1/P2/P3 all zero).
-- [ ] Screenshot evidence for profile, live simulator, background profile, event-heavy profile, long Chinese LCD labels, Config > Axes, and Config > Curves.
+- [x] Analysis-overlay slice verification: `350 passed, 1 skipped, 2 warnings`; final independent review: `.sisyphus/phase-analysis-overlay-review-pass.md` (P0/P1/P2/P3 all zero).
+- [ ] Screenshot evidence for profile, live simulator, background profile, event-heavy profile, analysis overlays, long Chinese LCD labels, Config > Axes, and Config > Curves.
 
 ## Evidence
 
@@ -123,4 +124,4 @@
 
 ## Exit Gate
 
-Phase 1.6 high-value parity is closed when the default PyQtGraph view has visible gridlines, visible phase bands, event labels, event value rails, AUC/BBP/charge-target guide lines, stable LCD telemetry, and scoped modern chrome for Axes/Curves/Events/Alarms. Full export parity, AUC area fills, dense analysis masks/statistics overlays, drag/edit event interactions, and real-device OpenGL validation remain future gates rather than hidden unfinished work.
+Phase 1.6 high-value parity is closed when the default PyQtGraph view has visible gridlines, visible phase bands, event labels, event value rails, AUC/BBP/charge-target guide lines, analysis masks/statistics, stable LCD telemetry, and scoped modern chrome for Axes/Curves/Events/Alarms. Full export parity, draggable analysis result boxes, drag/edit event interactions, and real-device OpenGL validation remain future gates rather than hidden unfinished work.
