@@ -56,7 +56,7 @@ Important observations from the code review:
 | 1.27 | Event Value and Renderer-Neutral Curve Style Finish | Closed: 2026-07-23 with compact legacy-configured event markers, canonical curve defaults, and PyQtGraph-aware Lines editor | Dense event values remain readable; Lines edits the active renderer | No dense event-value color blocks; PyQtGraph Lines action no longer opens Matplotlib-only editor |
 | 1.28 | Opt-In PyQtGraph Report Graph Handoff | Closed: 2026-07-23 with guarded report-graph selection, nonblank evidence validation, and Matplotlib fallback | Explicit PyQtGraph report graph renders from the same snapshot contract; default report path remains Matplotlib | Saved-profile report graph is nonblank; simulated export failure falls back to Matplotlib |
 | 2 | Plot Renderer Boundary and PyQtGraph POC | Guarded PyQtGraph main-splitter embed implemented and benchmarked in offscreen/native-window simulator smokes | Read-only plot snapshot model, Matplotlib adapter, PyQtGraph live adapter prototype | POC is benchmarkable before any live renderer swap |
-| 3 | Sampling Post-Processing Decoupling | Phase 3.3 sampling-integrity gate closed; deeper filtering/RoR/PID migration remains | Pure data pipeline plus a queued processed-frame worker contract | GUI thread consumes immutable frame results; heavier processing moves only after benchmarked equivalence |
+| 3 | Sampling Post-Processing Decoupling | Phase 3.3-B thermal handoff closed; long-duration/hardware benchmark gate remains | Pure thermal data pipeline plus queued thermal and processed-frame worker continuations | GUI thread consumes accepted immutable results; performance claims require representative soak evidence |
 | 4 | Main UI Information Architecture | Closed at IA/policy/status-hint layer | Scenario-oriented Roast Control, QC Analysis, Device Setup, Production, and Expert workspaces | Users can switch task modes without losing existing expert controls |
 | 5 | Local QML Islands | Closed at Workspace Status island level | A limited Qt Quick panel backed by Python state models, renderer status, and workspace action hints | QML proves useful without breaking packaging, translations, or Windows portable build |
 | 6 | Plugin Boundary Exploration | Closed at typed plugin-boundary level | Renderer/report/filter/analyzer/profile-comparison extension categories | Future customization can be isolated without destabilizing upstream sync |
@@ -459,7 +459,7 @@ Important observations from the code review:
 
 **Status:** Closed on 2026-07-23 after implementation, repair, independent review, and commit. Latest-value coalescing retains the newest raw device batch while a processed frame is pending. Generation invalidation clears deferred input during reset, profile clearing, recording/monitor stop, and shutdown. One deduplicated 10ms retry handles deferred lock contention.
 
-**Contract:** This bounded merge prevents silent loss of the newest reading without creating an unbounded backlog. It does not claim lossless retention of every high-frequency sample; Phase 3.3-B must benchmark 1 Hz, 5 Hz, and 10 Hz before moving thermal precompute into the worker.
+**Contract:** This bounded merge prevents silent loss of the newest reading without creating an unbounded backlog. It does not claim lossless retention of every high-frequency sample. Thermal precompute now runs through the Phase 3.3-B worker boundary; representative 1 Hz, 5 Hz, and 10 Hz soak evidence remains a performance follow-up.
 
 **Evidence:** Focused suite remains `157 passed, 2 warnings`. An 8-second real WebSocket main-window autorun completed with `14` samples, event indexes `[1, 10, 0, 0, 0, 0, 0, 0]`, restored state, normal finish, and non-empty screenshot/perf evidence. Final review PASS: `.sisyphus/phase-3-3-sampling-integrity-final-review.md`.
 
@@ -467,11 +467,11 @@ Important observations from the code review:
 
 **Tracking Plan:** `docs/superpowers/plans/2026-07-23-gui-modernization-phase-3-3b-thermal-precompute-contract.md`
 
-**Status:** Contract slice closed on 2026-07-23 after independent review PASS and commit. Runtime GUI handoff, differential benchmarks, and full Phase 3.3-B remain pending.
+**Status:** Closed on 2026-07-23 after runtime handoff, fallback repair, WebSocket validation, review PASS, and commit. Long-duration and hardware-representative benchmarks remain as the performance evidence gate.
 
-**Implementation:** `sample_processing.py` now exposes deep-immutable `LiveThermalInputRequest/Result` and a pure ET/BT smoothing, raw RoR, and PID process-value function. `ProcessedFrameWorker` exposes a separate thermal request/result/error boundary. Existing GUI-owned state and Phase 3.2 live frame path remain unchanged until the runtime handoff is proven equivalent.
+**Implementation:** `sample_processing.py` exposes deep-immutable `LiveThermalInputRequest/Result` and a pure ET/BT smoothing, raw RoR, and PID process-value function. `canvas.py` submits that request after GUI-owned device/input-filter and connected-history work, applies accepted thermal results, preserves Delta math-expression ordering, then enters the existing processed-frame worker. ET/BT/extra curve payloads, event/alarm/projection decisions, and rendering remain GUI-owned. Thermal errors fall back to the pure helper; stale/reset/shutdown paths invalidate both worker stages.
 
-**Evidence:** `test_sample_processing.py` plus `test_processed_frame_worker.py`: `159 passed`; changed modules compile and pass Ruff. Final review PASS: `.sisyphus/phase-3-3b-thermal-contract-final-review.md`.
+**Evidence:** Focused runtime suite: `176 passed, 2 warnings`; changed modules compile and pass Ruff. A 16-second real main-window WebSocket autorun completed with `30` samples, event indexes `[1, 10, 19, 22, 26, 0, 26, 0]`, restored state, normal finish, non-empty screenshot, and perf evidence. `canvas.sample_processing` averaged `0.693 ms` with maximum `1.350 ms`. Final review PASS: `.sisyphus/phase-3-3b-thermal-runtime-review.md`.
 
 ## Phase 4: Main UI Information Architecture
 

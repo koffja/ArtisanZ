@@ -140,6 +140,7 @@ from artisanlib.processed_frame_worker import (
 )
 from artisanlib.sample_processing import (
     build_live_processed_sample_frame,
+    build_live_thermal_input_result,
     connected_curve_point,
     decay_weight_sequence,
     decay_weighted_average,
@@ -155,17 +156,16 @@ from artisanlib.sample_processing import (
     manual_turning_point_check_candidate,
     manual_x_axis_extension_end,
     phase_event_candidates_after_turning_point,
-    pid_process_value,
     pid_process_value_update_enabled,
     pid_set_value_update,
     pid_sv_update_target,
     PidSvUpdateTarget,
+    LiveThermalInputRequest,
+    LiveThermalInputResult,
     post_sample_update_decisions,
     ProcessedSampleFrame,
     rate_of_rise_per_minute,
     smoothed_rate_of_change_value,
-    smoothed_temperature_value,
-    smoothing_weights_for_recent_readings,
     simple_rate_of_rise_per_minute,
     turning_point_temperature_is_valid,
     windowed_curve_data,
@@ -369,6 +369,38 @@ class _ProcessedFrameContinuation:
     length_of_qmc_timex: int
     tx: float
     live_frame_curves: list[LiveCurveData]
+    profile_lock_held: bool = True
+
+
+@dataclass(slots=True)
+class _ThermalContinuation:
+    """GUI-owned state retained while thermal inputs are computed."""
+
+    generation: int
+    sequence: int
+    request: LiveThermalInputRequest
+    local_flagstart: bool
+    sample_timex: list[float]
+    sample_temp1: list[float]
+    sample_temp2: list[float]
+    sample_ctimex1: list[float]
+    sample_ctemp1: list[float | None]
+    sample_ctimex2: list[float]
+    sample_ctemp2: list[float | None]
+    sample_tstemp1: list[float | None]
+    sample_tstemp2: list[float | None]
+    sample_unfiltereddelta1: list[float]
+    sample_unfiltereddelta2: list[float]
+    sample_delta1: list[float | None]
+    sample_delta2: list[float | None]
+    sample_extratemp1: list[Any]
+    sample_extratemp2: list[Any]
+    length_of_qmc_timex: int
+    tx: float
+    t1_final: float
+    t2_final: float
+    live_frame_curves: list[LiveCurveData]
+    pid_update_enabled: bool
     profile_lock_held: bool = True
 
 
@@ -2355,6 +2387,10 @@ class tgraphcanvas(QObject):
             self._processed_frame_worker.process,
             type=Qt.ConnectionType.QueuedConnection,
         )
+        self._processed_frame_request_channel.thermal_request.connect(
+            self._processed_frame_worker.process_thermal,
+            type=Qt.ConnectionType.QueuedConnection,
+        )
         self._processed_frame_worker.result_ready.connect(
             self._processed_frame_result_ready,
             type=Qt.ConnectionType.QueuedConnection,
@@ -2363,8 +2399,17 @@ class tgraphcanvas(QObject):
             self._processed_frame_error,
             type=Qt.ConnectionType.QueuedConnection,
         )
+        self._processed_frame_worker.thermal_result_ready.connect(
+            self._thermal_result_ready,
+            type=Qt.ConnectionType.QueuedConnection,
+        )
+        self._processed_frame_worker.thermal_error.connect(
+            self._thermal_error,
+            type=Qt.ConnectionType.QueuedConnection,
+        )
         self._processed_frame_worker_thread.finished.connect(self._processed_frame_worker.deleteLater)
         self._processed_frame_pending: _ProcessedFrameContinuation | None = None
+        self._thermal_pending: _ThermalContinuation | None = None
         self._deferred_sample_input: _DeferredSampleInput | None = None
         self._deferred_sample_retry_scheduled = False
         self._processed_frame_generation = 0
@@ -4832,7 +4877,7 @@ class tgraphcanvas(QObject):
         """Queue one frame request; return False when the boundary is unavailable."""
         if self._processed_frame_worker_shutdown or not self._processed_frame_worker_thread.isRunning():
             return False
-        if self._processed_frame_pending is not None:
+        if self._processed_frame_pending is not None or self._thermal_pending is not None:
             _log.debug('processed frame worker is busy; skipping duplicate request')
             gui_perf_count('canvas.sample_processing.worker_busy')
             return False
@@ -4845,17 +4890,38 @@ class tgraphcanvas(QObject):
         gui_perf_count('canvas.sample_processing.worker_submit')
         return True
 
+    def _submit_thermal(self, continuation: _ThermalContinuation) -> bool:
+        """Queue pure thermal calculations while retaining GUI-owned state."""
+        if self._processed_frame_worker_shutdown or not self._processed_frame_worker_thread.isRunning():
+            return False
+        if self._processed_frame_pending is not None or self._thermal_pending is not None:
+            return False
+        self._thermal_pending = continuation
+        self._processed_frame_sequence = continuation.sequence
+        self._processed_frame_request_channel.thermal_request.emit(
+            continuation.sequence,
+            continuation.request,
+        )
+        gui_perf_count('canvas.sample_processing.thermal_submit')
+        return True
+
     def _invalidate_processed_frame_work(self) -> None:
         """Cancel a queued frame before roast state or recording mode changes."""
         self._processed_frame_generation += 1
         pending = self._processed_frame_pending
+        thermal_pending = self._thermal_pending
         self._processed_frame_pending = None
+        self._thermal_pending = None
         self._deferred_sample_input = None
         self._deferred_sample_retry_scheduled = False
         if pending is not None and pending.profile_lock_held and self.profileDataSemaphore.available() < 1:
             self.profileDataSemaphore.release(1)
+        if thermal_pending is not None and thermal_pending.profile_lock_held and self.profileDataSemaphore.available() < 1:
+            self.profileDataSemaphore.release(1)
         if pending is not None:
             gui_perf_count('canvas.sample_processing.worker_cancel')
+        if thermal_pending is not None:
+            gui_perf_count('canvas.sample_processing.thermal_cancel')
 
     def _schedule_deferred_sample_resume(self) -> None:
         if self._deferred_sample_input is None or self._deferred_sample_retry_scheduled:
@@ -5198,6 +5264,245 @@ class tgraphcanvas(QObject):
         finally:
             self._finalize_sample_processing(continuation.local_flagstart)
 
+    def _continue_thermal_result(
+            self,
+            result: LiveThermalInputResult,
+            continuation: _ThermalContinuation) -> bool:
+        """Finish GUI-owned thermal state, then enter the existing frame worker."""
+        sample_timex = continuation.sample_timex
+        sample_tstemp1 = continuation.sample_tstemp1
+        sample_tstemp2 = continuation.sample_tstemp2
+        sample_unfiltereddelta1 = continuation.sample_unfiltereddelta1
+        sample_unfiltereddelta2 = continuation.sample_unfiltereddelta2
+        sample_delta1 = continuation.sample_delta1
+        sample_delta2 = continuation.sample_delta2
+        live_frame_curves = continuation.live_frame_curves
+
+        st1 = result.smoothed_et
+        st2 = result.smoothed_bt
+        sample_tstemp1.append(st1)
+        sample_tstemp2.append(st2)
+
+        process_value = result.pid_process_value
+        if continuation.pid_update_enabled:
+            self.pid.update(process_value)
+
+        if continuation.local_flagstart:
+            if self.ETcurve:
+                et_curve_data = full_curve_data(continuation.sample_ctimex1, continuation.sample_ctemp1)
+                live_frame_curves.append(
+                    LiveCurveData(
+                        name='ET',
+                        x=et_curve_data.times,
+                        y=et_curve_data.values,
+                        color=self.palette['et'],
+                        line_style=self.ETlinestyle,
+                        line_width=self.ETlinewidth,
+                    ),
+                )
+            if self.BTcurve:
+                bt_curve_data = full_curve_data(continuation.sample_ctimex2, continuation.sample_ctemp2)
+                live_frame_curves.append(
+                    LiveCurveData(
+                        name='BT',
+                        x=bt_curve_data.times,
+                        y=bt_curve_data.values,
+                        color=self.palette['bt'],
+                        line_style=self.BTlinestyle,
+                        line_width=self.BTlinewidth,
+                    ),
+                )
+
+        rateofchange1plot: float | None = None
+        rateofchange2plot: float | None = None
+        if continuation.length_of_qmc_timex > 1:
+            self.rateofchange1 = result.raw_ror_et
+            self.rateofchange2 = result.raw_ror_bt
+            self.unfiltereddelta1_pure.append(self.rateofchange1)
+            self.unfiltereddelta2_pure.append(self.rateofchange2)
+
+            if self.DeltaETfunction.strip():
+                try:
+                    self.rateofchange1 = self.eval_math_expression(
+                        self.DeltaETfunction,
+                        continuation.tx,
+                        RTsname='R1',
+                        RTsval=self.rateofchange1,
+                    )
+                except Exception as e: # pylint: disable=broad-except
+                    _log.exception(e)
+            if self.DeltaBTfunction.strip():
+                try:
+                    self.rateofchange2 = self.eval_math_expression(
+                        self.DeltaBTfunction,
+                        continuation.tx,
+                        RTsname='R2',
+                        RTsval=self.rateofchange2,
+                    )
+                except Exception as e: # pylint: disable=broad-except
+                    _log.exception(e)
+
+            sample_unfiltereddelta1.append(self.rateofchange1)
+            sample_unfiltereddelta2.append(self.rateofchange2)
+
+            user_filter = delta_smoothing_filter_size(
+                self.deltaETfilter,
+                continuation.length_of_qmc_timex,
+                len(sample_unfiltereddelta1),
+            )
+            if user_filter is not None:
+                if self.decay_weights is None or len(self.decay_weights) != user_filter:
+                    self.decay_weights = list(decay_weight_sequence(user_filter))
+                self.rateofchange1 = smoothed_rate_of_change_value(
+                    sample_timex,
+                    sample_unfiltereddelta1,
+                    self.decay_weights,
+                    self.delay / 1000.,
+                )
+            user_filter = delta_smoothing_filter_size(
+                self.deltaBTfilter,
+                continuation.length_of_qmc_timex,
+                len(sample_unfiltereddelta2),
+            )
+            if user_filter is not None:
+                if self.decay_weights is None or len(self.decay_weights) != user_filter:
+                    self.decay_weights = list(decay_weight_sequence(user_filter))
+                self.rateofchange2 = smoothed_rate_of_change_value(
+                    sample_timex,
+                    sample_unfiltereddelta2,
+                    self.decay_weights,
+                    self.delay / 1000.,
+                )
+            rateofchange1plot = self.rateofchange1
+            rateofchange2plot = self.rateofchange2
+        else:
+            sample_unfiltereddelta1.append(0.)
+            sample_unfiltereddelta2.append(0.)
+            self.rateofchange1 = self.rateofchange2 = 0.
+            rateofchange1plot = rateofchange2plot = 0.
+
+        local_flagstart = continuation.local_flagstart
+        processed_frame_request = ProcessedFrameRequest(
+            timestamp=continuation.tx,
+            sample_count=continuation.length_of_qmc_timex,
+            latest_et=continuation.t1_final,
+            latest_bt=continuation.t2_final,
+            smoothed_et=st1,
+            smoothed_bt=st2,
+            pid_process_value=process_value,
+            raw_delta_et=rateofchange1plot,
+            raw_delta_bt=rateofchange2plot,
+            ror_limit_enabled=self.RoRlimitFlag,
+            max_ror_limit=self.maxRoRlimit,
+            ror_limit=self.RoRlimit,
+            ror_limit_min=self.RoRlimitm,
+            charge_index=self.timeindex[0] if local_flagstart else -1,
+            dry_index=self.timeindex[1] if local_flagstart else 0,
+            drop_index=self.timeindex[6] if local_flagstart else 0,
+            delta_et_filter=self.deltaETfilter,
+            delta_bt_filter=self.deltaBTfilter,
+            delta_et_samples=self.deltaETsamples,
+            delta_bt_samples=self.deltaBTsamples,
+            fix_max_time=self.fixmaxtime or not local_flagstart,
+            lock_time_x=self.locktimex,
+            sample_times=tuple(sample_timex),
+            start_of_x=self.startofx,
+            end_of_x=self.endofx,
+            tp_alarm_timeindex=self.TPalarmtimeindex if local_flagstart else None,
+            tp_max_roast_time=self.TP_max_roasttime,
+            auto_charge_idx=self.autoChargeIdx,
+            auto_charge_flag=local_flagstart and self.autoChargeFlag,
+            auto_charge_enabled=self.autoCHARGEenabled,
+            auto_drop_idx=self.autoDropIdx,
+            auto_drop_flag=local_flagstart and self.autoDropFlag,
+            auto_drop_enabled=self.autoDROPenabled,
+            mode=self.mode,
+        )
+        frame_continuation = _ProcessedFrameContinuation(
+            generation=continuation.generation,
+            sequence=self._processed_frame_sequence + 1,
+            request=processed_frame_request,
+            local_flagstart=local_flagstart,
+            sample_timex=sample_timex,
+            sample_temp1=continuation.sample_temp1,
+            sample_temp2=continuation.sample_temp2,
+            sample_delta1=sample_delta1,
+            sample_delta2=sample_delta2,
+            sample_extratemp1=continuation.sample_extratemp1,
+            sample_extratemp2=continuation.sample_extratemp2,
+            length_of_qmc_timex=continuation.length_of_qmc_timex,
+            tx=continuation.tx,
+            live_frame_curves=continuation.live_frame_curves,
+        )
+        if self._submit_processed_frame(frame_continuation):
+            if self.profileDataSemaphore.available() < 1:
+                self.profileDataSemaphore.release(1)
+            continuation.profile_lock_held = False
+            frame_continuation.profile_lock_held = False
+            return True
+        processed_frame = build_live_processed_sample_frame(**processed_frame_request.as_kwargs())
+        self._apply_processed_frame(processed_frame, frame_continuation)
+        return False
+
+    @pyqtSlot(int, object)
+    def _thermal_result_ready(self, sequence: int, result: object) -> None:
+        """Apply a thermal result in the GUI thread, rejecting stale responses."""
+        continuation = self._thermal_pending
+        if (
+                continuation is None or
+                continuation.sequence != sequence or
+                continuation.generation != self._processed_frame_generation or
+                self._processed_frame_worker_shutdown):
+            _log.warning('ignoring stale thermal result %s', sequence)
+            gui_perf_count('canvas.sample_processing.thermal_stale_result')
+            return
+        if not self.profileDataSemaphore.tryAcquire(1, 50):
+            QTimer.singleShot(10, lambda: self._thermal_result_ready(sequence, result))
+            gui_perf_count('canvas.sample_processing.thermal_result_lock_retry')
+            return
+        self._thermal_pending = None
+        processing_deferred = False
+        try:
+            if not isinstance(result, LiveThermalInputResult):
+                raise TypeError(f'invalid thermal result: {type(result).__name__}')
+            processing_deferred = self._continue_thermal_result(result, continuation)
+        except Exception as e: # pylint: disable=broad-except
+            _log.exception(e)
+            _, _, exc_tb = sys.exc_info()
+            self.adderror((QApplication.translate('Error Message','Exception:') + ' sample() {0}').format(str(e)),getattr(exc_tb, 'tb_lineno', '?'))
+        finally:
+            if not processing_deferred:
+                self._finalize_sample_processing(continuation.local_flagstart)
+
+    @pyqtSlot(int, str)
+    def _thermal_error(self, sequence: int, message: str) -> None:
+        """Fallback to the pure helper when the thermal worker fails."""
+        continuation = self._thermal_pending
+        if (
+                continuation is None or
+                continuation.sequence != sequence or
+                continuation.generation != self._processed_frame_generation or
+                self._processed_frame_worker_shutdown):
+            _log.warning('ignoring stale thermal error %s', sequence)
+            return
+        if not self.profileDataSemaphore.tryAcquire(1, 50):
+            QTimer.singleShot(10, lambda: self._thermal_error(sequence, message))
+            gui_perf_count('canvas.sample_processing.thermal_error_lock_retry')
+            return
+        self._thermal_pending = None
+        _log.error('thermal worker failed: %s', message)
+        processing_deferred = False
+        try:
+            fallback = build_live_thermal_input_result(continuation.request)
+            processing_deferred = self._continue_thermal_result(fallback, continuation)
+        except Exception as e: # pylint: disable=broad-except
+            _log.exception(e)
+            _, _, exc_tb = sys.exc_info()
+            self.adderror((QApplication.translate('Error Message','Exception:') + ' sample() {0}').format(str(e)),getattr(exc_tb, 'tb_lineno', '?'))
+        finally:
+            if not processing_deferred:
+                self._finalize_sample_processing(continuation.local_flagstart)
+
     @pyqtSlot(int, str)
     def _processed_frame_error(self, sequence: int, message: str) -> None:
         """Finish a failed worker request through a guarded GUI fallback."""
@@ -5263,7 +5568,7 @@ class tgraphcanvas(QObject):
         if deferred_batch is None and deferred is not None:
             if deferred.generation != self._processed_frame_generation:
                 self._deferred_sample_input = None
-            elif self._processed_frame_pending is None:
+            elif self._processed_frame_pending is None and self._thermal_pending is None:
                 queued = deferred
                 self._deferred_sample_input = _DeferredSampleInput(
                     generation=self._processed_frame_generation,
@@ -5280,8 +5585,8 @@ class tgraphcanvas(QObject):
                     deferred_batch=queued,
                 )
                 return
-        if self._processed_frame_pending is not None:
-            _log.debug('sample_processing(): queueing newest input while frame continuation is pending')
+        if self._processed_frame_pending is not None or self._thermal_pending is not None:
+            _log.debug('sample_processing(): queueing newest input while worker continuation is pending')
             self._queue_latest_sample_input(local_flagstart, temp1_readings, temp2_readings, timex_readings)
             return
         ##### (try to) lock resources  #########
@@ -5543,210 +5848,76 @@ class tgraphcanvas(QObject):
                         sample_ctimex2.append(tx)
                         sample_ctemp2.append(connected_point2.value)
 
-
-                    #we populate the temporary smoothed ET/BT data arrays (with readings cleansed from -1 dropouts)
                     cf = self.curvefilter
-                    if self.temp_decay_weights is None or len(self.temp_decay_weights) != cf: # recompute only on changes
+                    if self.temp_decay_weights is None or len(self.temp_decay_weights) != cf:
                         self.temp_decay_weights = list(decay_weight_sequence(cf))
-                    # we don't smooth st'x if last, or butlast temperature value were a drop-out not to confuse the RoR calculation
-                    dw1 = list(smoothing_weights_for_recent_readings(sample_temp1, self.temp_decay_weights, cf))
-                    dw2 = list(smoothing_weights_for_recent_readings(sample_temp2, self.temp_decay_weights, cf))
-                    # average smoothing
-                    st1 = smoothed_temperature_value(
-                        sample_ctimex1,
-                        sample_ctemp1,
-                        dw1,
-                        self.delay / 1000.,
-                    )
-                    st2 = smoothed_temperature_value(
-                        sample_ctimex2,
-                        sample_ctemp2,
-                        dw2,
-                        self.delay / 1000.,
-                    )
-
-#                    # we apply a minimal live median spike filter
-#                    if self.filterDropOuts:
-#                        if st1 is not None and st1 != -1:
-#                            st1 = self.liveMedianETfilter(st1)
-#                        if st1 is not None and st2 != -1:
-#                            st2 = self.liveMedianBTfilter(st2)
-
-                    # register smoothed values
-                    sample_tstemp1.append(st1)
-                    sample_tstemp2.append(st2)
-
-                    if local_flagstart:
-                        if self.ETcurve:
-                            et_curve_data = full_curve_data(sample_ctimex1, sample_ctemp1)
-                            live_frame_curves.append(
-                                LiveCurveData(
-                                    name='ET',
-                                    x=et_curve_data.times,
-                                    y=et_curve_data.values,
-                                    color=self.palette['et'],
-                                    line_style=self.ETlinestyle,
-                                    line_width=self.ETlinewidth,
-                                ),
-                            )
-                        if self.BTcurve:
-                            bt_curve_data = full_curve_data(sample_ctimex2, sample_ctemp2)
-                            live_frame_curves.append(
-                                LiveCurveData(
-                                    name='BT',
-                                    x=bt_curve_data.times,
-                                    y=bt_curve_data.values,
-                                    color=self.palette['bt'],
-                                    line_style=self.BTlinestyle,
-                                    line_width=self.BTlinewidth,
-                                ),
-                            )
-
-                    #NOTE: the following is no longer restricted to self.aw.pidcontrol.pidActive==True
-                    # as now the software PID is also update while the PID is off (if configured).
-                    process_value:float|None = None
                     external_pid_controller = (
                         self.aw.pidcontrol.externalPIDControl() if self.Controlbuttonflag else None)
-                    if pid_process_value_update_enabled(
-                            self.Controlbuttonflag,
-                            external_pid_controller): # any device and + Artisan Software PID lib
-                        process_value = pid_process_value(
-                            self.aw.pidcontrol.pidSource,
-                            smoothed_et=st1,
-                            smoothed_bt=st2,
-                            extra_temps_1=sample_extratemp1,
-                            extra_temps_2=sample_extratemp2,
-                        )
-                        self.pid.update(process_value)
-
-                    rateofchange1plot:float|None = None
-                    rateofchange2plot:float|None = None
-
-                    #we need a minimum of two readings to calculate rate of change
-                    if length_of_qmc_timex > 1:
-                        # compute T1 RoR
-                        self.rateofchange1 = self.compute_ror(t1_final, sample_timex, sample_tstemp1, sample_unfiltereddelta1, self.deltaETsamples)
-
-                        # compute T2 RoR
-                        self.rateofchange2 = self.compute_ror(t2_final, sample_timex, sample_tstemp2, sample_unfiltereddelta2, self.deltaBTsamples)
-
-                        # self.unfiltereddelta{1,2}_pure contain the RoR values respecting the delta_span, but without any delta smoothing NOR delta mathformulas applied
-                        self.unfiltereddelta1_pure.append(self.rateofchange1)
-                        self.unfiltereddelta2_pure.append(self.rateofchange2)
-
-                        # apply the math formula before the delta smoothing
-                        if self.DeltaETfunction.strip():
-                            try:
-                                self.rateofchange1 = self.eval_math_expression(self.DeltaETfunction,tx,RTsname='R1',RTsval=self.rateofchange1)
-                            except Exception as e: # pylint: disable=broad-except
-                                _log.exception(e)
-                        if self.DeltaBTfunction.strip():
-                            try:
-                                self.rateofchange2 = self.eval_math_expression(self.DeltaBTfunction,tx,RTsname='R2',RTsval=self.rateofchange2)
-                            except Exception as e: # pylint: disable=broad-except
-                                _log.exception(e)
-
-# RoR Smooth Spikes (Drop Filter, Median Filter) is only applied offline
-#                        # unfiltereddelta1/2 contains the RoRs respecting the delta_span, but without any delta smoothing AND delta mathformulas applied
-#                        # we apply a minimal live median spike filter minimizing the delay by choosing a window smaller than in the offline medfilt
-#                        if self.filterDropOuts:
-#                            if self.rateofchange1 is not None and self.rateofchange1 != -1:
-#                                self.rateofchange1 = self.liveMedianETRoRfilter(self.rateofchange1)
-#                            if self.rateofchange2 is not None and self.rateofchange2 != -1:
-#                                self.rateofchange2 = self.liveMedianBTRoRfilter(self.rateofchange2)
-
-                        sample_unfiltereddelta1.append(self.rateofchange1)
-                        sample_unfiltereddelta2.append(self.rateofchange2)
-
-                        #######   filter deltaBT deltaET
-                        # decay smoothing
-                        user_filter = delta_smoothing_filter_size(self.deltaETfilter, length_of_qmc_timex, len(sample_unfiltereddelta1))
-                        if user_filter is not None:
-                            if self.decay_weights is None or len(self.decay_weights) != user_filter: # recompute only on changes
-                                self.decay_weights = list(decay_weight_sequence(user_filter))
-                            self.rateofchange1 = smoothed_rate_of_change_value(
-                                sample_timex,
-                                sample_unfiltereddelta1,
-                                self.decay_weights,
-                                self.delay / 1000.,
-                            )
-                        user_filter = delta_smoothing_filter_size(self.deltaBTfilter, length_of_qmc_timex, len(sample_unfiltereddelta2))
-                        if user_filter is not None:
-                            if self.decay_weights is None or len(self.decay_weights) != user_filter: # recompute only on changes
-                                self.decay_weights = list(decay_weight_sequence(user_filter))
-                            self.rateofchange2 = smoothed_rate_of_change_value(
-                                sample_timex,
-                                sample_unfiltereddelta2,
-                                self.decay_weights,
-                                self.delay / 1000.,
-                            )
-                        rateofchange1plot = self.rateofchange1
-                        rateofchange2plot = self.rateofchange2
-                    else:
-                        sample_unfiltereddelta1.append(0.)
-                        sample_unfiltereddelta2.append(0.)
-                        self.rateofchange1,self.rateofchange2,rateofchange1plot,rateofchange2plot = 0.,0.,0.,0.
-
-                    processed_frame_request = ProcessedFrameRequest(
-                        timestamp=tx,
-                        sample_count=length_of_qmc_timex,
+                    pid_update_enabled = pid_process_value_update_enabled(
+                        self.Controlbuttonflag,
+                        external_pid_controller,
+                    )
+                    thermal_request = LiveThermalInputRequest(
                         latest_et=t1_final,
                         latest_bt=t2_final,
-                        smoothed_et=st1,
-                        smoothed_bt=st2,
-                        pid_process_value=process_value,
-                        raw_delta_et=rateofchange1plot,
-                        raw_delta_bt=rateofchange2plot,
-                        ror_limit_enabled=self.RoRlimitFlag,
-                        max_ror_limit=self.maxRoRlimit,
-                        ror_limit=self.RoRlimit,
-                        ror_limit_min=self.RoRlimitm,
-                        charge_index=self.timeindex[0] if local_flagstart else -1,
-                        dry_index=self.timeindex[1] if local_flagstart else 0,
-                        drop_index=self.timeindex[6] if local_flagstart else 0,
-                        delta_et_filter=self.deltaETfilter,
-                        delta_bt_filter=self.deltaBTfilter,
+                        sample_times=tuple(sample_timex),
+                        raw_et_history=tuple(sample_temp1),
+                        raw_bt_history=tuple(sample_temp2),
+                        connected_et_times=tuple(sample_ctimex1),
+                        connected_et_temperatures=tuple(sample_ctemp1),
+                        connected_bt_times=tuple(sample_ctimex2),
+                        connected_bt_temperatures=tuple(sample_ctemp2),
+                        smoothed_et_history=tuple(sample_tstemp1),
+                        smoothed_bt_history=tuple(sample_tstemp2),
+                        previous_et_rates=tuple(sample_unfiltereddelta1),
+                        previous_bt_rates=tuple(sample_unfiltereddelta2),
+                        temperature_decay_weights=tuple(self.temp_decay_weights),
+                        curve_filter=cf,
+                        sample_interval_seconds=self.delay / 1000.,
                         delta_et_samples=self.deltaETsamples,
                         delta_bt_samples=self.deltaBTsamples,
-                        fix_max_time=self.fixmaxtime or not local_flagstart,
-                        lock_time_x=self.locktimex,
-                        sample_times=tuple(sample_timex),
-                        start_of_x=self.startofx,
-                        end_of_x=self.endofx,
-                        tp_alarm_timeindex=self.TPalarmtimeindex if local_flagstart else None,
-                        tp_max_roast_time=self.TP_max_roasttime,
-                        auto_charge_idx=self.autoChargeIdx,
-                        auto_charge_flag=local_flagstart and self.autoChargeFlag,
-                        auto_charge_enabled=self.autoCHARGEenabled,
-                        auto_drop_idx=self.autoDropIdx,
-                        auto_drop_flag=local_flagstart and self.autoDropFlag,
-                        auto_drop_enabled=self.autoDROPenabled,
-                        mode=self.mode,
+                        use_polyfit=self.polyfitRoRcalc,
+                        pid_source=self.aw.pidcontrol.pidSource if pid_update_enabled else None,
+                        extra_temperatures_1=sample_extratemp1,
+                        extra_temperatures_2=sample_extratemp2,
                     )
-                    continuation = _ProcessedFrameContinuation(
+                    thermal_continuation = _ThermalContinuation(
                         generation=self._processed_frame_generation,
                         sequence=self._processed_frame_sequence + 1,
-                        request=processed_frame_request,
+                        request=thermal_request,
                         local_flagstart=local_flagstart,
                         sample_timex=sample_timex,
                         sample_temp1=sample_temp1,
                         sample_temp2=sample_temp2,
+                        sample_ctimex1=sample_ctimex1,
+                        sample_ctemp1=sample_ctemp1,
+                        sample_ctimex2=sample_ctimex2,
+                        sample_ctemp2=sample_ctemp2,
+                        sample_tstemp1=sample_tstemp1,
+                        sample_tstemp2=sample_tstemp2,
+                        sample_unfiltereddelta1=sample_unfiltereddelta1,
+                        sample_unfiltereddelta2=sample_unfiltereddelta2,
                         sample_delta1=sample_delta1,
                         sample_delta2=sample_delta2,
                         sample_extratemp1=sample_extratemp1,
                         sample_extratemp2=sample_extratemp2,
                         length_of_qmc_timex=length_of_qmc_timex,
                         tx=tx,
+                        t1_final=t1_final,
+                        t2_final=t2_final,
                         live_frame_curves=live_frame_curves,
+                        pid_update_enabled=pid_update_enabled,
                     )
-                    if self._submit_processed_frame(continuation):
+                    if self._submit_thermal(thermal_continuation):
                         if self.profileDataSemaphore.available() < 1:
                             self.profileDataSemaphore.release(1)
-                        continuation.profile_lock_held = False
+                        thermal_continuation.profile_lock_held = False
                         processing_deferred = True
                         return
-                    processed_frame = build_live_processed_sample_frame(**processed_frame_request.as_kwargs())
-                    self._apply_processed_frame(processed_frame, continuation)
+                    processing_deferred = self._continue_thermal_result(
+                        build_live_thermal_input_result(thermal_request),
+                        thermal_continuation,
+                    )
                 #############    if using DEVICE 18 (no device). Manual mode
                 # temperatures are entered when pressing push buttons like for example at self.markDryEnd()
                 else:
@@ -6332,7 +6503,7 @@ class tgraphcanvas(QObject):
     @gui_perf_tracked('canvas.updategraphics')
     def updategraphics(self) -> None:
 #        QApplication.processEvents() # without this we see some flickers (canvas redraws) on using multiple button event actions on macOS!?
-        if self._processed_frame_pending is not None:
+        if self._processed_frame_pending is not None or self._thermal_pending is not None:
             gui_perf_count('canvas.updategraphics.worker_pending_skip')
             return
         gotlock = self.updateGraphicsSemaphore.tryAcquire(1,300) # we try to catch a lock if available but we do not wait, if we fail we just skip this redraw round (prevents stacking of waiting calls); we maximally wait 300ms which should be enough on modern machines
