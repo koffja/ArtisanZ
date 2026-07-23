@@ -6341,19 +6341,20 @@ class tgraphcanvas(QObject):
     def _sync_pyqtgraph_visual_overlays(self, target: object) -> None:
         """Push phase/event data to pyqtgraph visual overlays after snapshot render."""
         try:
-            phase_bands = getattr(target, 'phase_bands', None)
-            if phase_bands is not None and hasattr(phase_bands, 'update_phases'):
-                bounds = self._extract_phase_time_bounds()
-                if bounds:
+            renderer = getattr(target, 'renderer', None)
+            owns_snapshot_overlays = bool(getattr(renderer, 'owns_snapshot_overlays', False))
+            if not owns_snapshot_overlays:
+                phase_bands = getattr(target, 'phase_bands', None)
+                if phase_bands is not None and hasattr(phase_bands, 'update_phases'):
+                    bounds = self._extract_phase_time_bounds()
                     phase_bands.update_phases(bounds)
-            event_markers = getattr(target, 'event_markers', None)
-            if event_markers is not None and hasattr(event_markers, 'update_events'):
-                events = self._extract_event_marker_data()
-                if events:
+                event_markers = getattr(target, 'event_markers', None)
+                if event_markers is not None and hasattr(event_markers, 'update_events'):
+                    events = self._extract_event_marker_data()
                     event_markers.update_events(events)
-            enhance = getattr(target, 'enhance_curves', None)
-            if callable(enhance):
-                enhance()
+                enhance = getattr(target, 'enhance_curves', None)
+                if callable(enhance):
+                    enhance()
         except Exception:
             _log.debug('pyqtgraph visual overlay sync failed', exc_info=True)
 

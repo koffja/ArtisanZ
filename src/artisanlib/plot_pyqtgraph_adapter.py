@@ -75,6 +75,10 @@ def _settings_bool(keys: tuple[str, ...], default: bool) -> bool:
 
 
 class PyQtGraphSnapshotRenderer:
+    # Static phase/event/analysis overlays are owned by this renderer. The
+    # legacy widget overlay managers must not add a second visual layer.
+    owns_snapshot_overlays = True
+
     def __init__(
             self,
             *,
@@ -592,6 +596,16 @@ def _default_event_line_factory(
         return None
     if event.kind == 'main' and event.temperature is not None:
         temperature_position, label_position = _main_event_annotation_positions(event, snapshot)
+        event_line = pg.InfiniteLine(
+            pos=event.time,
+            angle=90,
+            pen=pg.mkPen(
+                color=_color_with_alpha(pg, event.color, 0.58),
+                width=1.1,
+                style=QtCore.Qt.PenStyle.DashLine,
+            ),
+            movable=False,
+        )
         point = pg.ScatterPlotItem(
             [event.time],
             [event.temperature],
@@ -610,9 +624,13 @@ def _default_event_line_factory(
             [event.temperature, label_position[1]],
             pen=pg.mkPen(color=_color_with_alpha(pg, event.color, 0.55), width=1.0),
         )
-        for item, z_value in ((temperature_leader, 24), (label_leader, 23), (point, 32)):
+        for item, z_value in (
+                (event_line, 20),
+                (temperature_leader, 24),
+                (label_leader, 23),
+                (point, 32)):
             _call_if_available(item, 'setZValue', z_value)
-        return temperature_leader, label_leader, point
+        return event_line, temperature_leader, label_leader, point
     width = 2 if event.kind == 'main' else 1
     opacity = 0.65 if event.kind == 'main' else 0.45
     item = pg.InfiniteLine(

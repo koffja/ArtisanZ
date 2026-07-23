@@ -752,22 +752,61 @@ def _phase_bands(source: object) -> tuple[PhaseBandSnapshot, ...]:
 
 
 def _time_ranges(source: object) -> tuple[TimeRangeSnapshot, ...]:
-    phase_times = _phase_event_times(source)
-    if phase_times is None:
+    try:
+        timeindex = _sequence(source, 'timeindex')
+        timex = _sequence(source, 'timex')
+    except TypeError:
         return ()
-    _, _, first_crack_start, drop = phase_times
-    if drop <= first_crack_start:
+    if len(timeindex) <= 6 or not timex:
         return ()
-    return (
-        TimeRangeSnapshot(
-            start=first_crack_start,
-            end=drop,
-            color='#F4F2EC',  # Morandi light cream (was #FFF6A8 yellow)
-            opacity=0.28,
-            label='Development',
-            kind='development',
-        ),
+    try:
+        indexes = tuple(int(timeindex[index]) for index in (0, 1, 2, 6))
+    except (IndexError, TypeError, ValueError, OverflowError):
+        return ()
+
+    phase_times: list[float | None] = []
+    for position, index in enumerate(indexes):
+        # Keep the live-plot behavior of the legacy overlay: charge may be the
+        # first sample, while later phase events need a recorded sample index.
+        if position == 0 and index < 0:
+            phase_times.append(0.0)
+            continue
+        if (position > 0 and index <= 0) or index >= len(timex):
+            phase_times.append(None)
+            continue
+        try:
+            value = float(timex[index])
+        except (TypeError, ValueError, OverflowError):
+            phase_times.append(None)
+            continue
+        phase_times.append(value if math.isfinite(value) else None)
+
+    phase_specs = (
+        ('Drying', 'drying', 0, 1, '#F5F5F0'),
+        ('Maillard', 'maillard', 1, 2, '#F5F0E1'),
+        ('Development', 'development', 2, 3, '#F4F2EC'),
     )
+    ranges: list[TimeRangeSnapshot] = []
+    for label, kind, start_index, end_index, color in phase_specs:
+        prefix = phase_times[:end_index + 1]
+        start = phase_times[start_index]
+        end = phase_times[end_index]
+        if (
+                any(value is None for value in prefix)
+                or any(prefix[index] >= prefix[index + 1] for index in range(end_index))
+                or start is None
+                or end is None
+                or end <= start):
+            continue
+        ranges.append(TimeRangeSnapshot(
+            start=start,
+            end=end,
+            color=color,
+            opacity=0.28,
+            label=label,
+            kind=kind,
+        ))
+    return tuple(ranges)
 
 
 def _phase_summaries(source: object) -> tuple[PhaseSummarySnapshot, ...]:

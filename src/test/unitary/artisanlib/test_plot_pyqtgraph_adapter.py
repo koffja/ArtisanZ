@@ -923,6 +923,26 @@ def test_rorflick_annotation_factory_returns_band_and_peak_label() -> None:
     assert item_tuple[1].__class__.__name__ == 'TextItem'
 
 
+def test_default_main_event_factory_restores_full_height_event_line() -> None:
+    from artisanlib.plot_pyqtgraph_adapter import _default_event_line_factory
+
+    event = EventMarkerSnapshot(
+        time=4.5,
+        label='charge',
+        event_type=100,
+        color='#666666',
+        temperature=140.0,
+        kind='main',
+    )
+
+    items = _default_event_line_factory(event, _snapshot(events=(event,)))
+
+    assert items is not None
+    item_tuple = items if isinstance(items, tuple) else (items,)
+    assert len(item_tuple) == 4
+    assert item_tuple[0].__class__.__name__ == 'InfiniteLine'
+
+
 def test_rorflick_annotation_factory_uses_severity_color_for_band() -> None:
     from PyQt6.QtWidgets import QApplication
 

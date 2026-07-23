@@ -513,10 +513,26 @@ def test_build_roast_plot_snapshot_translates_main_event_markers(
     )
 
 
-def test_build_roast_plot_snapshot_extracts_completed_phase_summary_and_development_range() -> None:
+def test_build_roast_plot_snapshot_extracts_completed_phase_summary_and_phase_ranges() -> None:
     snapshot = build_roast_plot_snapshot(FakeCompletedRoastCanvas())
 
     assert snapshot.time_ranges == (
+        TimeRangeSnapshot(
+            start=0.0,
+            end=180.0,
+            color='#F5F5F0',
+            opacity=0.28,
+            label='Drying',
+            kind='drying',
+        ),
+        TimeRangeSnapshot(
+            start=180.0,
+            end=420.0,
+            color='#F5F0E1',
+            opacity=0.28,
+            label='Maillard',
+            kind='maillard',
+        ),
         TimeRangeSnapshot(
             start=420.0,
             end=600.0,
@@ -553,6 +569,61 @@ def test_build_roast_plot_snapshot_extracts_completed_phase_summary_and_developm
             percent_text='30.0%',
             delta_text='27.0F',
             color='#F4F2EC',
+        ),
+    )
+
+
+def test_build_roast_plot_snapshot_keeps_partial_phase_ranges_during_live_roast() -> None:
+    source = FakeCompletedRoastCanvas()
+    source.timeindex = [0, 3, 0, 0, 0, 0, 0, 0]
+
+    snapshot = build_roast_plot_snapshot(source)
+
+    assert snapshot.time_ranges == (
+        TimeRangeSnapshot(
+            start=0.0,
+            end=180.0,
+            color='#F5F5F0',
+            opacity=0.28,
+            label='Drying',
+            kind='drying',
+        ),
+    )
+
+
+def test_time_ranges_keep_charge_origin_and_reject_missing_or_non_monotonic_data() -> None:
+    class ChargeNotStartedCanvas(FakeCompletedRoastCanvas):
+        timeindex = [-1, 3, 0, 0, 0, 0, 0, 0]
+
+    assert plot_snapshot_extractor._time_ranges(ChargeNotStartedCanvas()) == (
+        TimeRangeSnapshot(
+            start=0.0,
+            end=180.0,
+            color='#F5F5F0',
+            opacity=0.28,
+            label='Drying',
+            kind='drying',
+        ),
+    )
+
+    class MissingSequenceCanvas:
+        timeindex = None
+        timex = None
+
+    assert plot_snapshot_extractor._time_ranges(MissingSequenceCanvas()) == ()
+
+    class NonMonotonicCanvas(FakeCompletedRoastCanvas):
+        timeindex = [0, 8, 7, 0, 0, 0, 10, 0]
+
+    non_monotonic = plot_snapshot_extractor._time_ranges(NonMonotonicCanvas())
+    assert non_monotonic == (
+        TimeRangeSnapshot(
+            start=0.0,
+            end=480.0,
+            color='#F5F5F0',
+            opacity=0.28,
+            label='Drying',
+            kind='drying',
         ),
     )
 
@@ -626,7 +697,16 @@ def test_build_roast_plot_snapshot_rejects_invalid_phase_indexes_and_times() -> 
 
     invalid_time = build_roast_plot_snapshot(InvalidPhaseTimeCanvas())
     assert invalid_time.phase_summaries == ()
-    assert invalid_time.time_ranges == ()
+    assert invalid_time.time_ranges == (
+        TimeRangeSnapshot(
+            start=0.0,
+            end=180.0,
+            color='#F5F5F0',
+            opacity=0.28,
+            label='Drying',
+            kind='drying',
+        ),
+    )
 
 
 def test_analysis_overlay_opacity_rejects_nonfinite_values() -> None:

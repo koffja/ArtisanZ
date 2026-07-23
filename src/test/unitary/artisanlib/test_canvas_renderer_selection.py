@@ -91,6 +91,79 @@ class FakePyQtGraphTarget:
         self.cursor_callback = callback
 
 
+class FakeOverlayManager:
+    def __init__(self) -> None:
+        self.phase_updates: list[object] = []
+        self.event_updates: list[object] = []
+
+    def update_phases(self, bounds: object) -> None:
+        self.phase_updates.append(bounds)
+
+    def update_events(self, events: object) -> None:
+        self.event_updates.append(events)
+
+
+class FakeOverlayTarget:
+    def __init__(self, owns_snapshot_overlays: bool) -> None:
+        self.renderer = SimpleNamespace(owns_snapshot_overlays=owns_snapshot_overlays)
+        self.phase_bands = FakeOverlayManager()
+        self.event_markers = self.phase_bands
+        self.enhance_count = 0
+
+    def enhance_curves(self) -> None:
+        self.enhance_count += 1
+
+
+def _overlay_sync_canvas() -> SimpleNamespace:
+    return SimpleNamespace(
+        _extract_phase_time_bounds=lambda: {'drying': (0.0, 60.0)},
+        _extract_event_marker_data=lambda: [{'code': 'DRY', 'time': 60.0}],
+    )
+
+
+def _empty_overlay_sync_canvas() -> SimpleNamespace:
+    def empty_phase_time_bounds() -> dict[str, object]:
+        return {}
+
+    def empty_event_marker_data() -> list[object]:
+        return []
+
+    return SimpleNamespace(
+        _extract_phase_time_bounds=empty_phase_time_bounds,
+        _extract_event_marker_data=empty_event_marker_data,
+    )
+
+
+def test_snapshot_renderer_owns_static_overlays_without_legacy_duplicates() -> None:
+    target = FakeOverlayTarget(owns_snapshot_overlays=True)
+
+    canvas.tgraphcanvas._sync_pyqtgraph_visual_overlays(_overlay_sync_canvas(), target)
+
+    assert target.phase_bands.phase_updates == []
+    assert target.event_markers.event_updates == []
+    assert target.enhance_count == 0
+
+
+def test_legacy_renderer_target_keeps_visual_overlay_sync() -> None:
+    target = FakeOverlayTarget(owns_snapshot_overlays=False)
+
+    canvas.tgraphcanvas._sync_pyqtgraph_visual_overlays(_overlay_sync_canvas(), target)
+
+    assert target.phase_bands.phase_updates == [{'drying': (0.0, 60.0)}]
+    assert target.event_markers.event_updates == [[{'code': 'DRY', 'time': 60.0}]]
+    assert target.enhance_count == 1
+
+
+def test_legacy_renderer_target_clears_visual_overlays_when_snapshot_is_empty() -> None:
+    target = FakeOverlayTarget(owns_snapshot_overlays=False)
+
+    canvas.tgraphcanvas._sync_pyqtgraph_visual_overlays(_empty_overlay_sync_canvas(), target)
+
+    assert target.phase_bands.phase_updates == [{}]
+    assert target.event_markers.event_updates == [[]]
+    assert target.enhance_count == 1
+
+
 class FakeToolbar:
     def __init__(self) -> None:
         self.message = ''

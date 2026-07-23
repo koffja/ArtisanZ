@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+from dataclasses import replace
+from types import SimpleNamespace
 
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 
@@ -15,10 +17,14 @@ from artisanlib.plot_snapshot import (
     EventMarkerSnapshot,
     PhaseBandSnapshot,
     RoastPlotSnapshot,
+    TimeRangeSnapshot,
 )
 
 pg = pytest.importorskip('pyqtgraph')
 _APPLICATION = QApplication.instance() or QApplication([])
+_APPLICATION.artisanviewerMode = False  # type: ignore[attr-defined]
+
+from artisanlib import canvas
 
 
 def _snapshot(*, include_ror: bool = True) -> RoastPlotSnapshot:
@@ -148,7 +154,78 @@ def test_create_pyqtgraph_plot_target_renders_main_event_as_original_annotation_
         target.renderer.set_snapshot(snapshot)
         _APPLICATION.processEvents()
 
-        assert target.renderer.event_item_count() == 5
+        assert target.renderer.event_item_count() == 6
+        assert [item.zValue() for item in target.renderer._event_items[:4]] == pytest.approx([20.0, 24.0, 23.0, 32.0])
+    finally:
+        target.close()
+
+
+def test_snapshot_renderer_does_not_duplicate_legacy_overlay_managers() -> None:
+    target = create_pyqtgraph_plot_target(use_opengl=False, include_ror=True)
+    try:
+        target.renderer.set_snapshot(replace(
+            _snapshot(),
+            time_ranges=(
+                TimeRangeSnapshot(start=0.0, end=180.0, color='#F5F5F0'),
+                TimeRangeSnapshot(start=180.0, end=420.0, color='#F5F0E1'),
+                TimeRangeSnapshot(start=420.0, end=600.0, color='#F4F2EC'),
+            ),
+        ))
+        _APPLICATION.processEvents()
+        assert target.renderer.time_range_item_count() == 3
+
+        canvas.tgraphcanvas._sync_pyqtgraph_visual_overlays(
+            SimpleNamespace(
+                _extract_phase_time_bounds=lambda: {
+                    'drying': (0.0, 180.0),
+                    'maillard': (180.0, 420.0),
+                    'development': (420.0, 600.0),
+                },
+                _extract_event_marker_data=lambda: [
+                    {'code': 'CHARGE', 'time': 0.0, 'temp': 160.0},
+                ],
+            ),
+            target,
+        )
+
+        assert target.renderer.owns_snapshot_overlays is True
+        assert target.phase_bands is not None
+        assert target.event_markers is not None
+        assert target.phase_bands._regions == []  # type: ignore[attr-defined]
+        assert target.event_markers._lines == {}  # type: ignore[attr-defined]
+
+        target.renderer.owns_snapshot_overlays = False
+        canvas.tgraphcanvas._sync_pyqtgraph_visual_overlays(
+            SimpleNamespace(
+                _extract_phase_time_bounds=lambda: {
+                    'drying': (0.0, 180.0),
+                    'maillard': (180.0, 420.0),
+                    'development': (420.0, 600.0),
+                },
+                _extract_event_marker_data=lambda: [
+                    {'code': 'CHARGE', 'time': 0.0, 'temp': 160.0},
+                ],
+            ),
+            target,
+        )
+        assert len(target.phase_bands._regions) == 3  # type: ignore[attr-defined]
+        assert len(target.event_markers._lines) == 1  # type: ignore[attr-defined]
+
+        def empty_phase_time_bounds() -> dict[str, object]:
+            return {}
+
+        def empty_event_marker_data() -> list[object]:
+            return []
+
+        canvas.tgraphcanvas._sync_pyqtgraph_visual_overlays(
+            SimpleNamespace(
+                _extract_phase_time_bounds=empty_phase_time_bounds,
+                _extract_event_marker_data=empty_event_marker_data,
+            ),
+            target,
+        )
+        assert target.phase_bands._regions == []  # type: ignore[attr-defined]
+        assert target.event_markers._lines == {}  # type: ignore[attr-defined]
     finally:
         target.close()
 
