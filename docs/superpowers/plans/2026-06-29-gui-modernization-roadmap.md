@@ -53,6 +53,7 @@ Important observations from the code review:
 | 1.22 | PyQtGraph Original Annotation and RoR Pass | Closed: original-style event annotations, TP, visible RoR overlay | Event points/leaders/value labels, TP marker, thicker phase bars | PyQtGraph annotations are no longer reduced to vertical-line labels |
 | 1.23 | PyQtGraph Cursor, i18n, and Theme Parity | Closed: toolbar cursor readout, translated labels, Morandi default palette | Cursor time/temp/RoR callback, i18n event labels, wider inputs, flat theme preservation | The default renderer restores key interaction feedback and theme consistency |
 | 1.24 | Cotrix Toolbar and Cursor Fit Pass | Closed: Cotrix brand entry, compact toolbar, unclipped cursor text | Cotrix SVG assets, hidden empty subscription action, single-line cursor readout | Toolbar no longer carries obvious Artisan Plus leftovers or clipped telemetry |
+| 1.27 | Event Value and Renderer-Neutral Curve Style Finish | Closed: 2026-07-23 with compact legacy-configured event markers, canonical curve defaults, and PyQtGraph-aware Lines editor | Dense event values remain readable; Lines edits the active renderer | No dense event-value color blocks; PyQtGraph Lines action no longer opens Matplotlib-only editor |
 | 2 | Plot Renderer Boundary and PyQtGraph POC | Guarded PyQtGraph main-splitter embed implemented and benchmarked in offscreen/native-window simulator smokes | Read-only plot snapshot model, Matplotlib adapter, PyQtGraph live adapter prototype | POC is benchmarkable before any live renderer swap |
 | 3 | Sampling Post-Processing Decoupling | Pure helper extraction surface audited; remaining work is orchestration/renderer payload | Pure data pipeline for filtering, RoR, PID inputs, alarm/event decisions | GUI thread consumes snapshots instead of doing heavy processing inline |
 | 4 | Main UI Information Architecture | Closed at IA/policy/status-hint layer | Scenario-oriented Roast Control, QC Analysis, Device Setup, Production, and Expert workspaces | Users can switch task modes without losing existing expert controls |
@@ -346,7 +347,19 @@ Important observations from the code review:
 
 **Evidence:** Focused toolbar/theme tests produced `18 passed`; `py_compile`, targeted `ruff check`, and `git diff --check` passed. Offscreen saved-profile screenshot smoke wrote `/tmp/artisanz-toolbar-polish.png` and visually confirmed the Cotrix pill is no longer clipped and the Lines icon is heavier and centered.
 
-**Remaining Gate:** The Lines action still opens the Matplotlib curve-style editor path. A future curve-style pass should replace it with a renderer-neutral style panel or PyQtGraph-aware editor before removing Matplotlib as the primary compatibility surface.
+**Remaining Gate:** Matplotlib remains the compatibility surface for reports and the explicit `matplotlib-snapshot` renderer.
+
+## Phase 1.27: Event Value and Renderer-Neutral Curve Style Finish
+
+**Goal:** Remove the dense event-value color-block regression and finish the active PyQtGraph toolbar's Lines workflow without changing Matplotlib compatibility behavior.
+
+**Tracking Plan:** `docs/superpowers/plans/2026-07-23-gui-modernization-phase-1-27-visual-parity-finish.md`
+
+**Implementation:** PyQtGraph event values now render as one compact marker at the mapped event value, with snapshot opacity preserved. The PyQtGraph Lines action now opens a small renderer-neutral ET/BT/Delta ET/Delta BT style panel; the legacy Matplotlib path remains unchanged. Cotrix brand width is 140px so the label and icon remain inside the button.
+
+**Closed:** 2026-07-23 after final independent review PASS. Legacy event marker shapes (`*`, `H`, and `None`), configured size/width, canonical Artisan curve colors, and existing Simplified Chinese translation contexts are preserved.
+
+**Evidence:** Focused suite produced `108 passed`; event-heavy WebSocket smoke produced a nonblank 1280x720 screenshot with `2` event-value items, `9` event items, and `2` RoR items. `py_compile`, targeted `ruff check`, and `git diff --check` passed. Final review: `.sisyphus/phase-1-visual-parity-final-review-2.md`.
 
 ## Phase 2: Plot Renderer Boundary and PyQtGraph POC
 

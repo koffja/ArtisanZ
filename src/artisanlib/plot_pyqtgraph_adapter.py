@@ -574,14 +574,37 @@ def _default_event_value_factory(event_value: EventValueSnapshot, snapshot: Roas
     except ImportError:
         return None
     y_value = _event_value_y_position(event_value, snapshot)
-    baseline = _clamp(event_value.baseline, snapshot.temperature_axis.minimum, snapshot.temperature_axis.maximum)
-    item = pg.PlotDataItem(
-        [event_value.time, event_value.time],
-        [baseline, y_value],
-        pen=pg.mkPen(color=_color_with_alpha(pg, event_value.color, event_value.opacity), width=4),
+    marker_symbol = _event_value_marker_symbol(event_value.marker)
+    if marker_symbol is None:
+        return None
+    # A full-height stem is faithful to neither the configured event markers nor
+    # the original step-value layer. Dense control events turn those stems into
+    # solid vertical blocks, so show the value at its actual position instead.
+    opacity = _clamp(float(event_value.opacity), 0.0, 1.0)
+    item = pg.ScatterPlotItem(
+        x=[event_value.time],
+        y=[y_value],
+        symbol=marker_symbol,
+        size=_clamp(float(event_value.marker_size), 1.0, 14.0),
+        pen=pg.mkPen(
+            color=_color_with_alpha(pg, event_value.color, opacity),
+            width=_clamp(float(event_value.line_width), 1.0, 10.0)),
+        brush=pg.mkBrush(_color_with_alpha(pg, event_value.color, opacity)),
     )
     _call_if_available(item, 'setZValue', 18)
     return item
+
+
+def _event_value_marker_symbol(marker: str) -> str | None:
+    normalized = str(marker).strip()
+    if normalized in {'None', 'none', ''}:
+        return None
+    return {
+        'D': 'd',
+        'diamond': 'd',
+        '*': 'star',
+        'H': 'h',
+    }.get(normalized, normalized if normalized in {'o', 's', 't', 'd', 'h', 'p', '+', 'x'} else 'o')
 
 
 def _default_event_label_factory(

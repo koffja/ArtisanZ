@@ -773,7 +773,7 @@ ROAST_TOOLBAR_VISUAL_METRICS: Final[dict[str, int]] = {
     'toolbar_vertical_padding': 6,
     'button_height': 44,
     'button_width': 48,
-    'brand_width': 92,
+    'brand_width': 140,
     'icon_size': 30,
     'label_height': 44,
 }
@@ -816,6 +816,26 @@ def renderer_surface_from_qmc(qmc: object) -> object:
     selection = getattr(qmc, 'plot_renderer_selection', None)
     plugin = getattr(selection, 'plugin', None)
     return getattr(plugin, 'surface', None)
+
+
+def pyqtgraph_curve_style_editor_active(qmc: object) -> bool:
+    return (
+        renderer_surface_from_qmc(qmc) == 'pyqtgraph-plot'
+        and getattr(qmc, 'plot_pyqtgraph_target', None) is not None
+    )
+
+
+def redraw_pyqtgraph_after_curve_style(qmc: object) -> None:
+    target = getattr(qmc, 'plot_pyqtgraph_target', None)
+    renderer = getattr(target, 'renderer', None)
+    export_view_state = getattr(renderer, 'export_view_state', None)
+    reset_view = getattr(renderer, 'reset_view', None)
+    view_state = export_view_state() if callable(export_view_state) else None
+    try:
+        qmc.redraw_keep_view(recomputeAllDeltas=False)
+    finally:
+        if view_state is not None and callable(reset_view):
+            reset_view(view_state)
 
 
 def reset_pyqtgraph_toolbar_target(qmc: object) -> bool:
@@ -1460,6 +1480,9 @@ class VMToolbar(NavigationToolbar): # pylint: disable=abstract-method
     @pyqtSlot()
     @pyqtSlot(bool)
     def my_edit_parameters(self,_:bool=False) -> None:
+        if pyqtgraph_curve_style_editor_active(self.qmc):
+            self._edit_pyqtgraph_curve_parameters()
+            return
         try:
             if self.qmc.ax is not None and not self.qmc.designerflag: # deactivate figure_options in designer mode due to all kind of side effects
                 allaxes = self.canvas.figure.get_axes()
@@ -1494,6 +1517,16 @@ class VMToolbar(NavigationToolbar): # pylint: disable=abstract-method
             _log.exception(e)
             _type, _exc, exc_tb = sys.exc_info()
             self.qmc.adderror((QApplication.translate('Error Message','Exception:') + ' edit_parameters() {0}').format(str(e)),getattr(exc_tb, 'tb_lineno', '?'))
+
+    def _edit_pyqtgraph_curve_parameters(self) -> None:
+        from artisanlib.plot_curve_style_dialog import CurveStyleDialog
+
+        dialog = CurveStyleDialog(
+            self,
+            self.qmc,
+            apply_callback=lambda: redraw_pyqtgraph_after_curve_style(self.qmc),
+        )
+        dialog.exec()
 
 
 

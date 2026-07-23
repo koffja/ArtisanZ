@@ -888,3 +888,103 @@ def test_phase_summary_uses_light_thin_bar_and_includes_label() -> None:
     label_item = item_tuple[1]
     text = label_item.toPlainText() if hasattr(label_item, 'toPlainText') else label_item.text
     assert 'Drying' in text, f'phase label missing from text: {text!r}'
+
+
+def test_event_values_use_compact_markers_instead_of_full_height_stems() -> None:
+    from PyQt6.QtWidgets import QApplication
+    from artisanlib.plot_pyqtgraph_adapter import _default_event_value_factory
+
+    _app = QApplication.instance() or QApplication([])
+    snapshot = _snapshot()
+    item = _default_event_value_factory(
+        EventValueSnapshot(
+            time=4.5,
+            value=55.0,
+            event_type=1,
+            color='#CC0000',
+            label='power',
+            marker='s',
+            marker_size=7.0,
+            line_width=1.0,
+        ),
+        snapshot,
+    )
+
+    assert item is not None
+    assert item.__class__.__name__ == 'ScatterPlotItem'
+    assert item.opts['symbol'] == 's'
+    assert item.opts['size'] == pytest.approx(7.0)
+    assert item.opts['pen'].widthF() == pytest.approx(1.0)
+    assert len(item.data) == 1
+    assert item.data[0][0] == pytest.approx(4.5)
+    assert item.data[0][1] == pytest.approx(180.0)
+
+
+def test_event_value_marker_maps_configured_shape_and_width() -> None:
+    from PyQt6.QtWidgets import QApplication
+    from artisanlib.plot_pyqtgraph_adapter import _default_event_value_factory
+
+    _app = QApplication.instance() or QApplication([])
+    item = _default_event_value_factory(
+        EventValueSnapshot(
+            time=4.5,
+            value=180.0,
+            event_type=1,
+            color='#123456',
+            label='Fan',
+            marker='*',
+            marker_size=14.0,
+            line_width=10.0,
+        ),
+        _snapshot(),
+    )
+
+    assert item is not None
+    assert item.opts['symbol'] == 'star'
+    assert item.opts['size'] == pytest.approx(14.0)
+    assert item.opts['pen'].widthF() == pytest.approx(10.0)
+
+
+@pytest.mark.parametrize('marker, expected_symbol', [
+    ('H', 'h'),
+    ('None', None),
+])
+def test_event_value_marker_preserves_legacy_marker_semantics(
+        marker: str,
+        expected_symbol: str | None) -> None:
+    from PyQt6.QtWidgets import QApplication
+    from artisanlib.plot_pyqtgraph_adapter import _default_event_value_factory
+
+    _app = QApplication.instance() or QApplication([])
+    item = _default_event_value_factory(
+        EventValueSnapshot(time=4.5, value=55.0, event_type=1, color='#123456', marker=marker),
+        _snapshot(),
+    )
+
+    if expected_symbol is None:
+        assert item is None
+    else:
+        assert item is not None
+        assert item.opts['symbol'] == expected_symbol
+
+
+@pytest.mark.parametrize('opacity', [0.0, 0.34, 1.0])
+def test_event_value_marker_preserves_snapshot_opacity(opacity: float) -> None:
+    from PyQt6.QtWidgets import QApplication
+    from artisanlib.plot_pyqtgraph_adapter import _default_event_value_factory
+
+    _app = QApplication.instance() or QApplication([])
+    item = _default_event_value_factory(
+        EventValueSnapshot(
+            time=4.5,
+            value=55.0,
+            event_type=0,
+            color='#CC0000',
+            opacity=opacity,
+        ),
+        _snapshot(),
+    )
+
+    assert item is not None
+    assert item.opts['pen'].color().alphaF() == pytest.approx(opacity, abs=0.01)
+    assert item.opts['brush'].color().alphaF() == pytest.approx(opacity, abs=0.01)

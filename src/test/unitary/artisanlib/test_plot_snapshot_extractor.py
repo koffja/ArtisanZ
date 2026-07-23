@@ -56,6 +56,9 @@ class FakeCanvas:
     etypes = ['None', 'Power', 'Fan', 'Damper']
     showEtypes = [True, True, True, True]
     EvalueColor = ['#111111', '#222222', '#333333', '#444444']
+    EvalueMarker = ['o', 's', 'h', 'D']
+    EvalueMarkerSize = [4.0, 5.0, 6.0, 7.0]
+    Evaluelinethickness = [1.0, 1.5, 2.0, 2.5]
     ax = FakeAxis(xlim=(-1.0, 12.0), ylim=(70.0, 270.0))
     delta_ax = FakeAxis(xlim=(-1.0, 12.0), ylim=(-15.0, 25.0))
 
@@ -229,8 +232,8 @@ def test_build_roast_plot_snapshot_extracts_foreground_event_markers() -> None:
         EventMarkerSnapshot(time=2.0, label='Fan', event_type=2, color='#333333', value=25.0),
     )
     assert snapshot.event_values == (
-        EventValueSnapshot(time=1.0, value=55.0, event_type=1, color='#222222', label='power up'),
-        EventValueSnapshot(time=2.0, value=25.0, event_type=2, color='#333333', label='Fan'),
+        EventValueSnapshot(time=1.0, value=55.0, event_type=1, color='#222222', label='power up', marker='s', marker_size=5.0, line_width=1.5),
+        EventValueSnapshot(time=2.0, value=25.0, event_type=2, color='#333333', label='Fan', marker='h', marker_size=6.0, line_width=2.0),
     )
 
 
@@ -303,6 +306,9 @@ def test_build_roast_plot_snapshot_extracts_main_and_background_event_markers() 
         label='bg power',
         kind='background',
         opacity=0.34,
+        marker='s',
+        marker_size=5.0,
+        line_width=1.5,
     ) in snapshot.event_values
 
 

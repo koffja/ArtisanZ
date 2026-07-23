@@ -42,6 +42,9 @@ class EventValueSnapshot:
     kind: EventMarkerKind = 'special'
     baseline: float = 0.0
     opacity: float = 0.55
+    marker: str = 'o'
+    marker_size: float = 7.0
+    line_width: float = 1.0
 
 
 @dataclass(frozen=True, slots=True)

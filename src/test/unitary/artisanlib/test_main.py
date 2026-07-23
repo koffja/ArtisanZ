@@ -3453,6 +3453,50 @@ def test_reset_pyqtgraph_toolbar_target_ignores_matplotlib_surface() -> None:
     qmc.sync_pyqtgraph_view_from_canvas.assert_not_called()
 
 
+def test_pyqtgraph_curve_style_editor_requires_live_target() -> None:
+    from artisanlib import main
+
+    qmc = SimpleNamespace(
+        plot_renderer_selection=SimpleNamespace(plugin=SimpleNamespace(surface='pyqtgraph-plot')),
+        plot_pyqtgraph_target=None,
+    )
+    assert main.pyqtgraph_curve_style_editor_active(qmc) is False
+    qmc.plot_pyqtgraph_target = object()
+    assert main.pyqtgraph_curve_style_editor_active(qmc) is True
+
+
+def test_pyqtgraph_curve_style_redraw_restores_active_view() -> None:
+    from artisanlib import main
+
+    view_state = object()
+
+    class FakeRenderer:
+        def __init__(self) -> None:
+            self.reset_states: list[object] = []
+
+        def export_view_state(self) -> object:
+            return view_state
+
+        def reset_view(self, state: object) -> None:
+            self.reset_states.append(state)
+
+    renderer = FakeRenderer()
+    qmc = SimpleNamespace(
+        plot_pyqtgraph_target=SimpleNamespace(renderer=renderer),
+        redraw_calls=0,
+    )
+
+    def redraw_keep_view(*, recomputeAllDeltas: bool) -> None:
+        del recomputeAllDeltas
+        qmc.redraw_calls += 1
+
+    qmc.redraw_keep_view = redraw_keep_view
+    main.redraw_pyqtgraph_after_curve_style(qmc)
+
+    assert qmc.redraw_calls == 1
+    assert renderer.reset_states == [view_state]
+
+
 def test_roast_toolbar_visual_metrics_prevent_brand_clipping() -> None:
     from artisanlib import main
 

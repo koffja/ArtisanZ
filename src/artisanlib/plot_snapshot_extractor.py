@@ -25,16 +25,14 @@ from artisanlib.plot_snapshot import (
     TimeRangeSnapshot,
     YAxisName,
 )
+from artisanlib.plot_style_defaults import CANONICAL_CURVE_COLORS
 
 _DEFAULT_COLORS = {
-    'bt': '#3A7CA5',
-    'et': '#C0504D',
-    'deltabt': '#5B9BD5',
-    'deltaet': '#D4943A',
-    'backgroundbt': '#3A7CA5',
-    'backgroundet': '#C0504D',
-    'backgrounddeltabt': '#5B9BD5',
-    'backgrounddeltaet': '#D4943A',
+    **CANONICAL_CURVE_COLORS,
+    'backgroundbt': CANONICAL_CURVE_COLORS['bt'],
+    'backgroundet': CANONICAL_CURVE_COLORS['et'],
+    'backgrounddeltabt': CANONICAL_CURVE_COLORS['deltabt'],
+    'backgrounddeltaet': CANONICAL_CURVE_COLORS['deltaet'],
     'aucarea': '#767676',
     'grid': '#C9D2D4',
     'markers': '#5E6B6E',
@@ -115,7 +113,7 @@ def build_roast_plot_snapshot(source: object) -> RoastPlotSnapshot:
         temperature_axis=temperature_axis,
         ror_axis=_ror_axis(source, curves),
         events=events,
-        event_values=_event_value_snapshots(events),
+        event_values=_event_value_snapshots(source, events),
         phase_bands=_phase_bands(source),
         time_ranges=_time_ranges(source),
         phase_summaries=_phase_summaries(source),
@@ -147,7 +145,7 @@ def build_roast_plot_static_overlay_snapshot(
         temperature_axis=temperature_axis,
         ror_axis=ror_axis,
         events=events,
-        event_values=_event_value_snapshots(events),
+        event_values=_event_value_snapshots(source, events),
         phase_bands=_phase_bands(source),
         time_ranges=_time_ranges(source),
         phase_summaries=_phase_summaries(source),
@@ -439,7 +437,9 @@ def _event_markers(source: object) -> tuple[EventMarkerSnapshot, ...]:
     return _main_event_markers(source) + _foreground_event_markers(source) + _background_event_markers(source)
 
 
-def _event_value_snapshots(events: tuple[EventMarkerSnapshot, ...]) -> tuple[EventValueSnapshot, ...]:
+def _event_value_snapshots(
+        source: object,
+        events: tuple[EventMarkerSnapshot, ...]) -> tuple[EventValueSnapshot, ...]:
     values: list[EventValueSnapshot] = []
     for event in events:
         if event.value is None or event.kind == 'main':
@@ -452,8 +452,25 @@ def _event_value_snapshots(events: tuple[EventMarkerSnapshot, ...]) -> tuple[Eve
             label=event.label,
             kind=event.kind,
             opacity=0.55 if event.kind == 'special' else 0.34,
+            marker=str(_event_setting(source, 'EvalueMarker', event.event_type, 'o')),
+            marker_size=_event_setting_float(source, 'EvalueMarkerSize', event.event_type, 7.0),
+            line_width=_event_setting_float(source, 'Evaluelinethickness', event.event_type, 1.0),
         ))
     return tuple(values)
+
+
+def _event_setting(source: object, attribute: str, event_type: int, default: object) -> object:
+    values = _sequence(source, attribute)
+    if 0 <= event_type < len(values):
+        return values[event_type]
+    return default
+
+
+def _event_setting_float(source: object, attribute: str, event_type: int, default: float) -> float:
+    try:
+        return max(0.1, float(_event_setting(source, attribute, event_type, default)))
+    except (TypeError, ValueError):
+        return default
 
 
 def _main_event_markers(source: object) -> tuple[EventMarkerSnapshot, ...]:
