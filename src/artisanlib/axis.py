@@ -325,6 +325,16 @@ class WindowsDlg(ArtisanDialog):
         self.gridalphaSpinBox.setMaximumWidth(104)
         self.gridalphaSpinBox.setAlignment(Qt.AlignmentFlag.AlignRight|Qt.AlignmentFlag.AlignTrailing|Qt.AlignmentFlag.AlignVCenter)
 
+        # These values carry time/temperature text and need the modern dialog
+        # polish to reserve space for the editor indicator without truncation.
+        for value_widget in (
+                self.step100Edit, self.xlimitEdit, self.xlimitEdit_min,
+                self.ylimitEdit, self.ylimitEdit_min, self.zlimitEdit,
+                self.zlimitEdit_min, self.resetEdit, self.chargeminEdit,
+                self.ygridSpinBox, self.zgridSpinBox, self.gridwidthSpinBox,
+                self.gridalphaSpinBox):
+            value_widget.setProperty('modernExpandValueControl', True)
+
         # connect the ArtisanDialog standard OK/Cancel buttons
         self.dialogbuttons.accepted.connect(self.updatewindow)
         self.dialogbuttons.rejected.connect(self.restoreState)

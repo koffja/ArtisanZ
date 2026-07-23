@@ -217,6 +217,55 @@ def test_set_snapshot_does_not_add_black_shadow_to_background_curves() -> None:
     assert background.shadow_pen is None
 
 
+def test_set_snapshot_renders_background_extra_curves_on_configured_axes() -> None:
+    temperature_plot = FakePlot()
+    ror_plot = FakePlot()
+    renderer = PyQtGraphSnapshotRenderer(
+        temperature_plot=temperature_plot,
+        ror_plot=ror_plot,
+        pen_factory=_fake_pen_factory,
+    )
+
+    renderer.set_snapshot(_snapshot(
+        CurveSnapshot.from_sequences(
+            name='Background XT',
+            x=[0, 1],
+            y=[None, 111],
+            color='#123456',
+            y_axis='ror',
+            line_style=':',
+            line_width=1.25,
+            opacity=0.4,
+        ),
+        CurveSnapshot.from_sequences(
+            name='Background YT',
+            x=[0, 1],
+            y=[25, 26],
+            color='#654321',
+            line_style='-.',
+            line_width=1.75,
+            opacity=0.4,
+        ),
+    ))
+
+    assert len(temperature_plot.items) == 1
+    assert len(ror_plot.items) == 1
+    assert temperature_plot.items[0].name == 'Background YT'
+    assert ror_plot.items[0].name == 'Background XT'
+    assert temperature_plot.items[0].pen == {
+        'color': '#654321',
+        'width': 1.75,
+        'style': '-.',
+    }
+    assert ror_plot.items[0].pen == {
+        'color': '#123456',
+        'width': 1.25,
+        'style': ':',
+    }
+    assert temperature_plot.items[0].shadow_pen is None
+    assert ror_plot.items[0].shadow_pen is None
+
+
 def test_set_snapshot_populates_legend_with_temperature_and_ror_curves() -> None:
     temperature_plot = FakePlot()
     ror_plot = FakePlot()

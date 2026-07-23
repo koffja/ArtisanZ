@@ -257,6 +257,128 @@ def test_build_roast_plot_snapshot_extracts_overlay_curves_and_phase_bands() -> 
     )
 
 
+def test_build_roast_plot_snapshot_extracts_selected_background_extra_curves() -> None:
+    class FakeExtraBackgroundCanvas(FakeOverlayCanvas):
+        xtcurveidx = 1
+        ytcurveidx = 4
+        extraname1B = ['Drum', 'Air']
+        extraname2B = ['Power', 'Damper']
+        extratimexB = [[0.0, 1.0, 2.0, 3.0], [0.0, 1.0, 2.0, 3.0]]
+        temp1BX = [[100.0, 101.0, 102.0, 103.0], [200.0, 201.0, 202.0, 203.0]]
+        temp2BX = [[10.0, 11.0, 12.0, 13.0], [20.0, 21.0, 22.0, 23.0]]
+        stemp1BX = [[110.0, 111.0, 112.0, 113.0], [210.0, 211.0, 212.0, 213.0]]
+        stemp2BX = [[15.0, 16.0, 17.0, 18.0], [25.0, 26.0, 27.0, 28.0]]
+        backgroundxtcolor = '#123456'
+        backgroundytcolor = '#654321'
+        XTbacklinestyle = ':'
+        YTbacklinestyle = '-.'
+        XTbacklinewidth = 1.25
+        YTbacklinewidth = 1.75
+        aw = SimpleNamespace(extraDelta1b=[True, False], extraDelta2b=[False, False])
+
+    snapshot = build_roast_plot_snapshot(FakeExtraBackgroundCanvas())
+    curves = {curve.name: curve for curve in snapshot.curves}
+
+    assert curves['Background XT'].x == (0.0, 1.0, 2.0, 3.0)
+    assert curves['Background XT'].y == (None, 111.0, 112.0, None)
+    assert curves['Background XT'].y_axis == 'ror'
+    assert curves['Background XT'].color == '#123456'
+    assert curves['Background XT'].line_style == ':'
+    assert curves['Background XT'].line_width == 1.25
+    assert curves['Background XT'].opacity == 0.4
+
+    assert curves['Background YT'].x == (0.0, 1.0, 2.0, 3.0)
+    assert curves['Background YT'].y == (None, 26.0, 27.0, None)
+    assert curves['Background YT'].y_axis == 'temperature'
+    assert curves['Background YT'].color == '#654321'
+    assert curves['Background YT'].line_style == '-.'
+    assert curves['Background YT'].line_width == 1.75
+    assert curves['Background YT'].opacity == 0.4
+
+
+def test_build_roast_plot_snapshot_uses_selected_background_extra_curve_pair() -> None:
+    class FakeExtraBackgroundCanvas(FakeOverlayCanvas):
+        xtcurveidx = 2
+        ytcurveidx = 1
+        extratimexB = [[0.0, 1.0, 2.0]]
+        temp1BX = [[100.0, 101.0, 102.0]]
+        temp2BX = [[200.0, 201.0, 202.0]]
+        stemp1BX = [[110.0, 111.0, 112.0]]
+        stemp2BX = [[210.0, 211.0, 212.0]]
+        aw = SimpleNamespace(extraDelta1b=[False], extraDelta2b=[True])
+
+    snapshot = build_roast_plot_snapshot(FakeExtraBackgroundCanvas())
+    curves = {curve.name: curve for curve in snapshot.curves}
+
+    assert curves['Background XT'].y == (None, 211.0, 212.0)
+    assert curves['Background XT'].y_axis == 'ror'
+    assert curves['Background YT'].y == (None, 111.0, 112.0)
+    assert curves['Background YT'].y_axis == 'temperature'
+
+
+@pytest.mark.parametrize(
+    ('selection', 'expected'),
+    [(1, (None, 111.0, 112.0)), (2, (None, 211.0, 212.0)), (3, (None, 311.0, 312.0))],
+)
+def test_build_roast_plot_snapshot_maps_extra_background_selection(
+        selection: int, expected: tuple[float | None, ...]) -> None:
+    class FakeExtraBackgroundCanvas(FakeOverlayCanvas):
+        xtcurveidx = selection
+        ytcurveidx = 0
+        extratimexB = [[0.0, 1.0, 2.0], [0.0, 1.0, 2.0]]
+        temp1BX = [[100.0, 101.0, 102.0], [300.0, 301.0, 302.0]]
+        temp2BX = [[200.0, 201.0, 202.0], [400.0, 401.0, 402.0]]
+        stemp1BX = [[110.0, 111.0, 112.0], [310.0, 311.0, 312.0]]
+        stemp2BX = [[210.0, 211.0, 212.0], [410.0, 411.0, 412.0]]
+        aw = SimpleNamespace(extraDelta1b=[False, False], extraDelta2b=[False, False])
+
+    snapshot = build_roast_plot_snapshot(FakeExtraBackgroundCanvas())
+    curves = {curve.name: curve for curve in snapshot.curves}
+    assert curves['Background XT'].y == expected
+
+
+def test_build_roast_plot_snapshot_handles_invalid_extra_background_state() -> None:
+    class FakeInvalidExtraBackgroundCanvas(FakeOverlayCanvas):
+        xtcurveidx = float('inf')
+        ytcurveidx = 1
+        extratimexB = None
+        temp1BX = None
+        stemp1BX = None
+        aw = SimpleNamespace(extraDelta1b=None)
+
+    snapshot = build_roast_plot_snapshot(FakeInvalidExtraBackgroundCanvas())
+    assert all(curve.name != 'Background XT' for curve in snapshot.curves)
+    assert all(curve.name != 'Background YT' for curve in snapshot.curves)
+
+
+@pytest.mark.parametrize('selection', [0, -1, 1.5, 2.5, 99])
+def test_build_roast_plot_snapshot_skips_invalid_extra_background_selection(selection: float) -> None:
+    class FakeInvalidSelectionCanvas(FakeOverlayCanvas):
+        xtcurveidx = selection
+        ytcurveidx = 0
+        extratimexB = [[0.0, 1.0]]
+        temp1BX = [[100.0, 101.0]]
+        stemp1BX = [[100.0, 101.0]]
+
+    snapshot = build_roast_plot_snapshot(FakeInvalidSelectionCanvas())
+    assert all(curve.name != 'Background XT' for curve in snapshot.curves)
+
+
+def test_build_roast_plot_snapshot_keeps_extra_delta_on_temperature_axis_without_delta_axis() -> None:
+    class FakeNoDeltaAxisCanvas(FakeOverlayCanvas):
+        xtcurveidx = 1
+        ytcurveidx = 0
+        extratimexB = [[0.0, 1.0, 2.0, 3.0]]
+        temp1BX = [[100.0, 101.0, 102.0, 103.0]]
+        stemp1BX = [[110.0, 111.0, 112.0, 113.0]]
+        aw = SimpleNamespace(extraDelta1b=[True])
+        delta_ax = None
+
+    snapshot = build_roast_plot_snapshot(FakeNoDeltaAxisCanvas())
+    curves = {curve.name: curve for curve in snapshot.curves}
+    assert curves['Background XT'].y_axis == 'temperature'
+
+
 def test_build_roast_plot_static_overlay_snapshot_keeps_static_curve_payload() -> None:
     static_snapshot = build_roast_plot_static_overlay_snapshot(
         FakeOverlayCanvas(),

@@ -6,7 +6,7 @@
 
 **Architecture:** Keep the existing PyQt6 Widgets runtime. Improve PyQtGraph through the existing snapshot/widget adapter boundary, not by mutating Matplotlib state from the new renderer. Improve dialogs first through theme tokens and safe selectors, then by targeted per-dialog layout work.
 
-> **2026-07-04 Back-fill note:** Five `[ ]` items in this plan (event label overlap, AUC area fills, export decision, Devices/Roasting Properties dense polish, persistence/validation preservation) were de facto closed by Phases 1.9, 1.10, 1.12, 1.17, 1.18 but the checkboxes here were never updated. They are flipped to `[x]` with cross-references today; no code changes are involved. The remaining `[ ]` items are: (1) long-Chinese-label screenshot capture, (2) Config > Axes/Curves dialog screenshot capture, (3) extra-device background curve legend inclusion, (4) roast-analysis masks/statistics overlays, (5) charge-target annotation text/callout parity (handled by Task Group C of `docs/superpowers/plans/2026-07-04-phase-1-6-closure-workspace-switcher-charge-target-annotation.md`), (6) projection line BT/RoR visual differentiation, (7) anti-nested-card enforcement rule, (8) Config > Axes/Curves layout-internals restructuring.
+> **2026-07-24 implementation update:** Extra-device background curve extraction and fixed-width dialog control hardening are now implemented and independently reviewed. The remaining `[ ]` items are: (1) long-Chinese-label screenshot capture, (2) Config > Axes/Curves dialog screenshot capture, (3) roast-analysis masks/statistics overlays, (4) charge-target annotation text/callout parity (handled by Task Group C of `docs/superpowers/plans/2026-07-04-phase-1-6-closure-workspace-switcher-charge-target-annotation.md`), (5) projection line BT/RoR visual differentiation, (6) anti-nested-card enforcement rule, (7) Config > Axes/Curves layout-internals restructuring.
 
 ---
 
@@ -25,6 +25,8 @@
 - [x] PyQtGraph snapshots now carry foreground/background event value rails plus AUC, BBP, and charge-target guide lines when source data exists.
 - [x] `PyQtGraphSnapshotRenderer` now renders event value rails and guide lines through the snapshot adapter boundary.
 - [x] Axes, Curves, Events, and Alarms dialogs now have scoped modern dialog roles with Morandi group-box/tab/table/header/input/button styling.
+- [x] Extra-device background curves preserve legacy 1-based odd/even selection, raw/smoothed data, CHARGE/DROP masking, style, opacity, color, and temperature/RoR axis routing.
+- [x] Axis value controls opt into width expansion only where time/temperature values need it; ordinary fixed-width controls and combo popups remain bounded.
 - [x] Workspace Status now exposes a concrete action hint per workspace mode.
 - [x] Plugin registry now has typed renderer/report/analyzer/filter/profile-comparison categories while keeping only renderer plugins instantiable.
 
@@ -78,7 +80,7 @@
 - Modify: `src/test/unitary/artisanlib/test_plot_snapshot_extractor.py`
 - Modify: `src/test/unitary/artisanlib/test_plot_pyqtgraph_adapter.py`
 
-- [ ] Add extra-device background curves and verify their legend/color/visibility behavior.
+- [x] Add extra-device background curves and verify their color/visibility, style, opacity, masking, selection, and axis-routing behavior. Background curves remain excluded from the compact main legend, matching the existing adapter policy.
 - [x] Add event value rail/bar rendering for foreground/background event values available in the snapshot path.
 - [x] Add event label overlap avoidance and richer label placement. Closed by Phase 1.9 (`docs/superpowers/plans/2026-07-03-gui-modernization-phase-1-9-pyqtgraph-event-auc-parity.md`) clustered event-label row placement; edge anchor hardened by Phase 1.10. Evidence: `_event_label_row` `src/artisanlib/plot_pyqtgraph_adapter.py:717`, `_event_label_anchor:707`.
 - [x] Add AUC guide line visuals when `AUCguideFlag` and `AUCguideTime` are active.
@@ -109,6 +111,7 @@
 - [x] PyQtGraph smoke for nonblank rendering.
 - [x] Screenshot evidence for main-window phase bands and explicit PyQtGraph grid/phase rendering.
 - [x] Focused tests cover event value rails, guide extraction/rendering, scoped dialog properties/selectors, workspace action hints, and typed plugin categories.
+- [x] Current parity/dialog slice verification: `120 passed, 1 skipped`; final independent review: `.sisyphus/phase-1-6-1-12-final-review.md` (P0/P1/P2/P3 all zero).
 - [ ] Screenshot evidence for profile, live simulator, background profile, event-heavy profile, long Chinese LCD labels, Config > Axes, and Config > Curves.
 
 ## Evidence

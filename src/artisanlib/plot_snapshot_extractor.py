@@ -33,6 +33,8 @@ _DEFAULT_COLORS = {
     'backgroundet': CANONICAL_CURVE_COLORS['et'],
     'backgrounddeltabt': CANONICAL_CURVE_COLORS['deltabt'],
     'backgrounddeltaet': CANONICAL_CURVE_COLORS['deltaet'],
+    'xt': '#66615A',
+    'yt': '#66615A',
     'aucarea': '#767676',
     'grid': '#C9D2D4',
     'markers': '#5E6B6E',
@@ -250,7 +252,115 @@ def _background_curves(source: object) -> tuple[CurveSnapshot, ...]:
             line_style=background_line_style,
             line_width=_line_width(source, 'ETBdeltalinewidth', 1.0),
             opacity=_opacity(source, 'backgroundalpha', DEFAULT_BACKGROUND_OPACITY)),
+        _background_extra_curve(
+            source,
+            name='Background XT',
+            selection_attr='xtcurveidx',
+            raw_attrs=('temp1BX', 'temp2BX'),
+            smoothed_attrs=('stemp1BX', 'stemp2BX'),
+            color_attr='backgroundxtcolor',
+            line_style_attr='XTbacklinestyle',
+            line_width_attr='XTbacklinewidth',
+            delta_attrs=('extraDelta1b', 'extraDelta2b')),
+        _background_extra_curve(
+            source,
+            name='Background YT',
+            selection_attr='ytcurveidx',
+            raw_attrs=('temp1BX', 'temp2BX'),
+            smoothed_attrs=('stemp1BX', 'stemp2BX'),
+            color_attr='backgroundytcolor',
+            line_style_attr='YTbacklinestyle',
+            line_width_attr='YTbacklinewidth',
+            delta_attrs=('extraDelta1b', 'extraDelta2b')),
     ) if curve is not None)
+
+
+def _background_extra_curve(
+        source: object,
+        *,
+        name: str,
+        selection_attr: str,
+        raw_attrs: tuple[str, str],
+        smoothed_attrs: tuple[str, str],
+        color_attr: str,
+        line_style_attr: str,
+        line_width_attr: str,
+        delta_attrs: tuple[str, str]) -> CurveSnapshot | None:
+    try:
+        selection_value = float(getattr(source, selection_attr, 0))
+        if (
+                not math.isfinite(selection_value)
+                or selection_value <= 0
+                or not selection_value.is_integer()):
+            return None
+        selection = int(selection_value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if selection <= 0:
+        return None
+
+    curve_index = selection - 1
+    device_index = curve_index // 2
+    value_index = curve_index % 2
+    x = _background_extra_series(source, 'extratimexB', device_index)
+    raw_values = _background_extra_series(source, raw_attrs[value_index], device_index)
+    smoothed_values = _background_extra_series(source, smoothed_attrs[value_index], device_index)
+    values = raw_values if bool(getattr(source, 'flagon', False)) else smoothed_values
+    if not values:
+        values = raw_values
+    if not x or not values:
+        return None
+
+    y_axis: YAxisName = 'ror' if _background_extra_uses_ror(
+        source,
+        delta_attrs[value_index],
+        device_index,
+    ) else 'temperature'
+    return _curve_from_xy(
+        source,
+        name=name,
+        x=x,
+        y=_background_temperature_values(source, values),
+        color=_color_attr(source, color_attr, 'xt' if name.endswith('XT') else 'yt'),
+        visible=True,
+        y_axis=y_axis,
+        line_style=str(getattr(source, line_style_attr, _background_line_style())),
+        line_width=_line_width(source, line_width_attr, 1.0),
+        opacity=_opacity(source, 'backgroundalpha', DEFAULT_BACKGROUND_OPACITY),
+    )
+
+
+def _background_extra_series(source: object, attr_name: str, index: int) -> list[Any]:
+    value = getattr(source, attr_name, None)
+    if value is None:
+        return []
+    try:
+        series = value if isinstance(value, list) else list(value)
+    except (TypeError, ValueError):
+        return []
+    if index < 0 or index >= len(series):
+        return []
+    values = series[index]
+    if isinstance(values, list):
+        return values
+    try:
+        return list(values)
+    except TypeError:
+        return []
+
+
+def _background_extra_uses_ror(source: object, attr_name: str, index: int) -> bool:
+    if getattr(source, 'delta_ax', None) is None:
+        return False
+    owner = getattr(source, 'aw', source)
+    value = getattr(owner, attr_name, None)
+    if value is None:
+        return False
+    try:
+        values = value if isinstance(value, list) else list(value)
+    except (TypeError, ValueError):
+        return False
+    return index < len(values) and bool(values[index])
 
 
 def _background_curve(

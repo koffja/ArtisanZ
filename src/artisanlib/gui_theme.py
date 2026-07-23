@@ -60,7 +60,7 @@ def apply_modern_dialog_polish(dialog: object) -> None:
 
     root_layout = getattr(dialog, 'layout', lambda: None)()
     if isinstance(root_layout, QLayout):
-        _polish_dialog_layout_tree(root_layout, margin=8, spacing=6)
+        _polish_dialog_layout_tree(root_layout, margin=14, spacing=10)
 
     for combo_box in _find_children(dialog, QComboBox):
         _polish_dialog_combo_box(combo_box)
@@ -76,7 +76,7 @@ def apply_modern_dialog_polish(dialog: object) -> None:
         _refresh_widget_style(group_box)
         group_layout = group_box.layout()
         if isinstance(group_layout, QLayout):
-            _polish_dialog_layout_tree(group_layout, margin=6, spacing=6)
+            _polish_dialog_layout_tree(group_layout, margin=10, spacing=8)
 
     for tab_widget in _find_children(dialog, QTabWidget):
         tab_widget.setProperty('modernDialogTabs', True)
@@ -90,7 +90,7 @@ def apply_modern_dialog_polish(dialog: object) -> None:
             tab_page = tab_widget.widget(tab_index)
             tab_layout = tab_page.layout() if tab_page is not None else None
             if isinstance(tab_layout, QLayout):
-                _polish_dialog_layout_tree(tab_layout, margin=6, spacing=6)
+                _polish_dialog_layout_tree(tab_layout, margin=8, spacing=6)
 
     for scroll_area in _find_children(dialog, QAbstractScrollArea):
         scroll_area.setProperty('modernDialogScrollArea', True)
@@ -124,7 +124,11 @@ def _polish_dialog_layout_tree(layout: Any, *, margin: int, spacing: int) -> Non
         item = layout.itemAt(index)
         child_layout = item.layout() if item is not None else None
         if child_layout is not None:
-            _polish_dialog_layout_tree(child_layout, margin=6, spacing=spacing)
+            _polish_dialog_layout_tree(
+                child_layout,
+                margin=max(10, margin - 2),
+                spacing=max(6, spacing - 2),
+            )
 
 
 def _polish_dialog_layout(layout: Any, *, margin: int, spacing: int) -> None:
@@ -180,9 +184,25 @@ def _polish_dialog_combo_box(combo_box: Any) -> None:
         from PyQt6.QtWidgets import QComboBox, QSizePolicy
     except ImportError:
         return
-    combo_box.setMinimumContentsLength(max(combo_box.minimumContentsLength(), 7))
+    item_texts = [combo_box.itemText(index) for index in range(combo_box.count())]
+    longest_text = max(item_texts, key=len, default='')
+    font_metrics = combo_box.fontMetrics()
+    longest_text_width = font_metrics.horizontalAdvance(longest_text)
+    combo_box.setMinimumContentsLength(max(
+        combo_box.minimumContentsLength(),
+        7,
+        len(longest_text),
+    ))
     combo_box.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
-    combo_box.setMinimumWidth(max(combo_box.minimumWidth(), 72))
+    size_hint = getattr(combo_box, 'minimumSizeHint', lambda: None)()
+    hint_width = 0 if size_hint is None else int(size_hint.width())
+    minimum_width = max(104, hint_width, longest_text_width + 40)
+    maximum_width = combo_box.maximumWidth()
+    minimum_width = min(minimum_width, maximum_width)
+    combo_box.setMinimumWidth(max(combo_box.minimumWidth(), minimum_width))
+    popup = combo_box.view()
+    if popup is not None:
+        popup.setMinimumWidth(max(popup.minimumWidth(), longest_text_width + 40))
     combo_box.setSizePolicy(QSizePolicy.Policy.MinimumExpanding, combo_box.sizePolicy().verticalPolicy())
     _refresh_widget_style(combo_box)
 
@@ -190,20 +210,31 @@ def _polish_dialog_combo_box(combo_box: Any) -> None:
 def _polish_dialog_line_edit(line_edit: Any) -> None:
     size_hint = getattr(line_edit, 'minimumSizeHint', lambda: None)()
     hint_width = 0 if size_hint is None else int(size_hint.width())
-    minimum_width = max(72, hint_width)
+    text_width = line_edit.fontMetrics().horizontalAdvance(
+        line_edit.text() or line_edit.placeholderText())
+    minimum_width = max(110, hint_width, text_width + 24)
+    maximum_width = line_edit.maximumWidth()
+    if maximum_width < minimum_width:
+        if bool(line_edit.property('modernExpandValueControl')):
+            line_edit.setMaximumWidth(minimum_width + 8)
+        else:
+            minimum_width = min(minimum_width, maximum_width)
     line_edit.setMinimumWidth(max(line_edit.minimumWidth(), minimum_width))
-    if line_edit.maximumWidth() < line_edit.minimumWidth():
-        line_edit.setMaximumWidth(line_edit.minimumWidth() + 8)
     _refresh_widget_style(line_edit)
 
 
 def _polish_dialog_spin_box(spin_box: Any) -> None:
     size_hint = getattr(spin_box, 'minimumSizeHint', lambda: None)()
     hint_width = 0 if size_hint is None else int(size_hint.width())
-    minimum_width = max(72, hint_width)
+    text_width = spin_box.fontMetrics().horizontalAdvance(spin_box.text())
+    minimum_width = max(110, hint_width, text_width + 40)
+    maximum_width = spin_box.maximumWidth()
+    if maximum_width < minimum_width:
+        if bool(spin_box.property('modernExpandValueControl')):
+            spin_box.setMaximumWidth(minimum_width + 8)
+        else:
+            minimum_width = min(minimum_width, maximum_width)
     spin_box.setMinimumWidth(max(spin_box.minimumWidth(), minimum_width))
-    if spin_box.maximumWidth() < spin_box.minimumWidth():
-        spin_box.setMaximumWidth(spin_box.minimumWidth() + 8)
     _refresh_widget_style(spin_box)
 
 
@@ -395,7 +426,10 @@ def modern_application_stylesheet(theme: ModernTheme | None = None) -> str:
         }}
         QDialog[modernDialog="true"] QComboBox {{
             padding: 3px 22px 3px 8px;
-            min-width: 72px;
+            padding-right: 32px;
+        }}
+        QDialog[modernDialog="true"] QComboBox[modernExpandValueControl="true"] {{
+            min-width: 104px;
         }}
         QDialog[modernDialog="true"] QComboBox::drop-down {{
             subcontrol-origin: border;
@@ -429,8 +463,13 @@ def modern_application_stylesheet(theme: ModernTheme | None = None) -> str:
         QDialog[modernDialog="true"] QDoubleSpinBox,
         QDialog[modernDialog="true"] QTimeEdit,
         QDialog[modernDialog="true"] QDateEdit {{
-            padding-right: 18px;
-            min-width: 48px;
+            padding-right: 32px;
+        }}
+        QDialog[modernDialog="true"] QSpinBox[modernExpandValueControl="true"],
+        QDialog[modernDialog="true"] QDoubleSpinBox[modernExpandValueControl="true"],
+        QDialog[modernDialog="true"] QTimeEdit[modernExpandValueControl="true"],
+        QDialog[modernDialog="true"] QDateEdit[modernExpandValueControl="true"] {{
+            min-width: 110px;
         }}
         QDialog[modernDialog="true"] QSpinBox::up-button,
         QDialog[modernDialog="true"] QDoubleSpinBox::up-button,
@@ -515,14 +554,32 @@ def modern_application_stylesheet(theme: ModernTheme | None = None) -> str:
             alternate-background-color: {t.surface_alt};
             border-color: {t.border};
         }}
+        QDialog[modernDenseDialog="true"] QTableWidget::item,
         QDialog[modernDenseDialog="true"] QTableView::item {{
             padding: 3px 6px;
         }}
         QDialog[modernDenseDialog="true"] QHeaderView::section {{
             background-color: {t.surface_muted};
             color: {t.text_muted};
-            padding: 6px 8px;
+            padding: 5px 8px;
             font-weight: 600;
+        }}
+        QDialog[modernDenseDialog="true"] QGroupBox {{
+            background-color: {t.surface_alt};
+            border-color: {t.border};
+            padding: 8px 7px 7px 7px;
+        }}
+        QDialog[modernDenseDialog="true"] QTabBar::tab {{
+            padding: 5px 9px;
+        }}
+        QDialog[modernDenseDialog="true"] QComboBox[modernExpandValueControl="true"] {{
+            min-width: 104px;
+        }}
+        QDialog[modernDenseDialog="true"] QSpinBox[modernExpandValueControl="true"],
+        QDialog[modernDenseDialog="true"] QDoubleSpinBox[modernExpandValueControl="true"],
+        QDialog[modernDenseDialog="true"] QTimeEdit[modernExpandValueControl="true"],
+        QDialog[modernDenseDialog="true"] QDateEdit[modernExpandValueControl="true"] {{
+            min-width: 110px;
         }}
         QMessageBox, QFileDialog {{
             background-color: {t.window};

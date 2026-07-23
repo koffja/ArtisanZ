@@ -131,7 +131,7 @@ Important observations from the code review:
 
 **High-Value PyQtGraph Parity Backlog:**
 
-- Background profile parity beyond the currently extracted ET/BT/Delta background curves: extra-device background curves, background event value rails, and background annotation details.
+- Background profile parity beyond the currently extracted ET/BT/Delta background curves: background event value rails and background annotation details. Extra-device background curves were added on 2026-07-24 with legacy selection, masking, styling, and axis-routing parity.
 - Event parity beyond current marker lines/labels: event value bars for the existing event graph modes, richer label placement, overlap avoidance, clustered labels, and drag/edit affordances where Matplotlib currently supports interaction.
 - Analysis overlays: AUC guide/area visuals, MET/analysis masks, statistics overlays, charge-target annotations, and other roast-analysis guide marks.
 - Projection/guide polish: distinguish forecast/projection lines visually, preserve original line styles more completely, and verify RoR projection placement against legacy behavior.

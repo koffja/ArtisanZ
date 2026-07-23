@@ -77,12 +77,20 @@ def test_modern_application_stylesheet_contains_core_surfaces() -> None:
     assert 'QDialog[modernDenseDialog="true"] QTableView::item' in stylesheet
     assert 'QDialog[modernDialog="true"] QComboBox::drop-down' in stylesheet
     assert 'QDialog[modernDialog="true"] QComboBox QAbstractItemView' in stylesheet
+    assert 'QDialog[modernDialog="true"] QComboBox[modernExpandValueControl="true"]' in stylesheet
     assert 'QDialog[modernDialog="true"] QSpinBox::up-button' in stylesheet
     assert 'QDialog[modernDialog="true"] QSpinBox::down-button' in stylesheet
+    assert 'QDialog[modernDialog="true"] QTimeEdit[modernExpandValueControl="true"]' in stylesheet
     assert 'padding-right: 32px;' in stylesheet
     assert 'modern-combo-down.svg' in stylesheet
     assert 'modern-spin-up.svg' in stylesheet
     assert 'modern-spin-down.svg' in stylesheet
+
+
+def test_modern_dialog_value_controls_reserve_indicator_space() -> None:
+    stylesheet = modern_application_stylesheet()
+
+    assert stylesheet.count('padding-right: 32px;') >= 2
 
 
 def test_modern_application_stylesheet_uses_supplied_theme() -> None:
@@ -203,8 +211,10 @@ def test_apply_modern_dialog_polish_expands_compact_value_controls(qapp: QApplic
     combo_box.addItems(['Minutes', 'Seconds'])
     line_edit = QLineEdit('-12:00')
     line_edit.setMaximumWidth(50)
+    line_edit.setProperty('modernExpandValueControl', True)
     spin_box = QSpinBox()
     spin_box.setMaximumWidth(40)
+    spin_box.setProperty('modernExpandValueControl', True)
     layout.addWidget(combo_box)
     layout.addWidget(line_edit)
     layout.addWidget(spin_box)
@@ -241,14 +251,23 @@ def test_apply_modern_dialog_polish_preserves_table_cell_layouts(qapp: QApplicat
     assert cell_layout.spacing() == 0
 
 
-def test_apply_modern_dialog_polish_marks_dense_dialog_tables(qapp: QApplication) -> None: # noqa: ARG001
+@pytest.mark.parametrize('dialog_role', ['devices', 'roast_properties'])
+def test_apply_modern_dialog_polish_marks_dense_dialog_tables(
+        qapp: QApplication, # noqa: ARG001
+        dialog_role: str) -> None:
     dialog = QDialog()
     dialog.setProperty('modernDialog', True)
-    dialog.setProperty('modernDialogRole', 'devices')
+    dialog.setProperty('modernDialogRole', dialog_role)
     layout = QVBoxLayout()
     table_widget = QTableWidget(1, 1)
     table_widget.setShowGrid(True)
+    combo_box = QComboBox()
+    combo_box.addItem('Very long translated device option')
+    spin_box = QSpinBox()
+    spin_box.setSuffix(' %')
     layout.addWidget(table_widget)
+    layout.addWidget(combo_box)
+    layout.addWidget(spin_box)
     dialog.setLayout(layout)
 
     apply_modern_dialog_polish(dialog)
@@ -258,6 +277,64 @@ def test_apply_modern_dialog_polish_marks_dense_dialog_tables(qapp: QApplication
     assert table_widget.horizontalHeader().property('modernDenseHeader') is True
     assert table_widget.verticalHeader().property('modernDenseHeader') is True
     assert table_widget.showGrid()
+    assert combo_box.minimumContentsLength() >= len(combo_box.itemText(0))
+    assert combo_box.minimumWidth() >= 104
+    assert spin_box.minimumWidth() >= 110
+
+
+def test_apply_modern_dialog_polish_preserves_explicit_narrow_widths(qapp: QApplication) -> None: # noqa: ARG001
+    dialog = QDialog()
+    dialog.setProperty('modernDialog', True)
+    layout = QVBoxLayout(dialog)
+    combo_box = QComboBox()
+    combo_box.addItem('一段很长的中文选项')
+    combo_box.setMaximumWidth(80)
+    line_edit = QLineEdit('long value')
+    line_edit.setMaximumWidth(90)
+    spin_box = QSpinBox()
+    spin_box.setMaximumWidth(96)
+    layout.addWidget(combo_box)
+    layout.addWidget(line_edit)
+    layout.addWidget(spin_box)
+
+    apply_modern_dialog_polish(dialog)
+
+    assert combo_box.maximumWidth() == 80
+    assert combo_box.minimumWidth() <= combo_box.maximumWidth()
+    assert combo_box.view().minimumWidth() >= combo_box.fontMetrics().horizontalAdvance(
+        combo_box.itemText(0)) + 40
+    assert line_edit.maximumWidth() == 90
+    assert line_edit.minimumWidth() <= line_edit.maximumWidth()
+    assert spin_box.maximumWidth() == 96
+    assert spin_box.minimumWidth() <= spin_box.maximumWidth()
+
+
+def test_apply_modern_dialog_polish_respects_widths_with_application_stylesheet(
+        qapp: QApplication) -> None:
+    original_stylesheet = qapp.styleSheet()
+    qapp.setStyleSheet(modern_application_stylesheet())
+    dialog = QDialog()
+    dialog.setProperty('modernDialog', True)
+    layout = QVBoxLayout(dialog)
+    combo_box = QComboBox()
+    combo_box.addItem('Port')
+    combo_box.setMaximumWidth(80)
+    spin_box = QSpinBox()
+    spin_box.setMaximumWidth(90)
+    layout.addWidget(combo_box)
+    layout.addWidget(spin_box)
+
+    apply_modern_dialog_polish(dialog)
+    dialog.show()
+    qapp.processEvents()
+
+    assert combo_box.minimumWidth() <= combo_box.maximumWidth()
+    assert spin_box.minimumWidth() <= spin_box.maximumWidth()
+    assert combo_box.width() <= combo_box.maximumWidth()
+    assert spin_box.width() <= spin_box.maximumWidth()
+
+    dialog.close()
+    qapp.setStyleSheet(original_stylesheet)
 
 
 def test_apply_modern_dialog_polish_respects_legacy_ui_flag(
