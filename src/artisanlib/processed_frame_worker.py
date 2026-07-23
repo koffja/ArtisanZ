@@ -7,7 +7,11 @@ from typing import Any
 
 from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
 
-from artisanlib.sample_processing import build_live_processed_sample_frame
+from artisanlib.sample_processing import (
+    LiveThermalInputRequest,
+    build_live_processed_sample_frame,
+    build_live_thermal_input_result,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,13 +66,16 @@ class ProcessedFrameRequestChannel(QObject):
     """GUI-owned signal channel used to queue requests into the worker thread."""
 
     request = pyqtSignal(int, object)
+    thermal_request = pyqtSignal(int, object)
 
 
 class ProcessedFrameWorker(QObject):
     """Compute pure frame decisions on a dedicated Qt event-loop thread."""
 
     result_ready = pyqtSignal(int, object)
+    thermal_result_ready = pyqtSignal(int, object)
     error = pyqtSignal(int, str)
+    thermal_error = pyqtSignal(int, str)
 
     @pyqtSlot(int, object)
     def process(self, sequence: int, request: ProcessedFrameRequest) -> None:
@@ -78,6 +85,15 @@ class ProcessedFrameWorker(QObject):
             self.error.emit(sequence, f'{type(exc).__name__}: {exc}')
             return
         self.result_ready.emit(sequence, result)
+
+    @pyqtSlot(int, object)
+    def process_thermal(self, sequence: int, request: LiveThermalInputRequest) -> None:
+        try:
+            result = build_live_thermal_input_result(request)
+        except Exception as exc:  # pylint: disable=broad-except
+            self.thermal_error.emit(sequence, f'{type(exc).__name__}: {exc}')
+            return
+        self.thermal_result_ready.emit(sequence, result)
 
 
 __all__ = [

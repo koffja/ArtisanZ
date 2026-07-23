@@ -463,6 +463,16 @@ Important observations from the code review:
 
 **Evidence:** Focused suite remains `157 passed, 2 warnings`. An 8-second real WebSocket main-window autorun completed with `14` samples, event indexes `[1, 10, 0, 0, 0, 0, 0, 0]`, restored state, normal finish, and non-empty screenshot/perf evidence. Final review PASS: `.sisyphus/phase-3-3-sampling-integrity-final-review.md`.
 
+## Phase 3.3-B: Thermal Precompute Contract
+
+**Tracking Plan:** `docs/superpowers/plans/2026-07-23-gui-modernization-phase-3-3b-thermal-precompute-contract.md`
+
+**Status:** Contract slice closed on 2026-07-23 after independent review PASS and commit. Runtime GUI handoff, differential benchmarks, and full Phase 3.3-B remain pending.
+
+**Implementation:** `sample_processing.py` now exposes deep-immutable `LiveThermalInputRequest/Result` and a pure ET/BT smoothing, raw RoR, and PID process-value function. `ProcessedFrameWorker` exposes a separate thermal request/result/error boundary. Existing GUI-owned state and Phase 3.2 live frame path remain unchanged until the runtime handoff is proven equivalent.
+
+**Evidence:** `test_sample_processing.py` plus `test_processed_frame_worker.py`: `159 passed`; changed modules compile and pass Ruff. Final review PASS: `.sisyphus/phase-3-3b-thermal-contract-final-review.md`.
+
 ## Phase 4: Main UI Information Architecture
 
 **Goal:** Organize ArtisanZ around actual roasting workflows instead of only feature menus.

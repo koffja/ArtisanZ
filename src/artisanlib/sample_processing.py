@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import Enum
+from typing import Any
 import warnings
 
 import numpy
@@ -74,6 +75,77 @@ class ProcessedSampleFrame:
     delta_bt_window: tuple[int, int] | None
     live_x_axis_extension_end: float | None
     events: AutoEventDecisions
+
+
+def _deep_tuple(value: Any) -> Any:
+    if isinstance(value, numpy.ndarray):
+        return tuple(_deep_tuple(item) for item in value.tolist())
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        return tuple(_deep_tuple(item) for item in value)
+    return value
+
+
+@dataclass(frozen=True, slots=True)
+class LiveThermalInputRequest:
+    """Immutable pre-frame snapshot for live thermal calculations.
+
+    The history fields contain the current raw sample where applicable. The
+    smoothed histories and previous RoR histories contain values before the
+    current sample. All histories are copied in ``__post_init__`` so worker
+    code cannot observe GUI-owned list mutations.
+    """
+
+    latest_et: float
+    latest_bt: float
+    sample_times: tuple[float, ...]
+    raw_et_history: tuple[float, ...]
+    raw_bt_history: tuple[float, ...]
+    connected_et_times: tuple[float, ...]
+    connected_et_temperatures: tuple[TemperatureValue, ...]
+    connected_bt_times: tuple[float, ...]
+    connected_bt_temperatures: tuple[TemperatureValue, ...]
+    smoothed_et_history: tuple[TemperatureValue, ...]
+    smoothed_bt_history: tuple[TemperatureValue, ...]
+    previous_et_rates: tuple[float, ...]
+    previous_bt_rates: tuple[float, ...]
+    temperature_decay_weights: tuple[int, ...] | None
+    curve_filter: int
+    sample_interval_seconds: float
+    delta_et_samples: int
+    delta_bt_samples: int
+    use_polyfit: bool
+    pid_source: int | None
+    extra_temperatures_1: tuple[tuple[float, ...], ...]
+    extra_temperatures_2: tuple[tuple[float, ...], ...]
+
+    def __post_init__(self) -> None:
+        for field_name in (
+                'sample_times',
+                'raw_et_history',
+                'raw_bt_history',
+                'connected_et_times',
+                'connected_et_temperatures',
+                'connected_bt_times',
+                'connected_bt_temperatures',
+                'smoothed_et_history',
+                'smoothed_bt_history',
+                'previous_et_rates',
+                'previous_bt_rates',
+                'temperature_decay_weights',
+                'extra_temperatures_1',
+                'extra_temperatures_2'):
+            object.__setattr__(self, field_name, _deep_tuple(getattr(self, field_name)))
+
+
+@dataclass(frozen=True, slots=True)
+class LiveThermalInputResult:
+    """Pure live ET/BT smoothing, raw RoR and PID process-value result."""
+
+    smoothed_et: TemperatureValue
+    smoothed_bt: TemperatureValue
+    raw_ror_et: float
+    raw_ror_bt: float
+    pid_process_value: TemperatureValue
 
 
 @dataclass(frozen=True)
@@ -913,6 +985,78 @@ def rate_of_rise_per_minute(
     return simple_rate_of_rise_per_minute(sample_times, temperatures, left_index, previous_rates)
 
 
+def build_live_thermal_input_result(
+        request: LiveThermalInputRequest) -> LiveThermalInputResult:
+    """Calculate the pure thermal inputs consumed by live frame processing.
+
+    ``request`` owns snapshots of every history. This function performs no
+    state mutation, device I/O, PID update, event marking, or GUI work.
+    """
+    decay_weights = request.temperature_decay_weights
+    if decay_weights is None:
+        decay_weights = decay_weight_sequence(request.curve_filter)
+    et_weights = smoothing_weights_for_recent_readings(
+        request.raw_et_history,
+        decay_weights,
+        request.curve_filter,
+    )
+    bt_weights = smoothing_weights_for_recent_readings(
+        request.raw_bt_history,
+        decay_weights,
+        request.curve_filter,
+    )
+    smoothed_et = smoothed_temperature_value(
+        request.connected_et_times,
+        request.connected_et_temperatures,
+        et_weights,
+        request.sample_interval_seconds,
+    )
+    smoothed_bt = smoothed_temperature_value(
+        request.connected_bt_times,
+        request.connected_bt_temperatures,
+        bt_weights,
+        request.sample_interval_seconds,
+    )
+    if len(request.sample_times) <= 1:
+        raw_ror_et = 0.0
+        raw_ror_bt = 0.0
+    else:
+        et_ror_history = tuple(-1.0 if value is None else value for value in request.smoothed_et_history)
+        bt_ror_history = tuple(-1.0 if value is None else value for value in request.smoothed_bt_history)
+        raw_ror_et = rate_of_rise_per_minute(
+            request.latest_et,
+            request.sample_times,
+            et_ror_history + (smoothed_et,),
+            request.previous_et_rates,
+            request.delta_et_samples,
+            request.use_polyfit,
+        )
+        raw_ror_bt = rate_of_rise_per_minute(
+            request.latest_bt,
+            request.sample_times,
+            bt_ror_history + (smoothed_bt,),
+            request.previous_bt_rates,
+            request.delta_bt_samples,
+            request.use_polyfit,
+        )
+    pid_value = None
+    if request.pid_source is not None:
+        pid_value = pid_process_value(
+            request.pid_source,
+            smoothed_et=smoothed_et,
+            smoothed_bt=smoothed_bt,
+            extra_temps_1=request.extra_temperatures_1,
+            extra_temps_2=request.extra_temperatures_2,
+        )
+    return LiveThermalInputResult(
+        smoothed_et=smoothed_et,
+        smoothed_bt=smoothed_bt,
+        raw_ror_et=raw_ror_et,
+        raw_ror_bt=raw_ror_bt,
+        pid_process_value=pid_value,
+    )
+
+
 def displayed_ror_value(
         rate_of_change: TemperatureValue,
         ror_limit_enabled: bool,
@@ -1138,6 +1282,7 @@ __all__ = [
     'auto_fcs_event_candidate',
     'BackfillUpdate',
     'build_live_processed_sample_frame',
+    'build_live_thermal_input_result',
     'connected_curve_point',
     'ConnectedCurvePoint',
     'CurveWindowData',
@@ -1154,6 +1299,8 @@ __all__ = [
     'input_filter_previous_values',
     'input_filter_result',
     'InputFilterResult',
+    'LiveThermalInputRequest',
+    'LiveThermalInputResult',
     'live_x_axis_extension_end',
     'manual_turning_point_check_candidate',
     'manual_x_axis_extension_end',

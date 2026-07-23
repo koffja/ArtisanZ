@@ -20,6 +20,7 @@ from artisanlib.sample_processing import (
     auto_dry_event_candidate,
     auto_fcs_event_candidate,
     build_live_processed_sample_frame,
+    build_live_thermal_input_result,
     connected_curve_point,
     decay_weight_sequence,
     decay_weighted_average,
@@ -58,6 +59,8 @@ from artisanlib.sample_processing import (
     ConnectedCurvePoint,
     CurveWindowData,
     InputFilterResult,
+    LiveThermalInputRequest,
+    LiveThermalInputResult,
     PhaseEventDecisions,
     PidSvUpdateTarget,
     PostSampleUpdateDecisions,
@@ -86,6 +89,38 @@ class NoAccessSequence(Sequence[float]):
 
     def __iter__(self) -> Iterator[float]:
         raise AssertionError('unexpected sequence iteration')
+
+
+def _live_thermal_request(
+        *,
+        pid_source: int | None = 0,
+        use_polyfit: bool = False,
+        latest_et: float = 130.0,
+        latest_bt: float = 120.0) -> LiveThermalInputRequest:
+    return LiveThermalInputRequest(
+        latest_et=latest_et,
+        latest_bt=latest_bt,
+        sample_times=[0.0, 10.0, 20.0, 30.0],
+        raw_et_history=[100.0, 110.0, 120.0, latest_et],
+        raw_bt_history=[90.0, 100.0, 110.0, latest_bt],
+        connected_et_times=[0.0, 10.0, 20.0, 30.0],
+        connected_et_temperatures=[100.0, 110.0, 120.0, latest_et],
+        connected_bt_times=[0.0, 10.0, 20.0, 30.0],
+        connected_bt_temperatures=[90.0, 100.0, 110.0, latest_bt],
+        smoothed_et_history=[100.0, 110.0, 120.0],
+        smoothed_bt_history=[90.0, 100.0, 110.0],
+        previous_et_rates=[7.0],
+        previous_bt_rates=[6.0],
+        temperature_decay_weights=[1, 2, 3],
+        curve_filter=3,
+        sample_interval_seconds=10.0,
+        delta_et_samples=2,
+        delta_bt_samples=2,
+        use_polyfit=use_polyfit,
+        pid_source=pid_source,
+        extra_temperatures_1=[[11.0, 12.0], [21.0, 22.0]],
+        extra_temperatures_2=[[31.0, 32.0], [41.0, 42.0]],
+    )
 
 
 def test_decay_weight_sequence_uses_one_based_linear_weights() -> None:
@@ -1998,6 +2033,220 @@ def test_rate_of_rise_falls_back_when_polyfit_fails(monkeypatch: pytest.MonkeyPa
         delta_samples=2,
         use_polyfit=True,
     ) == 90.0
+
+
+def test_live_thermal_request_deep_freezes_nested_histories() -> None:
+    extra_temperatures = [[11.0], [21.0]]
+    request = LiveThermalInputRequest(
+        latest_et=130.0,
+        latest_bt=120.0,
+        sample_times=[0.0, 10.0],
+        raw_et_history=[120.0, 130.0],
+        raw_bt_history=[110.0, 120.0],
+        connected_et_times=[0.0, 10.0],
+        connected_et_temperatures=[120.0, 130.0],
+        connected_bt_times=[0.0, 10.0],
+        connected_bt_temperatures=[110.0, 120.0],
+        smoothed_et_history=[120.0],
+        smoothed_bt_history=[110.0],
+        previous_et_rates=[8.0],
+        previous_bt_rates=[7.0],
+        temperature_decay_weights=[1, 2],
+        curve_filter=2,
+        sample_interval_seconds=10.0,
+        delta_et_samples=2,
+        delta_bt_samples=2,
+        use_polyfit=False,
+        pid_source=3,
+        extra_temperatures_1=extra_temperatures,
+        extra_temperatures_2=[[31.0]],
+    )
+    extra_temperatures.append([31.0])
+    extra_temperatures[0].append(12.0)
+
+    assert request.sample_times == (0.0, 10.0)
+    assert request.extra_temperatures_1 == ((11.0,), (21.0,))
+    assert isinstance(request.extra_temperatures_1, tuple)
+    assert isinstance(request.extra_temperatures_1[0], tuple)
+    with pytest.raises(FrozenInstanceError):
+        request.pid_source = 2  # type: ignore[misc]
+
+
+def test_live_thermal_request_deep_freezes_numpy_histories() -> None:
+    request = _live_thermal_request()
+    numpy_history = numpy.array([[11.0, 12.0], [21.0, 22.0]])
+    request = LiveThermalInputRequest(
+        latest_et=request.latest_et,
+        latest_bt=request.latest_bt,
+        sample_times=numpy.array(request.sample_times),
+        raw_et_history=request.raw_et_history,
+        raw_bt_history=request.raw_bt_history,
+        connected_et_times=request.connected_et_times,
+        connected_et_temperatures=request.connected_et_temperatures,
+        connected_bt_times=request.connected_bt_times,
+        connected_bt_temperatures=request.connected_bt_temperatures,
+        smoothed_et_history=request.smoothed_et_history,
+        smoothed_bt_history=request.smoothed_bt_history,
+        previous_et_rates=request.previous_et_rates,
+        previous_bt_rates=request.previous_bt_rates,
+        temperature_decay_weights=request.temperature_decay_weights,
+        curve_filter=request.curve_filter,
+        sample_interval_seconds=request.sample_interval_seconds,
+        delta_et_samples=request.delta_et_samples,
+        delta_bt_samples=request.delta_bt_samples,
+        use_polyfit=request.use_polyfit,
+        pid_source=request.pid_source,
+        extra_temperatures_1=numpy_history,
+        extra_temperatures_2=request.extra_temperatures_2,
+    )
+    numpy_history[0, 0] = 99.0
+
+    assert request.sample_times == (0.0, 10.0, 20.0, 30.0)
+    assert request.extra_temperatures_1 == ((11.0, 12.0), (21.0, 22.0))
+
+
+def test_live_thermal_result_matches_golden_smoothing_ror_and_pid() -> None:
+    result = build_live_thermal_input_result(_live_thermal_request())
+
+    assert isinstance(result, LiveThermalInputResult)
+    assert result.smoothed_et == pytest.approx(123.3333333333)
+    assert result.smoothed_bt == pytest.approx(113.3333333333)
+    assert result.raw_ror_et == pytest.approx(40.0)
+    assert result.raw_ror_bt == pytest.approx(40.0)
+    assert result.pid_process_value == result.smoothed_bt
+
+
+@pytest.mark.parametrize('use_polyfit', [False, True])
+def test_live_thermal_result_ror_matches_existing_rate_contract(use_polyfit: bool) -> None:
+    request = _live_thermal_request(use_polyfit=use_polyfit)
+    result = build_live_thermal_input_result(request)
+    expected_et_smoothing = smoothed_temperature_value(
+        request.connected_et_times,
+        request.connected_et_temperatures,
+        smoothing_weights_for_recent_readings(
+            request.raw_et_history,
+            request.temperature_decay_weights,
+            request.curve_filter,
+        ),
+        request.sample_interval_seconds,
+    )
+    expected_bt_smoothing = smoothed_temperature_value(
+        request.connected_bt_times,
+        request.connected_bt_temperatures,
+        smoothing_weights_for_recent_readings(
+            request.raw_bt_history,
+            request.temperature_decay_weights,
+            request.curve_filter,
+        ),
+        request.sample_interval_seconds,
+    )
+
+    assert result.raw_ror_et == rate_of_rise_per_minute(
+        request.latest_et,
+        request.sample_times,
+        request.smoothed_et_history + (expected_et_smoothing,),
+        request.previous_et_rates,
+        request.delta_et_samples,
+        use_polyfit,
+    )
+    assert result.raw_ror_bt == rate_of_rise_per_minute(
+        request.latest_bt,
+        request.sample_times,
+        request.smoothed_bt_history + (expected_bt_smoothing,),
+        request.previous_bt_rates,
+        request.delta_bt_samples,
+        use_polyfit,
+    )
+
+
+def test_live_thermal_result_uses_previous_rates_for_short_invalid_history() -> None:
+    request = _live_thermal_request(latest_et=-1.0, latest_bt=-1.0)
+    result = build_live_thermal_input_result(request)
+
+    assert result.raw_ror_et == 7.0
+    assert result.raw_ror_bt == 6.0
+
+
+def test_live_thermal_result_treats_none_ror_history_as_dropout() -> None:
+    request = _live_thermal_request()
+    request = LiveThermalInputRequest(
+        latest_et=request.latest_et,
+        latest_bt=request.latest_bt,
+        sample_times=request.sample_times,
+        raw_et_history=request.raw_et_history,
+        raw_bt_history=request.raw_bt_history,
+        connected_et_times=request.connected_et_times,
+        connected_et_temperatures=request.connected_et_temperatures,
+        connected_bt_times=request.connected_bt_times,
+        connected_bt_temperatures=request.connected_bt_temperatures,
+        smoothed_et_history=[None, 110.0, 120.0],
+        smoothed_bt_history=[None, 100.0, 110.0],
+        previous_et_rates=request.previous_et_rates,
+        previous_bt_rates=request.previous_bt_rates,
+        temperature_decay_weights=request.temperature_decay_weights,
+        curve_filter=request.curve_filter,
+        sample_interval_seconds=request.sample_interval_seconds,
+        delta_et_samples=request.delta_et_samples,
+        delta_bt_samples=request.delta_bt_samples,
+        use_polyfit=False,
+        pid_source=request.pid_source,
+        extra_temperatures_1=request.extra_temperatures_1,
+        extra_temperatures_2=request.extra_temperatures_2,
+    )
+
+    result = build_live_thermal_input_result(request)
+
+    assert isinstance(result.raw_ror_et, float)
+    assert isinstance(result.raw_ror_bt, float)
+
+
+def test_live_thermal_result_returns_zero_for_single_sample_history() -> None:
+    request = LiveThermalInputRequest(
+        latest_et=130.0,
+        latest_bt=120.0,
+        sample_times=[30.0],
+        raw_et_history=[130.0],
+        raw_bt_history=[120.0],
+        connected_et_times=[30.0],
+        connected_et_temperatures=[130.0],
+        connected_bt_times=[30.0],
+        connected_bt_temperatures=[120.0],
+        smoothed_et_history=[],
+        smoothed_bt_history=[],
+        previous_et_rates=[8.0],
+        previous_bt_rates=[7.0],
+        temperature_decay_weights=[1, 2],
+        curve_filter=2,
+        sample_interval_seconds=10.0,
+        delta_et_samples=2,
+        delta_bt_samples=2,
+        use_polyfit=False,
+        pid_source=0,
+        extra_temperatures_1=[],
+        extra_temperatures_2=[],
+    )
+    result = build_live_thermal_input_result(request)
+
+    assert result.raw_ror_et == 0.0
+    assert result.raw_ror_bt == 0.0
+
+
+@pytest.mark.parametrize(
+    ('pid_source', 'expected'),
+    [(0, 113.3333333333), (2, 123.3333333333), (3, 12.0), (4, 32.0), (5, 22.0), (6, 42.0), (9, 0.0)],
+)
+def test_live_thermal_result_selects_pid_bt_et_extra_or_missing(
+        pid_source: int,
+        expected: float) -> None:
+    result = build_live_thermal_input_result(_live_thermal_request(pid_source=pid_source))
+
+    assert result.pid_process_value == pytest.approx(expected)
+
+
+def test_live_thermal_result_leaves_pid_value_empty_when_source_is_disabled() -> None:
+    result = build_live_thermal_input_result(_live_thermal_request(pid_source=None))
+
+    assert result.pid_process_value is None
 
 
 def test_displayed_ror_value_passes_through_when_limit_disabled_or_value_missing() -> None:

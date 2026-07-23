@@ -12,7 +12,10 @@ from artisanlib.processed_frame_worker import (
     ProcessedFrameRequestChannel,
     ProcessedFrameWorker,
 )
-from artisanlib.sample_processing import build_live_processed_sample_frame
+from artisanlib.sample_processing import (
+    LiveThermalInputRequest,
+    build_live_processed_sample_frame,
+)
 
 
 def _request(sample_times: tuple[float, ...] = (0.0, 1.0, 2.0)) -> ProcessedFrameRequest:
@@ -51,6 +54,33 @@ def _request(sample_times: tuple[float, ...] = (0.0, 1.0, 2.0)) -> ProcessedFram
         auto_drop_flag=False,
         auto_drop_enabled=False,
         mode='C',
+    )
+
+
+def _thermal_request() -> LiveThermalInputRequest:
+    return LiveThermalInputRequest(
+        latest_et=130.0,
+        latest_bt=120.0,
+        sample_times=(0.0, 10.0),
+        raw_et_history=(120.0, 130.0),
+        raw_bt_history=(110.0, 120.0),
+        connected_et_times=(0.0, 10.0),
+        connected_et_temperatures=(120.0, 130.0),
+        connected_bt_times=(0.0, 10.0),
+        connected_bt_temperatures=(110.0, 120.0),
+        smoothed_et_history=(120.0,),
+        smoothed_bt_history=(110.0,),
+        previous_et_rates=(8.0,),
+        previous_bt_rates=(7.0,),
+        temperature_decay_weights=(1, 2),
+        curve_filter=2,
+        sample_interval_seconds=10.0,
+        delta_et_samples=2,
+        delta_bt_samples=2,
+        use_polyfit=False,
+        pid_source=0,
+        extra_temperatures_1=(),
+        extra_temperatures_2=(),
     )
 
 
@@ -97,6 +127,75 @@ def test_worker_reports_typed_error_and_continues(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setattr(worker_module, 'build_live_processed_sample_frame', build_live_processed_sample_frame)
     worker.process(12, _request())
     assert results == [12]
+
+
+def test_worker_computes_thermal_input_contract() -> None:
+    results: list[tuple[int, object]] = []
+    worker = ProcessedFrameWorker()
+    worker.thermal_result_ready.connect(lambda sequence, result: results.append((sequence, result)))
+
+    worker.process_thermal(21, _thermal_request())
+
+    assert results[0][0] == 21
+    assert results[0][1].smoothed_bt == pytest.approx(116.6666666667)
+
+
+def test_worker_thermal_error_isolated_from_frame_signals(monkeypatch: pytest.MonkeyPatch) -> None:
+    import artisanlib.processed_frame_worker as worker_module
+
+    thermal_errors: list[tuple[int, str]] = []
+    frame_errors: list[tuple[int, str]] = []
+    thermal_results: list[int] = []
+    frame_results: list[int] = []
+    worker = ProcessedFrameWorker()
+    worker.thermal_error.connect(lambda sequence, message: thermal_errors.append((sequence, message)))
+    worker.error.connect(lambda sequence, message: frame_errors.append((sequence, message)))
+    worker.thermal_result_ready.connect(lambda sequence, _result: thermal_results.append(sequence))
+    worker.result_ready.connect(lambda sequence, _result: frame_results.append(sequence))
+
+    def fail(_request: object) -> object:
+        raise ValueError('invalid thermal input')
+
+    monkeypatch.setattr(worker_module, 'build_live_thermal_input_result', fail)
+    worker.process_thermal(22, _thermal_request())
+
+    assert thermal_errors == [(22, 'ValueError: invalid thermal input')]
+    assert frame_errors == []
+    assert thermal_results == []
+    assert frame_results == []
+
+
+def test_worker_queues_thermal_request_and_returns_on_gui_thread() -> None:
+    app = QCoreApplication.instance() or QCoreApplication([])
+    thread = QThread()
+    thread.setObjectName('thermal-worker-test')
+    worker = ProcessedFrameWorker()
+    channel = ProcessedFrameRequestChannel()
+    worker.moveToThread(thread)
+    channel.thermal_request.connect(worker.process_thermal, type=Qt.ConnectionType.QueuedConnection)
+
+    results: list[tuple[int, object, str]] = []
+    loop = QEventLoop()
+
+    def receive_result(sequence: int, result: object) -> None:
+        results.append((sequence, result, QThread.currentThread().objectName()))
+        loop.quit()
+
+    worker.thermal_result_ready.connect(receive_result, type=Qt.ConnectionType.QueuedConnection)
+    thread.finished.connect(worker.deleteLater)
+    thread.start()
+    try:
+        channel.thermal_request.emit(23, _thermal_request())
+        QTimer.singleShot(2000, loop.quit)
+        loop.exec()
+
+        assert len(results) == 1
+        assert results[0][0] == 23
+        assert results[0][1].pid_process_value == pytest.approx(116.6666666667)
+        assert results[0][2] == app.thread().objectName()
+    finally:
+        thread.quit()
+        assert thread.wait(2000)
 
 
 def test_worker_queues_request_and_returns_result_on_gui_thread() -> None:
