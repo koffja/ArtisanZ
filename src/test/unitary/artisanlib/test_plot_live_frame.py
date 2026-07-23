@@ -24,6 +24,7 @@ from artisanlib.plot_snapshot import (
     AreaFillSnapshot,
     AxisSnapshot,
     ChargeTargetAnnotationSnapshot,
+    CurveSnapshot,
     EventMarkerSnapshot,
     EventValueSnapshot,
     GuideLineSnapshot,
@@ -400,7 +401,21 @@ def test_merge_static_plot_overlays_keeps_live_curves_and_restores_background_la
         ror_axis=AxisSnapshot(minimum=-15.0, maximum=25.0, label='RoR'),
     )
     static_snapshot = RoastPlotSnapshot(
-        curves=(),
+        curves=(
+            CurveSnapshot.from_sequences(
+                name='Background BT',
+                x=[0, 1],
+                y=[118, 119],
+                color='#314E59',
+                opacity=0.35,
+            ),
+            CurveSnapshot.from_sequences(
+                name='BT',
+                x=[0, 1],
+                y=[110, 111],
+                color='#000000',
+            ),
+        ),
         time_axis=AxisSnapshot(minimum=10.0, maximum=99.0, label='Old Time'),
         temperature_axis=AxisSnapshot(minimum=10.0, maximum=99.0, label='Old Temperature'),
         ror_axis=None,
@@ -419,7 +434,9 @@ def test_merge_static_plot_overlays_keeps_live_curves_and_restores_background_la
 
     merged = merge_static_plot_overlays(live_snapshot, static_snapshot)
 
-    assert merged.curves == live_snapshot.curves
+    assert [curve.name for curve in merged.curves] == ['BT', 'Background BT']
+    assert merged.curves[0] == live_snapshot.curves[0]
+    assert merged.curves[1] == static_snapshot.curves[0]
     assert merged.time_axis == live_snapshot.time_axis
     assert merged.temperature_axis == live_snapshot.temperature_axis
     assert merged.ror_axis == live_snapshot.ror_axis

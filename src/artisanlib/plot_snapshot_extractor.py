@@ -142,7 +142,7 @@ def build_roast_plot_static_overlay_snapshot(
         ror_axis: AxisSnapshot | None = None) -> RoastPlotSnapshot:
     events = _event_markers(source)
     return RoastPlotSnapshot(
-        curves=(),
+        curves=_background_curves(source) + _projection_curves(source),
         time_axis=time_axis,
         temperature_axis=temperature_axis,
         ror_axis=ror_axis,
@@ -1134,7 +1134,7 @@ def _event_color(source: object, event_type: int) -> str:
     return '#ffffff'
 
 
-def _phase_band_color(source: object, color_key: str, index: int) -> str:
+def _phase_band_color(source: object, color_key: str, index: int) -> str:  # noqa: ARG001
     # Force Morandi light palette for phase bands — ignore saved palette overrides
     # from .aset/QSettings to maintain the ArtisanZ visual design language.
     return ('#F5F5F0', '#F5F0E1', '#F4F2EC')[index]

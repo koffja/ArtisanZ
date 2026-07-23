@@ -254,7 +254,7 @@ def test_build_roast_plot_snapshot_extracts_overlay_curves_and_phase_bands() -> 
     )
 
 
-def test_build_roast_plot_static_overlay_snapshot_skips_curve_payload() -> None:
+def test_build_roast_plot_static_overlay_snapshot_keeps_static_curve_payload() -> None:
     static_snapshot = build_roast_plot_static_overlay_snapshot(
         FakeOverlayCanvas(),
         time_axis=AxisSnapshot(minimum=0.0, maximum=12.0, label='Live Time'),
@@ -263,7 +263,13 @@ def test_build_roast_plot_static_overlay_snapshot_skips_curve_payload() -> None:
     )
     full_snapshot = build_roast_plot_snapshot(FakeOverlayCanvas())
 
-    assert static_snapshot.curves == ()
+    curve_names = [curve.name for curve in static_snapshot.curves]
+    assert {'Background BT', 'Background ET', 'Background Delta BT', 'Background Delta ET'}.issubset(curve_names)
+    assert not {'BT', 'ET', 'Delta BT', 'Delta ET'}.intersection(curve_names)
+    assert static_snapshot.curves == tuple(
+        curve for curve in full_snapshot.curves
+        if curve.name.startswith('Background ') or 'projection' in curve.name.lower()
+    )
     assert static_snapshot.time_axis == AxisSnapshot(minimum=0.0, maximum=12.0, label='Live Time')
     assert static_snapshot.temperature_axis == AxisSnapshot(minimum=70.0, maximum=270.0, label='Live Temperature')
     assert static_snapshot.ror_axis == AxisSnapshot(minimum=-15.0, maximum=25.0, label='Live RoR')
@@ -626,7 +632,7 @@ def test_charge_target_annotations_active_state_returns_snapshot():
         ror_tolerance = 6.0
         prediction_window = 5.0
         prediction_time = None
-        def evaluate_readiness(self, current_temp, current_ror, short_ror=None, long_ror=None, et_bt_gap=None, reference_et_bt_gap=None):
+        def evaluate_readiness(self, current_temp, current_ror, short_ror=None, long_ror=None, et_bt_gap=None, reference_et_bt_gap=None):  # noqa: ARG002
             return ChargeReadiness(
                 status='near',
                 title='接近目标',
@@ -675,7 +681,7 @@ def test_charge_target_annotations_charged_state_returns_snapshot():
         ror_tolerance = 6.0
         prediction_window = 5.0
         prediction_time = None
-        def evaluate_readiness(self, current_temp, current_ror, short_ror=None, long_ror=None, et_bt_gap=None, reference_et_bt_gap=None):
+        def evaluate_readiness(self, current_temp, current_ror, short_ror=None, long_ror=None, et_bt_gap=None, reference_et_bt_gap=None):  # noqa: ARG002
             raise AssertionError('evaluate_readiness should NOT be called in charged state')
         @staticmethod
         def calculate_rwt(ror):
@@ -708,7 +714,7 @@ def test_charge_target_annotations_falls_back_when_evaluate_raises():
         @staticmethod
         def calculate_rwt(ror):
             return 600.0 / ror if ror and ror > 0 else 0.0
-        def evaluate_readiness(self, **kwargs):
+        def evaluate_readiness(self, **_kwargs):
             raise ValueError('bad manager state')
     class FakeSource:
         charge_manager = FakeManager()
@@ -734,7 +740,7 @@ def test_charge_target_annotations_handles_inf_and_nan_inputs():
         @staticmethod
         def calculate_rwt(ror):
             return 600.0 / ror if ror and ror > 0 else 0.0
-        def evaluate_readiness(self, **kwargs):
+        def evaluate_readiness(self, **_kwargs):
             from artisanlib.charge_manager import ChargeReadiness
             return ChargeReadiness(
                 status='waiting',
@@ -774,7 +780,7 @@ def test_charge_target_annotations_reuses_precomputed_axes():
         @staticmethod
         def calculate_rwt(ror):
             return 600.0 / ror if ror and ror > 0 else 0.0
-        def evaluate_readiness(self, **kwargs):
+        def evaluate_readiness(self, **_kwargs):
             from artisanlib.charge_manager import ChargeReadiness
             return ChargeReadiness(
                 status='waiting',

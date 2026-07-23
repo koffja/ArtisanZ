@@ -208,7 +208,7 @@ def merge_static_plot_overlays(
         live_snapshot: RoastPlotSnapshot,
         static_snapshot: RoastPlotSnapshot) -> RoastPlotSnapshot:
     return RoastPlotSnapshot(
-        curves=live_snapshot.curves,
+        curves=_merge_live_and_static_curves(live_snapshot, static_snapshot),
         time_axis=live_snapshot.time_axis,
         temperature_axis=live_snapshot.temperature_axis,
         ror_axis=live_snapshot.ror_axis,
@@ -220,7 +220,16 @@ def merge_static_plot_overlays(
         guides=static_snapshot.guides,
         areas=static_snapshot.areas,
         charge_target_annotations=static_snapshot.charge_target_annotations,
+        rorflick_annotations=static_snapshot.rorflick_annotations,
     )
+
+
+def _merge_live_and_static_curves(
+        live_snapshot: RoastPlotSnapshot,
+        static_snapshot: RoastPlotSnapshot) -> tuple[CurveSnapshot, ...]:
+    live_curve_names = {curve.name for curve in live_snapshot.curves}
+    static_curves = tuple(curve for curve in static_snapshot.curves if curve.name not in live_curve_names)
+    return live_snapshot.curves + static_curves
 
 
 def _pyqtgraph_y_values(values: tuple[float | None, ...]) -> tuple[float, ...]:

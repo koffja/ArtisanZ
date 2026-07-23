@@ -13,7 +13,7 @@ _APPLICATION.artisanviewerMode = False  # type: ignore[attr-defined]
 
 from artisanlib import canvas
 from artisanlib.plot_live_frame import LiveCurveData, LivePlotFrame
-from artisanlib.plot_snapshot import AxisSnapshot, PhaseBandSnapshot, RoastPlotSnapshot
+from artisanlib.plot_snapshot import AxisSnapshot, CurveSnapshot, PhaseBandSnapshot, RoastPlotSnapshot
 from artisanlib.plot_renderer_registry import create_default_renderer_registry
 from artisanlib.plot_renderer_settings import (
     ARTISANZ_RENDERER_ID,
@@ -195,6 +195,9 @@ class FakeLiveFrameCanvas:
 
     def sync_pyqtgraph_static_overlays_from_canvas(self) -> None:
         return canvas.tgraphcanvas.sync_pyqtgraph_static_overlays_from_canvas(self)
+
+    def _sync_pyqtgraph_visual_overlays(self, _target: object) -> None:
+        return None
 
     def pyqtgraph_time_axis_start(self) -> float:
         return canvas.tgraphcanvas.pyqtgraph_time_axis_start(self)
@@ -428,7 +431,21 @@ def test_apply_live_plot_frame_merges_static_overlays_into_pyqtgraph_snapshot(
     window = FakeLiveFrameCanvas(_renderer_selection('pyqtgraph-snapshot'))
     window.plot_pyqtgraph_target = FakePyQtGraphTarget()
     window.plot_display_widget = FakeWidget()
-    static_snapshot = _static_overlay_snapshot()
+    static_snapshot = RoastPlotSnapshot(
+        curves=(
+            CurveSnapshot.from_sequences(
+                name='Background BT',
+                x=[0, 1],
+                y=[118, 119],
+                color='#314E59',
+                opacity=0.35,
+            ),
+        ),
+        time_axis=AxisSnapshot(minimum=0.0, maximum=12.0, label='Time'),
+        temperature_axis=AxisSnapshot(minimum=70.0, maximum=270.0, label='Temperature'),
+        ror_axis=AxisSnapshot(minimum=-15.0, maximum=25.0, label='RoR'),
+        phase_bands=(PhaseBandSnapshot(minimum=100.0, maximum=150.0, color='#E5E5E5'),),
+    )
     received_overlay_axes = []
 
     def build_static_overlay_snapshot(
@@ -459,7 +476,9 @@ def test_apply_live_plot_frame_merges_static_overlays_into_pyqtgraph_snapshot(
     assert window.plot_pyqtgraph_target.renderer.snapshots
     snapshot = window.plot_pyqtgraph_target.renderer.snapshots[-1]
     assert snapshot.curves[0].name == 'BT'
+    assert snapshot.curves[1].name == 'Background BT'
     assert snapshot.phase_bands == static_snapshot.phase_bands
+    assert 'Background BT' in window.plot_pyqtgraph_target.renderer.items
     assert received_overlay_axes == [
         (snapshot.time_axis, snapshot.temperature_axis, snapshot.ror_axis),
     ]
