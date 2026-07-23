@@ -600,6 +600,20 @@ def modern_application_stylesheet(theme: ModernTheme | None = None) -> str:
             border-color: {t.border};
             padding: 8px 7px 7px 7px;
         }}
+        QDialog[modernDialogRole="roast_properties"] QFrame[modernFormSurface="true"] {{
+            background-color: {t.surface};
+            border: 1px solid {t.border};
+            border-radius: 8px;
+        }}
+        QDialog[modernDialogRole="roast_properties"] QFrame[modernFormSurface="true"] QLabel {{
+            color: {t.text_muted};
+        }}
+        QDialog[modernDialogRole="roast_properties"] QFrame[modernFormSurface="true"] QLineEdit,
+        QDialog[modernDialogRole="roast_properties"] QFrame[modernFormSurface="true"] QComboBox,
+        QDialog[modernDialogRole="roast_properties"] QFrame[modernFormSurface="true"] QSpinBox,
+        QDialog[modernDialogRole="roast_properties"] QFrame[modernFormSurface="true"] QDoubleSpinBox {{
+            background-color: {t.surface_alt};
+        }}
         QDialog[modernDenseDialog="true"] QTabBar::tab {{
             padding: 5px 9px;
         }}

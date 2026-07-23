@@ -55,6 +55,7 @@ Important observations from the code review:
 | 1.24 | Cotrix Toolbar and Cursor Fit Pass | Closed: Cotrix brand entry, compact toolbar, unclipped cursor text | Cotrix SVG assets, hidden empty subscription action, single-line cursor readout | Toolbar no longer carries obvious Artisan Plus leftovers or clipped telemetry |
 | 1.27 | Event Value and Renderer-Neutral Curve Style Finish | Closed: 2026-07-23 with compact legacy-configured event markers, canonical curve defaults, and PyQtGraph-aware Lines editor | Dense event values remain readable; Lines edits the active renderer | No dense event-value color blocks; PyQtGraph Lines action no longer opens Matplotlib-only editor |
 | 1.28 | Opt-In PyQtGraph Report Graph Handoff | Closed: 2026-07-23 with guarded report-graph selection, nonblank evidence validation, and Matplotlib fallback | Explicit PyQtGraph report graph renders from the same snapshot contract; default report path remains Matplotlib | Saved-profile report graph is nonblank; simulated export failure falls back to Matplotlib |
+| 1.29 | Dense Dialog Form Hierarchy | Closed 2026-07-24 after repair, visual verification, and independent review | Roast Properties details, measurements, and ambient conditions use deliberate form surfaces with bounded text editing | Dense Roast Properties screen has clear hierarchy, padded controls, and preserved behavior |
 | 2 | Plot Renderer Boundary and PyQtGraph POC | Guarded PyQtGraph main-splitter embed implemented and benchmarked in offscreen/native-window simulator smokes | Read-only plot snapshot model, Matplotlib adapter, PyQtGraph live adapter prototype | POC is benchmarkable before any live renderer swap |
 | 3 | Sampling Post-Processing Decoupling | Phase 3.3-B thermal handoff and simulator soak closed; hardware baseline gate remains | Pure thermal data pipeline plus queued thermal and processed-frame worker continuations | GUI thread consumes accepted immutable results; device-wide performance claims require representative hardware evidence |
 | 4 | Main UI Information Architecture | Closed at IA/policy/status-hint layer | Scenario-oriented Roast Control, QC Analysis, Device Setup, Production, and Expert workspaces | Users can switch task modes without losing existing expert controls |
@@ -375,6 +376,16 @@ Important observations from the code review:
 **Closed:** 2026-07-23 after independent review PASS. `roastReport()` now uses the shared renderer selector and guarded PyQtGraph PNG export for explicit opt-in only. Blank or failed PyQtGraph output falls back to the existing Matplotlib SVG asset; flavor chart and report template remain unchanged.
 
 **Evidence:** Focused report/export suite produced `18 passed`. Saved `tmp/TEST012.alog` exported a nonblank PyQtGraph report graph with `3,139` sampled non-background pixels, `18` temperature items, `2` RoR items, and `29` event items. Final review: `.sisyphus/phase-1-28-report-graph-review-2.md`.
+
+## Phase 1.29: Dense Dialog Form Hierarchy
+
+**Goal:** Close the remaining high-density Roast Properties visual gap without changing roast data, validation, tab behavior, or persistence.
+
+**Tracking Plan:** `docs/superpowers/plans/2026-07-24-gui-modernization-phase-1-29-dense-dialog-form-hierarchy.md`
+
+**Implementation:** The Roast tab now bounds the free-form bean description editor to a scrollable working range, increases form spacing/padding, and wraps the existing details, measurements, and ambient layouts in `modernFormSurface` frames. The existing Devices dense-dialog role remains unchanged and behavior-compatible. A review fix removed an overly broad `QTabWidget::pane` selector so other Roast Properties tabs retain their shared chrome.
+
+**Evidence:** `/tmp/artisanz-roast-properties-after.png` shows three aligned Morandi form surfaces, controlled description height, padded controls, and preserved Save/Cancel actions. Focused verification: `84 passed, 1 skipped, 2 warnings`; `ruff`, `py_compile`, and `git diff --check` passed. Independent review: PASS, P0/P1/P2/P3 all zero. Wide suite caveat is recorded in the Phase 1.29 tracking plan.
 
 ## Phase 2: Plot Renderer Boundary and PyQtGraph POC
 
