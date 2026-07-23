@@ -2,7 +2,7 @@
 
 **Parent roadmap:** `docs/superpowers/plans/2026-06-29-gui-modernization-roadmap.md`
 
-**Status:** Closed on 2026-07-23 after runtime handoff, fallback repair, WebSocket validation, review, and commit.
+**Status:** Closed on 2026-07-23 after runtime handoff, fallback repair, multi-rate WebSocket validation, review, and commit.
 
 ## Goal
 
@@ -23,7 +23,7 @@ Define an immutable, worker-ready boundary for ET/BT smoothing, pure raw RoR cal
 - [x] Add worker entry point and typed thermal result/error signals.
 - [x] Add golden, differential, dropout, short-history, polyfit, and PID-source tests.
 - [x] Connect the thermal request to the live GUI continuation.
-- [x] Run end-to-end WebSocket smoke and runtime perf capture; differential contract coverage remains in focused tests.
+- [x] Run end-to-end WebSocket smoke and runtime perf capture at 1/5/10 Hz; differential contract coverage remains in focused tests.
 - [x] Independent review of the contract slice and repair. Final review: `.sisyphus/phase-3-3b-thermal-contract-final-review.md`, PASS.
 - [x] Commit the contract slice.
 
@@ -46,6 +46,8 @@ Define an immutable, worker-ready boundary for ET/BT smoothing, pure raw RoR cal
 - `py_compile` and Ruff pass for changed runtime modules/tests.
 - WebSocket main-window smoke: 16 seconds, 30 samples, `timeindex=[1, 10, 19, 22, 26, 0, 26, 0]`, normal state restoration, non-empty screenshot.
 - Runtime report: `/tmp/artisanz-phase33b-runtime-perf.jsonl`; `canvas.sample_processing` average `0.693 ms`, maximum `1.350 ms`.
+- Multi-rate WebSocket smokes: 1 Hz produced `16/16` samples with `0.650 ms` average processing; 5 Hz produced `75` samples with `0.799 ms` average processing; 10 Hz produced `140` samples with `0.758 ms` average processing. All runs restored state normally with no stale/error counters.
+- Multi-rate artifacts: `/tmp/artisanz-phase33b-1hz-status.txt`, `/tmp/artisanz-phase33b-5hz-status.txt`, `/tmp/artisanz-phase33b-10hz-status.txt` and matching perf JSONL files.
 - Final review: `.sisyphus/phase-3-3b-thermal-runtime-review.md`, PASS.
 
 ## Next Boundary

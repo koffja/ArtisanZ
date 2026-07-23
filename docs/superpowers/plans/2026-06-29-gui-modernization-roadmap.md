@@ -467,11 +467,11 @@ Important observations from the code review:
 
 **Tracking Plan:** `docs/superpowers/plans/2026-07-23-gui-modernization-phase-3-3b-thermal-precompute-contract.md`
 
-**Status:** Closed on 2026-07-23 after runtime handoff, fallback repair, WebSocket validation, review PASS, and commit. Long-duration and hardware-representative benchmarks remain as the performance evidence gate.
+**Status:** Closed on 2026-07-23 after runtime handoff, fallback repair, multi-rate WebSocket validation, review PASS, and commit. Long-duration and hardware-representative benchmarks remain as the performance evidence gate.
 
 **Implementation:** `sample_processing.py` exposes deep-immutable `LiveThermalInputRequest/Result` and a pure ET/BT smoothing, raw RoR, and PID process-value function. `canvas.py` submits that request after GUI-owned device/input-filter and connected-history work, applies accepted thermal results, preserves Delta math-expression ordering, then enters the existing processed-frame worker. ET/BT/extra curve payloads, event/alarm/projection decisions, and rendering remain GUI-owned. Thermal errors fall back to the pure helper; stale/reset/shutdown paths invalidate both worker stages.
 
-**Evidence:** Focused runtime suite: `176 passed, 2 warnings`; changed modules compile and pass Ruff. A 16-second real main-window WebSocket autorun completed with `30` samples, event indexes `[1, 10, 19, 22, 26, 0, 26, 0]`, restored state, normal finish, non-empty screenshot, and perf evidence. `canvas.sample_processing` averaged `0.693 ms` with maximum `1.350 ms`. Final review PASS: `.sisyphus/phase-3-3b-thermal-runtime-review.md`.
+**Evidence:** Focused runtime suite: `176 passed, 2 warnings`; changed modules compile and pass Ruff. A 16-second real main-window WebSocket autorun completed with `30` samples, event indexes `[1, 10, 19, 22, 26, 0, 26, 0]`, restored state, normal finish, non-empty screenshot, and perf evidence. Multi-rate runs completed at 1 Hz (`16` samples, `0.650 ms` average sample processing), 5 Hz (`75` samples, `0.799 ms`), and 10 Hz (`140` samples, `0.758 ms`); no stale/error counters. The 2 Hz reference averaged `0.693 ms` with maximum `1.350 ms`. Final review PASS: `.sisyphus/phase-3-3b-thermal-runtime-review.md`.
 
 ## Phase 4: Main UI Information Architecture
 
