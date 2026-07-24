@@ -19,6 +19,7 @@ from artisanlib.sample_processing import (
     auto_drop_event_candidate,
     auto_dry_event_candidate,
     auto_fcs_event_candidate,
+    build_live_input_filter_result,
     build_live_processed_sample_frame,
     build_live_thermal_input_result,
     connected_curve_point,
@@ -59,6 +60,8 @@ from artisanlib.sample_processing import (
     ConnectedCurvePoint,
     CurveWindowData,
     InputFilterResult,
+    LiveInputFilterRequest,
+    LiveInputFilterResult,
     LiveThermalInputRequest,
     LiveThermalInputResult,
     PhaseEventDecisions,
@@ -67,6 +70,27 @@ from artisanlib.sample_processing import (
     PreviousReadings,
     ProcessedSampleFrame,
 )
+
+
+def _live_input_filter_request() -> LiveInputFilterRequest:
+    return LiveInputFilterRequest(
+        sample_times=(0.0, 10.0, 20.0),
+        et_temperatures=(180.0, 180.0),
+        bt_temperatures=(120.0, 120.0),
+        current_time=30.0,
+        current_et=182.0,
+        current_bt=121.0,
+        drop_duplicates=False,
+        drop_duplicates_limit=0.0,
+        minmax_limits=False,
+        min_temperature=-100.0,
+        max_temperature=500.0,
+        drop_spikes=False,
+        auto_charge_flag=False,
+        charge_index=-1,
+        spike_period=3,
+        spike_dror_limit=20.0,
+    )
 
 
 class ExplodingSequence(Sequence[float]):
@@ -692,6 +716,58 @@ def test_input_filter_result_returns_two_backfills_for_three_repeated_readings()
         BackfillUpdate(2, 154.0),
         BackfillUpdate(1, 152.0),
     )
+
+
+def test_live_input_filter_result_matches_individual_channel_decisions() -> None:
+    request = _live_input_filter_request()
+    result = build_live_input_filter_result(request)
+
+    assert isinstance(result, LiveInputFilterResult)
+    assert result.et == input_filter_result(
+        request.sample_times,
+        request.et_temperatures,
+        request.current_time,
+        request.current_et,
+        False,
+        request.drop_duplicates,
+        request.drop_duplicates_limit,
+        request.minmax_limits,
+        request.min_temperature,
+        request.max_temperature,
+        request.drop_spikes,
+        request.auto_charge_flag,
+        request.charge_index,
+        request.spike_period,
+        request.spike_dror_limit,
+    )
+    assert result.bt.value == pytest.approx(121.0)
+
+
+def test_live_input_filter_request_copies_history_and_is_frozen() -> None:
+    times = [0.0, 10.0]
+    request = LiveInputFilterRequest(
+        sample_times=times,
+        et_temperatures=[180.0],
+        bt_temperatures=[120.0],
+        current_time=20.0,
+        current_et=181.0,
+        current_bt=121.0,
+        drop_duplicates=False,
+        drop_duplicates_limit=0.0,
+        minmax_limits=False,
+        min_temperature=-100.0,
+        max_temperature=500.0,
+        drop_spikes=False,
+        auto_charge_flag=False,
+        charge_index=-1,
+        spike_period=3,
+        spike_dror_limit=20.0,
+    )
+    times.append(20.0)
+
+    assert request.sample_times == (0.0, 10.0)
+    with pytest.raises(FrozenInstanceError):
+        request.current_et = 200.0  # type: ignore[misc]
 
 
 def test_live_x_axis_extension_skips_sample_time_access_when_fixed_or_locked() -> None:

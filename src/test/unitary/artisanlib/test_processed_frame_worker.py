@@ -13,9 +13,31 @@ from artisanlib.processed_frame_worker import (
     ProcessedFrameWorker,
 )
 from artisanlib.sample_processing import (
+    LiveInputFilterRequest,
     LiveThermalInputRequest,
     build_live_processed_sample_frame,
 )
+
+
+def _input_filter_request() -> LiveInputFilterRequest:
+    return LiveInputFilterRequest(
+        sample_times=(0.0, 10.0),
+        et_temperatures=(180.0,),
+        bt_temperatures=(120.0,),
+        current_time=20.0,
+        current_et=182.0,
+        current_bt=121.0,
+        drop_duplicates=False,
+        drop_duplicates_limit=0.0,
+        minmax_limits=True,
+        min_temperature=-100.0,
+        max_temperature=500.0,
+        drop_spikes=False,
+        auto_charge_flag=False,
+        charge_index=-1,
+        spike_period=3,
+        spike_dror_limit=20.0,
+    )
 
 
 def _request(sample_times: tuple[float, ...] = (0.0, 1.0, 2.0)) -> ProcessedFrameRequest:
@@ -140,6 +162,18 @@ def test_worker_computes_thermal_input_contract() -> None:
     assert results[0][1].smoothed_bt == pytest.approx(116.6666666667)
 
 
+def test_worker_computes_primary_input_filter_contract() -> None:
+    results: list[tuple[int, object]] = []
+    worker = ProcessedFrameWorker()
+    worker.input_filter_result_ready.connect(lambda sequence, result: results.append((sequence, result)))
+
+    worker.process_input_filter(20, _input_filter_request())
+
+    assert results[0][0] == 20
+    assert results[0][1].et.value == pytest.approx(182.0)
+    assert results[0][1].bt.value == pytest.approx(121.0)
+
+
 def test_worker_thermal_error_isolated_from_frame_signals(monkeypatch: pytest.MonkeyPatch) -> None:
     import artisanlib.processed_frame_worker as worker_module
 
@@ -192,6 +226,45 @@ def test_worker_queues_thermal_request_and_returns_on_gui_thread() -> None:
         assert len(results) == 1
         assert results[0][0] == 23
         assert results[0][1].pid_process_value == pytest.approx(116.6666666667)
+        assert results[0][2] == app.thread().objectName()
+    finally:
+        thread.quit()
+        assert thread.wait(2000)
+
+
+def test_worker_queues_input_filter_request_and_returns_result_on_gui_thread() -> None:
+    app = QCoreApplication.instance() or QCoreApplication([])
+    thread = QThread()
+    thread.setObjectName('input-filter-worker-test')
+    worker = ProcessedFrameWorker()
+    channel = ProcessedFrameRequestChannel()
+    worker.moveToThread(thread)
+    channel.input_filter_request.connect(worker.process_input_filter, type=Qt.ConnectionType.QueuedConnection)
+
+    worker_thread_names: list[str] = []
+    results: list[tuple[int, object, str]] = []
+    loop = QEventLoop()
+
+    def observe_worker_result(_sequence: int, _result: object) -> None:
+        worker_thread_names.append(QThread.currentThread().objectName())
+
+    def receive_result(sequence: int, result: object) -> None:
+        results.append((sequence, result, QThread.currentThread().objectName()))
+        loop.quit()
+
+    worker.input_filter_result_ready.connect(observe_worker_result, type=Qt.ConnectionType.DirectConnection)
+    worker.input_filter_result_ready.connect(receive_result, type=Qt.ConnectionType.QueuedConnection)
+    thread.finished.connect(worker.deleteLater)
+    thread.start()
+    try:
+        channel.input_filter_request.emit(24, _input_filter_request())
+        QTimer.singleShot(2000, loop.quit)
+        loop.exec()
+
+        assert len(results) == 1
+        assert results[0][0] == 24
+        assert results[0][1].et.value == pytest.approx(182.0)
+        assert worker_thread_names == ['input-filter-worker-test']
         assert results[0][2] == app.thread().objectName()
     finally:
         thread.quit()

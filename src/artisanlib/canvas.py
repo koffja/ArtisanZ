@@ -144,6 +144,7 @@ from artisanlib.processed_frame_worker import (
     ProcessedFrameWorker,
 )
 from artisanlib.sample_processing import (
+    build_live_input_filter_result,
     build_live_processed_sample_frame,
     build_live_thermal_input_result,
     connected_curve_point,
@@ -158,6 +159,9 @@ from artisanlib.sample_processing import (
     input_filter_backfill_updates,
     input_filter_previous_values,
     input_filter_result,
+    InputFilterResult,
+    LiveInputFilterRequest,
+    LiveInputFilterResult,
     manual_turning_point_check_candidate,
     manual_x_axis_extension_end,
     phase_event_candidates_after_turning_point,
@@ -406,6 +410,21 @@ class _ThermalContinuation:
     t2_final: float
     live_frame_curves: list[LiveCurveData]
     pid_update_enabled: bool
+    profile_lock_held: bool = True
+
+
+@dataclass(slots=True)
+class _InputFilterContinuation:
+    """GUI-owned sample input retained while ET/BT filters run in the worker."""
+
+    generation: int
+    sequence: int
+    request: LiveInputFilterRequest
+    local_flagstart: bool
+    temp1_readings: list[float]
+    temp2_readings: list[float]
+    timex_readings: list[float]
+    evaluated_temperatures: tuple[float, float]
     profile_lock_held: bool = True
 
 
@@ -2392,6 +2411,10 @@ class tgraphcanvas(QObject):
             self._processed_frame_worker.process,
             type=Qt.ConnectionType.QueuedConnection,
         )
+        self._processed_frame_request_channel.input_filter_request.connect(
+            self._processed_frame_worker.process_input_filter,
+            type=Qt.ConnectionType.QueuedConnection,
+        )
         self._processed_frame_request_channel.thermal_request.connect(
             self._processed_frame_worker.process_thermal,
             type=Qt.ConnectionType.QueuedConnection,
@@ -2400,8 +2423,16 @@ class tgraphcanvas(QObject):
             self._processed_frame_result_ready,
             type=Qt.ConnectionType.QueuedConnection,
         )
+        self._processed_frame_worker.input_filter_result_ready.connect(
+            self._input_filter_result_ready,
+            type=Qt.ConnectionType.QueuedConnection,
+        )
         self._processed_frame_worker.error.connect(
             self._processed_frame_error,
+            type=Qt.ConnectionType.QueuedConnection,
+        )
+        self._processed_frame_worker.input_filter_error.connect(
+            self._input_filter_error,
             type=Qt.ConnectionType.QueuedConnection,
         )
         self._processed_frame_worker.thermal_result_ready.connect(
@@ -2414,6 +2445,7 @@ class tgraphcanvas(QObject):
         )
         self._processed_frame_worker_thread.finished.connect(self._processed_frame_worker.deleteLater)
         self._processed_frame_pending: _ProcessedFrameContinuation | None = None
+        self._input_filter_pending: _InputFilterContinuation | None = None
         self._thermal_pending: _ThermalContinuation | None = None
         self._deferred_sample_input: _DeferredSampleInput | None = None
         self._deferred_sample_retry_scheduled = False
@@ -4962,7 +4994,10 @@ class tgraphcanvas(QObject):
         """Queue one frame request; return False when the boundary is unavailable."""
         if self._processed_frame_worker_shutdown or not self._processed_frame_worker_thread.isRunning():
             return False
-        if self._processed_frame_pending is not None or self._thermal_pending is not None:
+        if (
+                self._processed_frame_pending is not None or
+                self._input_filter_pending is not None or
+                self._thermal_pending is not None):
             _log.debug('processed frame worker is busy; skipping duplicate request')
             gui_perf_count('canvas.sample_processing.worker_busy')
             return False
@@ -4975,11 +5010,37 @@ class tgraphcanvas(QObject):
         gui_perf_count('canvas.sample_processing.worker_submit')
         return True
 
+    def _submit_input_filter(
+            self,
+            continuation: _InputFilterContinuation,
+            request: LiveInputFilterRequest) -> bool:
+        """Queue primary ET/BT input filters without moving GUI-owned history."""
+        if self._processed_frame_worker_shutdown or not self._processed_frame_worker_thread.isRunning():
+            return False
+        if (
+                self._processed_frame_pending is not None or
+                self._input_filter_pending is not None or
+                self._thermal_pending is not None):
+            _log.debug('input filter worker is busy; skipping duplicate request')
+            gui_perf_count('canvas.sample_processing.input_filter_busy')
+            return False
+        self._input_filter_pending = continuation
+        self._processed_frame_sequence = continuation.sequence
+        self._processed_frame_request_channel.input_filter_request.emit(
+            continuation.sequence,
+            request,
+        )
+        gui_perf_count('canvas.sample_processing.input_filter_submit')
+        return True
+
     def _submit_thermal(self, continuation: _ThermalContinuation) -> bool:
         """Queue pure thermal calculations while retaining GUI-owned state."""
         if self._processed_frame_worker_shutdown or not self._processed_frame_worker_thread.isRunning():
             return False
-        if self._processed_frame_pending is not None or self._thermal_pending is not None:
+        if (
+                self._processed_frame_pending is not None or
+                self._input_filter_pending is not None or
+                self._thermal_pending is not None):
             return False
         self._thermal_pending = continuation
         self._processed_frame_sequence = continuation.sequence
@@ -4994,17 +5055,23 @@ class tgraphcanvas(QObject):
         """Cancel a queued frame before roast state or recording mode changes."""
         self._processed_frame_generation += 1
         pending = self._processed_frame_pending
+        input_filter_pending = self._input_filter_pending
         thermal_pending = self._thermal_pending
         self._processed_frame_pending = None
+        self._input_filter_pending = None
         self._thermal_pending = None
         self._deferred_sample_input = None
         self._deferred_sample_retry_scheduled = False
         if pending is not None and pending.profile_lock_held and self.profileDataSemaphore.available() < 1:
             self.profileDataSemaphore.release(1)
+        if input_filter_pending is not None and input_filter_pending.profile_lock_held and self.profileDataSemaphore.available() < 1:
+            self.profileDataSemaphore.release(1)
         if thermal_pending is not None and thermal_pending.profile_lock_held and self.profileDataSemaphore.available() < 1:
             self.profileDataSemaphore.release(1)
         if pending is not None:
             gui_perf_count('canvas.sample_processing.worker_cancel')
+        if input_filter_pending is not None:
+            gui_perf_count('canvas.sample_processing.input_filter_cancel')
         if thermal_pending is not None:
             gui_perf_count('canvas.sample_processing.thermal_cancel')
 
@@ -5529,6 +5596,85 @@ class tgraphcanvas(QObject):
         self._apply_processed_frame(processed_frame, frame_continuation)
         return False
 
+    def _resume_input_filter_continuation(
+            self,
+            continuation: _InputFilterContinuation,
+            result: LiveInputFilterResult) -> None:
+        """Resume sample processing after accepting a worker filter result."""
+        if (
+                self._input_filter_pending is not continuation or
+                continuation.generation != self._processed_frame_generation or
+                self._processed_frame_worker_shutdown):
+            return
+        if not continuation.profile_lock_held:
+            if not self.profileDataSemaphore.tryAcquire(1, 50):
+                QTimer.singleShot(
+                    10,
+                    lambda: self._resume_input_filter_continuation(continuation, result),
+                )
+                gui_perf_count('canvas.sample_processing.input_filter_resume_lock_retry')
+                return
+            continuation.profile_lock_held = True
+        self._input_filter_pending = None
+        self.sample_processing(
+            continuation.local_flagstart,
+            continuation.temp1_readings,
+            continuation.temp2_readings,
+            continuation.timex_readings,
+            input_filter_results=(result.et, result.bt),
+            resume_input_filter=True,
+            evaluated_temperatures=continuation.evaluated_temperatures,
+            profile_lock_acquired=True,
+        )
+
+    def _input_filter_fallback_result(
+            self,
+            continuation: _InputFilterContinuation) -> LiveInputFilterResult:
+        """Return a pass-through result if even the pure fallback cannot run."""
+        try:
+            return build_live_input_filter_result(continuation.request)
+        except Exception as exc:  # pylint: disable=broad-except
+            _log.exception('input filter fallback failed: %s', exc)
+            et, bt = continuation.evaluated_temperatures
+            return LiveInputFilterResult(
+                et=InputFilterResult(et, ()),
+                bt=InputFilterResult(bt, ()),
+            )
+
+    @pyqtSlot(int, object)
+    def _input_filter_result_ready(self, sequence: int, result: object) -> None:
+        """Resume the GUI-owned sample transaction with accepted filter values."""
+        continuation = self._input_filter_pending
+        if (
+                continuation is None or
+                continuation.sequence != sequence or
+                continuation.generation != self._processed_frame_generation or
+                self._processed_frame_worker_shutdown):
+            _log.warning('ignoring stale input filter result %s', sequence)
+            gui_perf_count('canvas.sample_processing.input_filter_stale_result')
+            return
+        if not isinstance(result, LiveInputFilterResult):
+            _log.error('invalid input filter result %s', sequence)
+            result = self._input_filter_fallback_result(continuation)
+        self._resume_input_filter_continuation(continuation, result)
+
+    @pyqtSlot(int, str)
+    def _input_filter_error(self, sequence: int, message: str) -> None:
+        """Use the pure helper locally if the input-filter worker fails."""
+        continuation = self._input_filter_pending
+        if (
+                continuation is None or
+                continuation.sequence != sequence or
+                continuation.generation != self._processed_frame_generation or
+                self._processed_frame_worker_shutdown):
+            _log.warning('ignoring stale input filter error %s', sequence)
+            return
+        _log.error('input filter worker failed: %s', message)
+        self._resume_input_filter_continuation(
+            continuation,
+            self._input_filter_fallback_result(continuation),
+        )
+
     @pyqtSlot(int, object)
     def _thermal_result_ready(self, sequence: int, result: object) -> None:
         """Apply a thermal result in the GUI thread, rejecting stale responses."""
@@ -5648,12 +5794,25 @@ class tgraphcanvas(QObject):
     # we can assume within the processing of sample_processing() that flagon=True
     # NOTE: sample_processing is queued to the GUI thread by Athreadserver.createSampleThread().
     @gui_perf_tracked('canvas.sample_processing')
-    def sample_processing(self, local_flagstart:bool, temp1_readings:list[float], temp2_readings:list[float], timex_readings:list[float], deferred_batch:_DeferredSampleInput|None = None) -> None: # pyright: ignore [reportGeneralTypeIssues] # Code is too complex to analyze; reduce complexity by refactoring into subroutines or reducing conditional code paths
+    def sample_processing(
+            self,
+            local_flagstart:bool,
+            temp1_readings:list[float],
+            temp2_readings:list[float],
+            timex_readings:list[float],
+            deferred_batch:_DeferredSampleInput|None = None,
+            input_filter_results:tuple[InputFilterResult, InputFilterResult]|None = None,
+            resume_input_filter:bool = False,
+            evaluated_temperatures:tuple[float, float]|None = None,
+            profile_lock_acquired:bool = False) -> None: # pyright: ignore [reportGeneralTypeIssues] # Code is too complex to analyze; reduce complexity by refactoring into subroutines or reducing conditional code paths
         deferred = self._deferred_sample_input
-        if deferred_batch is None and deferred is not None:
+        if not resume_input_filter and deferred_batch is None and deferred is not None:
             if deferred.generation != self._processed_frame_generation:
                 self._deferred_sample_input = None
-            elif self._processed_frame_pending is None and self._thermal_pending is None:
+            elif (
+                    self._processed_frame_pending is None and
+                    self._input_filter_pending is None and
+                    self._thermal_pending is None):
                 queued = deferred
                 self._deferred_sample_input = _DeferredSampleInput(
                     generation=self._processed_frame_generation,
@@ -5670,7 +5829,10 @@ class tgraphcanvas(QObject):
                     deferred_batch=queued,
                 )
                 return
-        if self._processed_frame_pending is not None or self._thermal_pending is not None:
+        if (
+                self._processed_frame_pending is not None or
+                (self._input_filter_pending is not None and not resume_input_filter) or
+                self._thermal_pending is not None):
             _log.debug('sample_processing(): queueing newest input while worker continuation is pending')
             self._queue_latest_sample_input(local_flagstart, temp1_readings, temp2_readings, timex_readings)
             return
@@ -5678,7 +5840,7 @@ class tgraphcanvas(QObject):
         wait_period = 200  # we try to catch a lock within the next 200ms
         if self.delay < 500:
             wait_period = 10 # on tight sampling rate we only wait 10ms
-        gotlock = self.profileDataSemaphore.tryAcquire(1, wait_period) # we try to catch the lock, if we fail we just skip this sampling round (prevents stacking of waiting calls)
+        gotlock = profile_lock_acquired or self.profileDataSemaphore.tryAcquire(1, wait_period) # we try to catch the lock, if we fail we just skip this sampling round (prevents stacking of waiting calls)
         if not gotlock:
             _log.debug('sample_processing(): failed to get profileDataSemaphore lock')
             gui_perf_count('canvas.sample_processing.lock_skip')
@@ -5756,6 +5918,83 @@ class tgraphcanvas(QObject):
 
                     self.RTtemp1 = t1 # store readings for real-time symbolic evaluation
                     self.RTtemp2 = t2
+                    extra_expression_dependency = bool(self.extradevices) and any(
+                        re.search(r'\bY(?:[3-9]|[1-9][0-9]+)\b', expression or '')
+                        for expression in (self.ETfunction, self.BTfunction)
+                    )
+                    if evaluated_temperatures is not None:
+                        t1, t2 = evaluated_temperatures
+                        self.RTtemp1 = t1
+                        self.RTtemp2 = t2
+                    elif not extra_expression_dependency:
+                        if self.ETfunction.strip():
+                            try:
+                                t1 = self.eval_math_expression(self.ETfunction,tx,RTsname='Y1',RTsval=t1)
+                                self.RTtemp1 = t1
+                            except Exception as e: # pylint: disable=broad-except
+                                _log.exception(e)
+                        if self.BTfunction.strip():
+                            try:
+                                t2 = self.eval_math_expression(self.BTfunction,tx,RTsname='Y2',RTsval=t2)
+                                self.RTtemp2 = t2
+                            except Exception as e: # pylint: disable=broad-except
+                                _log.exception(e)
+                    primary_filter_results = input_filter_results
+                    primary_filters_enabled = self.minmaxLimits or self.dropSpikes or self.dropDuplicates
+                    primary_filter_device = not self.dummy_or_special_device(self.device, 0)
+                    if primary_filter_results is None:
+                        if primary_filters_enabled and primary_filter_device and not extra_expression_dependency:
+                            input_filter_request = LiveInputFilterRequest(
+                                sample_times=tuple(sample_timex),
+                                et_temperatures=tuple(sample_temp1),
+                                bt_temperatures=tuple(sample_temp2),
+                                current_time=tx,
+                                current_et=t1,
+                                current_bt=t2,
+                                drop_duplicates=self.dropDuplicates,
+                                drop_duplicates_limit=self.dropDuplicatesLimit,
+                                minmax_limits=self.minmaxLimits,
+                                min_temperature=self.filterDropOut_tmin,
+                                max_temperature=self.filterDropOut_tmax,
+                                drop_spikes=self.dropSpikes,
+                                auto_charge_flag=self.autoChargeFlag,
+                                charge_index=self.timeindex[0],
+                                spike_period=self.filterDropOut_spikeRoR_period,
+                                spike_dror_limit=self.filterDropOut_spikeRoR_dRoR_limit,
+                            )
+                            input_filter_continuation = _InputFilterContinuation(
+                                generation=self._processed_frame_generation,
+                                sequence=self._processed_frame_sequence + 1,
+                                request=input_filter_request,
+                                local_flagstart=local_flagstart,
+                                temp1_readings=list(temp1_readings),
+                                temp2_readings=list(temp2_readings),
+                                timex_readings=list(timex_readings),
+                                evaluated_temperatures=(t1, t2),
+                            )
+                            if self._submit_input_filter(input_filter_continuation, input_filter_request):
+                                if self.profileDataSemaphore.available() < 1:
+                                    self.profileDataSemaphore.release(1)
+                                input_filter_continuation.profile_lock_held = False
+                                processing_deferred = True
+                                return
+                            try:
+                                fallback_filter_result = build_live_input_filter_result(input_filter_request)
+                                primary_filter_results = (
+                                    fallback_filter_result.et,
+                                    fallback_filter_result.bt,
+                                )
+                            except Exception as exc:  # pylint: disable=broad-except
+                                _log.exception('input filter fallback failed: %s', exc)
+                                primary_filter_results = (
+                                    InputFilterResult(t1, ()),
+                                    InputFilterResult(t2, ()),
+                                )
+                        elif not extra_expression_dependency:
+                            primary_filter_results = (
+                                InputFilterResult(t1, ()),
+                                InputFilterResult(t2, ()),
+                            )
                     ##############  if using Extra devices
                     nxdevices = len(self.extradevices)
                     if nxdevices:
@@ -5873,18 +6112,19 @@ class tgraphcanvas(QObject):
 
                     ####### all values retrieved
 
-                    if self.ETfunction.strip():
-                        try:
-                            t1 = self.eval_math_expression(self.ETfunction,tx,RTsname='Y1',RTsval=t1)
-                            self.RTtemp1 = t1
-                        except Exception as e: # pylint: disable=broad-except
-                            _log.exception(e)
-                    if self.BTfunction.strip():
-                        try:
-                            t2 = self.eval_math_expression(self.BTfunction,tx,RTsname='Y2',RTsval=t2)
-                            self.RTtemp2 = t2
-                        except Exception as e: # pylint: disable=broad-except
-                            _log.exception(e)
+                    if extra_expression_dependency:
+                        if self.ETfunction.strip():
+                            try:
+                                t1 = self.eval_math_expression(self.ETfunction,tx,RTsname='Y1',RTsval=t1)
+                                self.RTtemp1 = t1
+                            except Exception as e: # pylint: disable=broad-except
+                                _log.exception(e)
+                        if self.BTfunction.strip():
+                            try:
+                                t2 = self.eval_math_expression(self.BTfunction,tx,RTsname='Y2',RTsval=t2)
+                                self.RTtemp2 = t2
+                            except Exception as e: # pylint: disable=broad-except
+                                _log.exception(e)
                     # if modbus device do the C/F conversion if needed (done after mathexpression, not to mess up with x/10 formulas)
                     # modbus channel 1+2, respect input temperature scale setting
 
@@ -5893,9 +6133,16 @@ class tgraphcanvas(QObject):
                     input_filters_enabled = self.minmaxLimits or self.dropSpikes or self.dropDuplicates
                     t1_previous = input_filter_previous_values(sample_temp1, input_filters_enabled)
                     t2_previous = input_filter_previous_values(sample_temp2, input_filters_enabled)
-                    if not self.dummy_or_special_device(self.device, 0):
+                    if primary_filter_results is not None and primary_filter_device:
+                        t1_result, t2_result = primary_filter_results
+                        t1 = t1_result.value
+                        t2 = t2_result.value
+                        for update in t1_result.backfill_updates:
+                            sample_temp1[update.index] = update.value
+                        for update in t2_result.backfill_updates:
+                            sample_temp2[update.index] = update.value
+                    elif primary_filter_device:
                         t1 = self.inputFilter(sample_timex,sample_temp1,tx,t1)
-                    if not self.dummy_or_special_device(self.device, 0):
                         t2 = self.inputFilter(sample_timex,sample_temp2,tx,t2,True)
 
                     length_of_qmc_timex = len(sample_timex)
@@ -6595,7 +6842,10 @@ class tgraphcanvas(QObject):
     @gui_perf_tracked('canvas.updategraphics')
     def updategraphics(self) -> None:
 #        QApplication.processEvents() # without this we see some flickers (canvas redraws) on using multiple button event actions on macOS!?
-        if self._processed_frame_pending is not None or self._thermal_pending is not None:
+        if (
+                self._processed_frame_pending is not None or
+                self._input_filter_pending is not None or
+                self._thermal_pending is not None):
             gui_perf_count('canvas.updategraphics.worker_pending_skip')
             return
         gotlock = self.updateGraphicsSemaphore.tryAcquire(1,300) # we try to catch a lock if available but we do not wait, if we fail we just skip this redraw round (prevents stacking of waiting calls); we maximally wait 300ms which should be enough on modern machines

@@ -40,6 +40,41 @@ class InputFilterResult:
     backfill_updates: tuple[BackfillUpdate, ...]
 
 
+@dataclass(frozen=True, slots=True)
+class LiveInputFilterRequest:
+    """Immutable ET/BT input-filter snapshot for the processing worker."""
+
+    sample_times: tuple[float, ...]
+    et_temperatures: tuple[float, ...]
+    bt_temperatures: tuple[float, ...]
+    current_time: float
+    current_et: float
+    current_bt: float
+    drop_duplicates: bool
+    drop_duplicates_limit: float
+    minmax_limits: bool
+    min_temperature: float
+    max_temperature: float
+    drop_spikes: bool
+    auto_charge_flag: bool
+    charge_index: int
+    spike_period: int
+    spike_dror_limit: float
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, 'sample_times', tuple(self.sample_times))
+        object.__setattr__(self, 'et_temperatures', tuple(self.et_temperatures))
+        object.__setattr__(self, 'bt_temperatures', tuple(self.bt_temperatures))
+
+
+@dataclass(frozen=True, slots=True)
+class LiveInputFilterResult:
+    """Worker result for both primary temperature channels."""
+
+    et: InputFilterResult
+    bt: InputFilterResult
+
+
 @dataclass(frozen=True)
 class AlarmTrigger:
     alarm_index: int
@@ -456,6 +491,40 @@ def input_filter_result(
                 (BackfillUpdate(len(temperatures) - 1, (temperatures[-2] + current_temperature) / 2.0),),
             )
     return InputFilterResult(current_temperature, ())
+
+
+def build_live_input_filter_result(request: LiveInputFilterRequest) -> LiveInputFilterResult:
+    """Apply the same pure filter decision to ET and BT snapshots."""
+    common = (
+        request.drop_duplicates,
+        request.drop_duplicates_limit,
+        request.minmax_limits,
+        request.min_temperature,
+        request.max_temperature,
+        request.drop_spikes,
+        request.auto_charge_flag,
+        request.charge_index,
+        request.spike_period,
+        request.spike_dror_limit,
+    )
+    return LiveInputFilterResult(
+        et=input_filter_result(
+            request.sample_times,
+            request.et_temperatures,
+            request.current_time,
+            request.current_et,
+            False,
+            *common,
+        ),
+        bt=input_filter_result(
+            request.sample_times,
+            request.bt_temperatures,
+            request.current_time,
+            request.current_bt,
+            True,
+            *common,
+        ),
+    )
 
 
 def live_x_axis_extension_end(
@@ -1282,6 +1351,7 @@ __all__ = [
     'auto_fcs_event_candidate',
     'BackfillUpdate',
     'build_live_processed_sample_frame',
+    'build_live_input_filter_result',
     'build_live_thermal_input_result',
     'connected_curve_point',
     'ConnectedCurvePoint',
@@ -1299,6 +1369,8 @@ __all__ = [
     'input_filter_previous_values',
     'input_filter_result',
     'InputFilterResult',
+    'LiveInputFilterRequest',
+    'LiveInputFilterResult',
     'LiveThermalInputRequest',
     'LiveThermalInputResult',
     'live_x_axis_extension_end',
