@@ -576,6 +576,11 @@ def modern_application_stylesheet(theme: ModernTheme | None = None) -> str:
         QDialog[modernDialogRole="devices"] QTabBar::tab:selected {{
             color: {t.primary};
         }}
+        QDialog[modernDialogRole="devices"] QFrame[modernDeviceHeaderBand="true"] {{
+            background-color: {t.surface_alt};
+            border-bottom: 1px solid {t.border};
+            padding: 4px 6px;
+        }}
         QDialog[modernDialogRole="roast_properties"] QTabBar::tab:selected {{
             color: {t.accent};
         }}

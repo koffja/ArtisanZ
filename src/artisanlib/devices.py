@@ -43,7 +43,7 @@ _log: Final[logging.Logger] = logging.getLogger(__name__)
 from PyQt6.QtCore import (Qt, pyqtSlot, QSettings, QTimer, QRegularExpression, QSignalBlocker)
 from PyQt6.QtGui import (QStandardItemModel, QStandardItem, QColor, QIntValidator, QRegularExpressionValidator, QPixmap, QIcon)
 from PyQt6.QtWidgets import (QApplication, QWidget, QCheckBox, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
-                             QPushButton, QSpinBox, QTabWidget, QComboBox, QDialogButtonBox, QGridLayout,
+                             QPushButton, QSpinBox, QTabWidget, QComboBox, QDialogButtonBox, QGridLayout, QFrame,
                              QGroupBox, QRadioButton, QButtonGroup, QInputDialog, QToolButton,
                              QTableWidget, QMessageBox, QHeaderView, QTableWidgetItem, QSizePolicy)
 
@@ -1485,17 +1485,21 @@ class DeviceAssignmentDlg(ArtisanResizeablDialog):
         deviceSelector.addWidget(self.devicetypeComboBox)
         deviceSelector.addStretch()
         deviceSelector.addLayout(deviceSubSelector)
+        deviceHeaderBand = QFrame()
+        deviceHeaderBand.setProperty('modernDeviceHeaderBand', True)
+        deviceHeaderBand.setLayout(deviceSelector)
 
         grid = QGridLayout()
         grid.addWidget(self.nonpidButton,2,0)
-        grid.addLayout(deviceSelector,2,1)
+        grid.addWidget(deviceHeaderBand,2,1)
         grid.addWidget(self.pidButton,3,0)
         grid.addWidget(PIDGroupBox,3,1)
         grid.addWidget(self.arduinoButton,4,0)
         grid.addWidget(arduinoGroupBox,4,1)
         grid.addWidget(self.programButton,5,0)
         grid.addWidget(programGroupBox,5,1)
-        grid.setSpacing(3)
+        grid.setHorizontalSpacing(10)
+        grid.setVerticalSpacing(8)
         buttonLayout = QHBoxLayout()
         buttonLayout.addWidget(self.deviceLoggingFlag)
         buttonLayout.addStretch()
@@ -1503,7 +1507,8 @@ class DeviceAssignmentDlg(ArtisanResizeablDialog):
         buttonLayout.setSpacing(10)
         tab1Layout = QVBoxLayout()
         tab1Layout.addLayout(grid)
-        tab1Layout.setContentsMargins(5,5,5,5)
+        tab1Layout.setContentsMargins(10,10,10,8)
+        tab1Layout.setSpacing(10)
         tab1Layout.addStretch()
         bLayout = QHBoxLayout()
         bLayout.addWidget(self.addButton)

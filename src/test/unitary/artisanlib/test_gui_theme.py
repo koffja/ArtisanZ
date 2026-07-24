@@ -79,6 +79,7 @@ def test_modern_application_stylesheet_contains_core_surfaces() -> None:
     assert 'QDialog[modernDialogRole="devices"] QTabBar::tab:selected' in stylesheet
     assert 'QDialog[modernDialogRole="roast_properties"] QTabBar::tab:selected' in stylesheet
     assert 'QDialog[modernDialogRole="roast_properties"] QFrame[modernFormSurface="true"]' in stylesheet
+    assert 'QDialog[modernDialogRole="devices"] QFrame[modernDeviceHeaderBand="true"]' in stylesheet
     assert 'QDialog[modernDenseDialog="true"] QTableView::item' in stylesheet
     assert 'QDialog[modernDialog="true"] QComboBox::drop-down' in stylesheet
     assert 'QDialog[modernDialog="true"] QComboBox QAbstractItemView' in stylesheet
