@@ -152,6 +152,11 @@ class LiveThermalInputRequest:
     pid_source: int | None
     extra_temperatures_1: tuple[tuple[float, ...], ...]
     extra_temperatures_2: tuple[tuple[float, ...], ...]
+    delta_et_filter: float = 0.0
+    delta_bt_filter: float = 0.0
+    delta_et_expression_enabled: bool = False
+    delta_bt_expression_enabled: bool = False
+    ror_decay_weights: tuple[int, ...] | None = None
 
     def __post_init__(self) -> None:
         for field_name in (
@@ -168,7 +173,8 @@ class LiveThermalInputRequest:
                 'previous_bt_rates',
                 'temperature_decay_weights',
                 'extra_temperatures_1',
-                'extra_temperatures_2'):
+                'extra_temperatures_2',
+                'ror_decay_weights'):
             object.__setattr__(self, field_name, _deep_tuple(getattr(self, field_name)))
 
 
@@ -181,6 +187,8 @@ class LiveThermalInputResult:
     raw_ror_et: float
     raw_ror_bt: float
     pid_process_value: TemperatureValue
+    smoothed_ror_et: float | None = None
+    smoothed_ror_bt: float | None = None
 
 
 @dataclass(frozen=True)
@@ -1089,6 +1097,8 @@ def build_live_thermal_input_result(
     if len(request.sample_times) <= 1:
         raw_ror_et = 0.0
         raw_ror_bt = 0.0
+        smoothed_ror_et = None
+        smoothed_ror_bt = None
     else:
         et_ror_history = tuple(-1.0 if value is None else value for value in request.smoothed_et_history)
         bt_ror_history = tuple(-1.0 if value is None else value for value in request.smoothed_bt_history)
@@ -1108,6 +1118,38 @@ def build_live_thermal_input_result(
             request.delta_bt_samples,
             request.use_polyfit,
         )
+        smoothed_ror_et = None
+        smoothed_ror_bt = None
+        et_filter_size = delta_smoothing_filter_size(
+            request.delta_et_filter,
+            len(request.sample_times),
+            len(request.previous_et_rates) + 1,
+        )
+        if et_filter_size is not None and not request.delta_et_expression_enabled:
+            et_ror_weights = request.ror_decay_weights
+            if et_ror_weights is None or len(et_ror_weights) != et_filter_size:
+                et_ror_weights = decay_weight_sequence(et_filter_size)
+            smoothed_ror_et = smoothed_rate_of_change_value(
+                request.sample_times,
+                request.previous_et_rates + (raw_ror_et,),
+                et_ror_weights,
+                request.sample_interval_seconds,
+            )
+        bt_filter_size = delta_smoothing_filter_size(
+            request.delta_bt_filter,
+            len(request.sample_times),
+            len(request.previous_bt_rates) + 1,
+        )
+        if bt_filter_size is not None and not request.delta_bt_expression_enabled:
+            bt_ror_weights = request.ror_decay_weights
+            if bt_ror_weights is None or len(bt_ror_weights) != bt_filter_size:
+                bt_ror_weights = decay_weight_sequence(bt_filter_size)
+            smoothed_ror_bt = smoothed_rate_of_change_value(
+                request.sample_times,
+                request.previous_bt_rates + (raw_ror_bt,),
+                bt_ror_weights,
+                request.sample_interval_seconds,
+            )
     pid_value = None
     if request.pid_source is not None:
         pid_value = pid_process_value(
@@ -1123,6 +1165,8 @@ def build_live_thermal_input_result(
         raw_ror_et=raw_ror_et,
         raw_ror_bt=raw_ror_bt,
         pid_process_value=pid_value,
+        smoothed_ror_et=smoothed_ror_et,
+        smoothed_ror_bt=smoothed_ror_bt,
     )
 
 

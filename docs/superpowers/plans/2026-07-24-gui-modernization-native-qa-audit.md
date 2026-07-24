@@ -11,7 +11,7 @@
 - Native screenshot shows the Cotrix toolbar, LCD telemetry, PyQtGraph roast surface, linked RoR axis, event points/leaders/labels, legend, minute labels, and event rail.
 - Native PyQtGraph probe reported `useOpenGL=True`, `requested=True`, and viewport class `GraphicsViewGLWidget`.
 - Qt Quick packaging smoke passed with `PyInstaller 6.21.0`, real `PyQt6.QtQml`/`PyQt6.QtQuick`/`PyQt6.QtQuickWidgets` imports, and `Workspace Status QML widget: ready 320x220`.
-- Full `test/unitary/artisanlib` run: `2457 passed, 29 failed, 3 skipped`. The 29 failures are environment/tooling failures: missing `pytest-asyncio` for async tests and a DNS-dependent invalid-host assertion. No GUI modernization test failed; Qt Quick size baseline now passes.
+- Full `test/unitary/artisanlib` run: `2458 passed, 29 failed, 3 skipped`. The 29 failures are environment/tooling failures: missing `pytest-asyncio` for async tests and a DNS-dependent invalid-host assertion. No GUI modernization test failed; Qt Quick size baseline now passes.
 
 ## Closed Code Gates
 
@@ -20,6 +20,7 @@
 - Axes, Curves, Events, Alarms, Devices, and Roast Properties use the shared flat Morandi dialog layer; Roast Properties received the final form-surface hierarchy pass.
 - Qt Quick remains isolated to the Workspace Status island; packaging and subprocess smoke coverage are green.
 - Primary ET/BT input-filter decisions now run through the queued worker boundary with stale-result, shutdown, lock-retry, and GUI-owned history guards. Extra-device filtering remains an explicit follow-up boundary.
+- Ordinary ET/BT RoR smoothing now rides the same immutable thermal worker contract; custom Delta formulas remain on the compatibility path. Native WebSocket autorun completed with 14 samples, restored state, a nonblank screenshot `/tmp/artisanz-native-ror-window-0724.png`, and both `input_filter_submit` and `thermal_submit` worker metrics.
 
 ## Remaining Gates
 

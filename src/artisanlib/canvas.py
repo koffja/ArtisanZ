@@ -41,7 +41,7 @@ from psutil._common import bytes2human # pyright:ignore[reportPrivateImportUsage
 from babel.units import get_unit_name
 
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import override, Final, Literal, Any, cast, TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -165,6 +165,7 @@ from artisanlib.sample_processing import (
     manual_turning_point_check_candidate,
     manual_x_axis_extension_end,
     phase_event_candidates_after_turning_point,
+    pid_process_value,
     pid_process_value_update_enabled,
     pid_set_value_update,
     pid_sv_update_target,
@@ -5497,34 +5498,54 @@ class tgraphcanvas(QObject):
             sample_unfiltereddelta1.append(self.rateofchange1)
             sample_unfiltereddelta2.append(self.rateofchange2)
 
-            user_filter = delta_smoothing_filter_size(
-                self.deltaETfilter,
-                continuation.length_of_qmc_timex,
-                len(sample_unfiltereddelta1),
-            )
-            if user_filter is not None:
-                if self.decay_weights is None or len(self.decay_weights) != user_filter:
-                    self.decay_weights = list(decay_weight_sequence(user_filter))
-                self.rateofchange1 = smoothed_rate_of_change_value(
-                    sample_timex,
-                    sample_unfiltereddelta1,
-                    self.decay_weights,
-                    self.delay / 1000.,
+            if result.smoothed_ror_et is not None and not self.DeltaETfunction.strip():
+                self.rateofchange1 = result.smoothed_ror_et
+                et_filter = delta_smoothing_filter_size(
+                    self.deltaETfilter,
+                    continuation.length_of_qmc_timex,
+                    len(sample_unfiltereddelta1),
                 )
-            user_filter = delta_smoothing_filter_size(
-                self.deltaBTfilter,
-                continuation.length_of_qmc_timex,
-                len(sample_unfiltereddelta2),
-            )
-            if user_filter is not None:
-                if self.decay_weights is None or len(self.decay_weights) != user_filter:
-                    self.decay_weights = list(decay_weight_sequence(user_filter))
-                self.rateofchange2 = smoothed_rate_of_change_value(
-                    sample_timex,
-                    sample_unfiltereddelta2,
-                    self.decay_weights,
-                    self.delay / 1000.,
+                if et_filter is not None:
+                    self.decay_weights = list(decay_weight_sequence(et_filter))
+            else:
+                user_filter = delta_smoothing_filter_size(
+                    self.deltaETfilter,
+                    continuation.length_of_qmc_timex,
+                    len(sample_unfiltereddelta1),
                 )
+                if user_filter is not None:
+                    if self.decay_weights is None or len(self.decay_weights) != user_filter:
+                        self.decay_weights = list(decay_weight_sequence(user_filter))
+                    self.rateofchange1 = smoothed_rate_of_change_value(
+                        sample_timex,
+                        sample_unfiltereddelta1,
+                        self.decay_weights,
+                        self.delay / 1000.,
+                    )
+            if result.smoothed_ror_bt is not None and not self.DeltaBTfunction.strip():
+                self.rateofchange2 = result.smoothed_ror_bt
+                bt_filter = delta_smoothing_filter_size(
+                    self.deltaBTfilter,
+                    continuation.length_of_qmc_timex,
+                    len(sample_unfiltereddelta2),
+                )
+                if bt_filter is not None:
+                    self.decay_weights = list(decay_weight_sequence(bt_filter))
+            else:
+                user_filter = delta_smoothing_filter_size(
+                    self.deltaBTfilter,
+                    continuation.length_of_qmc_timex,
+                    len(sample_unfiltereddelta2),
+                )
+                if user_filter is not None:
+                    if self.decay_weights is None or len(self.decay_weights) != user_filter:
+                        self.decay_weights = list(decay_weight_sequence(user_filter))
+                    self.rateofchange2 = smoothed_rate_of_change_value(
+                        sample_timex,
+                        sample_unfiltereddelta2,
+                        self.decay_weights,
+                        self.delay / 1000.,
+                    )
             rateofchange1plot = self.rateofchange1
             rateofchange2plot = self.rateofchange2
         else:
@@ -5695,7 +5716,8 @@ class tgraphcanvas(QObject):
         processing_deferred = False
         try:
             if not isinstance(result, LiveThermalInputResult):
-                raise TypeError(f'invalid thermal result: {type(result).__name__}')
+                _log.error('invalid thermal result %s; using pure fallback', sequence)
+                result = self._thermal_fallback_result(continuation.request)
             processing_deferred = self._continue_thermal_result(result, continuation)
         except Exception as e: # pylint: disable=broad-except
             _log.exception(e)
@@ -5724,7 +5746,7 @@ class tgraphcanvas(QObject):
         _log.error('thermal worker failed: %s', message)
         processing_deferred = False
         try:
-            fallback = build_live_thermal_input_result(continuation.request)
+            fallback = self._thermal_fallback_result(continuation.request)
             processing_deferred = self._continue_thermal_result(fallback, continuation)
         except Exception as e: # pylint: disable=broad-except
             _log.exception(e)
@@ -5733,6 +5755,42 @@ class tgraphcanvas(QObject):
         finally:
             if not processing_deferred:
                 self._finalize_sample_processing(continuation.local_flagstart)
+
+    def _thermal_fallback_result(
+            self,
+            request: LiveThermalInputRequest) -> LiveThermalInputResult:
+        """Retry thermal calculation without optional RoR smoothing before pass-through."""
+        try:
+            return build_live_thermal_input_result(request)
+        except Exception as exc:  # pylint: disable=broad-except
+            _log.exception('thermal worker fallback failed: %s', exc)
+        try:
+            return build_live_thermal_input_result(
+                replace(
+                    request,
+                    delta_et_filter=0.0,
+                    delta_bt_filter=0.0,
+                    ror_decay_weights=None,
+                ),
+            )
+        except Exception as exc:  # pylint: disable=broad-except
+            _log.exception('thermal fallback without RoR smoothing failed: %s', exc)
+        pid_value = None
+        if request.pid_source is not None:
+            pid_value = pid_process_value(
+                request.pid_source,
+                smoothed_et=request.latest_et,
+                smoothed_bt=request.latest_bt,
+                extra_temps_1=request.extra_temperatures_1,
+                extra_temps_2=request.extra_temperatures_2,
+            )
+        return LiveThermalInputResult(
+            smoothed_et=request.latest_et,
+            smoothed_bt=request.latest_bt,
+            raw_ror_et=request.previous_et_rates[-1] if request.previous_et_rates else 0.0,
+            raw_ror_bt=request.previous_bt_rates[-1] if request.previous_bt_rates else 0.0,
+            pid_process_value=pid_value,
+        )
 
     @pyqtSlot(int, str)
     def _processed_frame_error(self, sequence: int, message: str) -> None:
@@ -6212,6 +6270,14 @@ class tgraphcanvas(QObject):
                         pid_source=self.aw.pidcontrol.pidSource if pid_update_enabled else None,
                         extra_temperatures_1=sample_extratemp1,
                         extra_temperatures_2=sample_extratemp2,
+                        delta_et_filter=self.deltaETfilter,
+                        delta_bt_filter=self.deltaBTfilter,
+                        delta_et_expression_enabled=bool(self.DeltaETfunction.strip()),
+                        delta_bt_expression_enabled=bool(self.DeltaBTfunction.strip()),
+                        ror_decay_weights=(
+                            tuple(self.decay_weights)
+                            if self.decay_weights is not None else None
+                        ),
                     )
                     thermal_continuation = _ThermalContinuation(
                         generation=self._processed_frame_generation,
@@ -6247,7 +6313,7 @@ class tgraphcanvas(QObject):
                         processing_deferred = True
                         return
                     processing_deferred = self._continue_thermal_result(
-                        build_live_thermal_input_result(thermal_request),
+                        self._thermal_fallback_result(thermal_request),
                         thermal_continuation,
                     )
                 #############    if using DEVICE 18 (no device). Manual mode

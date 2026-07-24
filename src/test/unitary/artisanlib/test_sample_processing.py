@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator, Sequence
-from dataclasses import FrozenInstanceError
+from dataclasses import FrozenInstanceError, replace
 
 import pytest
 import numpy
@@ -768,6 +768,81 @@ def test_live_input_filter_request_copies_history_and_is_frozen() -> None:
     assert request.sample_times == (0.0, 10.0)
     with pytest.raises(FrozenInstanceError):
         request.current_et = 200.0  # type: ignore[misc]
+
+
+def test_live_thermal_result_can_compute_ror_smoothing_in_worker_contract() -> None:
+    request = replace(
+        LiveThermalInputRequest(
+            latest_et=140.0,
+            latest_bt=130.0,
+            sample_times=(0.0, 10.0),
+            raw_et_history=(120.0, 130.0),
+            raw_bt_history=(110.0, 120.0),
+            connected_et_times=(0.0, 10.0),
+            connected_et_temperatures=(120.0, 130.0),
+            connected_bt_times=(0.0, 10.0),
+            connected_bt_temperatures=(110.0, 120.0),
+            smoothed_et_history=(120.0,),
+            smoothed_bt_history=(110.0,),
+            previous_et_rates=(8.0,),
+            previous_bt_rates=(7.0,),
+            temperature_decay_weights=(1, 2),
+            curve_filter=2,
+            sample_interval_seconds=10.0,
+            delta_et_samples=2,
+            delta_bt_samples=2,
+            use_polyfit=False,
+            pid_source=None,
+            extra_temperatures_1=(),
+            extra_temperatures_2=(),
+        ),
+        latest_et=140.0,
+        latest_bt=130.0,
+        sample_times=(0.0, 10.0, 20.0, 30.0, 40.0),
+        raw_et_history=(100.0, 110.0, 120.0, 130.0, 140.0),
+        raw_bt_history=(90.0, 100.0, 110.0, 120.0, 130.0),
+        connected_et_times=(0.0, 10.0, 20.0, 30.0, 40.0),
+        connected_et_temperatures=(100.0, 110.0, 120.0, 130.0, 140.0),
+        connected_bt_times=(0.0, 10.0, 20.0, 30.0, 40.0),
+        connected_bt_temperatures=(90.0, 100.0, 110.0, 120.0, 130.0),
+        smoothed_et_history=(100.0, 110.0, 120.0, 130.0),
+        smoothed_bt_history=(90.0, 100.0, 110.0, 120.0),
+        previous_et_rates=(50.0, 50.0, 50.0, 50.0),
+        previous_bt_rates=(50.0, 50.0, 50.0, 50.0),
+        delta_et_filter=7.0,
+        delta_bt_filter=7.0,
+        ror_decay_weights=(99,),
+    )
+
+    result = build_live_thermal_input_result(request)
+
+    assert result.smoothed_ror_et is not None
+    assert result.smoothed_ror_bt is not None
+    assert result.smoothed_ror_et == pytest.approx(
+        smoothed_rate_of_change_value(
+            request.sample_times,
+            request.previous_et_rates + (result.raw_ror_et,),
+            decay_weight_sequence(4),
+            request.sample_interval_seconds,
+        ),
+    )
+    assert result.smoothed_ror_bt == pytest.approx(
+        smoothed_rate_of_change_value(
+            request.sample_times,
+            request.previous_bt_rates + (result.raw_ror_bt,),
+            decay_weight_sequence(4),
+            request.sample_interval_seconds,
+        ),
+    )
+    custom_delta_result = build_live_thermal_input_result(
+        replace(
+            request,
+            delta_et_expression_enabled=True,
+            delta_bt_expression_enabled=True,
+        ),
+    )
+    assert custom_delta_result.smoothed_ror_et is None
+    assert custom_delta_result.smoothed_ror_bt is None
 
 
 def test_live_x_axis_extension_skips_sample_time_access_when_fixed_or_locked() -> None:
