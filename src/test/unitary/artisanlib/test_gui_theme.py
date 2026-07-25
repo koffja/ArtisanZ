@@ -51,7 +51,7 @@ def test_modern_application_stylesheet_contains_core_surfaces() -> None:
     assert 'QMenuBar' in stylesheet
     assert 'QPushButton' in stylesheet
     assert 'QLCDNumber[lcdValue="true"]' in stylesheet
-    assert 'padding: 6px 8px 6px 8px;' in stylesheet
+    assert 'padding: 8px 8px 7px 8px;' in stylesheet
     assert 'QFrame[lcdSurface="true"]' in stylesheet
     assert 'background-color: transparent;' in stylesheet
     assert 'QLabel[lcdLabel="true"]' in stylesheet
@@ -81,8 +81,8 @@ def test_modern_application_stylesheet_contains_core_surfaces() -> None:
     assert 'QDialog[modernDialogRole="roast_properties"] QTabBar::tab:selected' in stylesheet
     assert 'QDialog[modernDialogRole="roast_properties"] QFrame[modernFormSurface="true"]' in stylesheet
     assert 'QDialog[modernDialogRole="devices"] QFrame[modernDeviceHeaderBand="true"]' in stylesheet
-    assert 'QFrame[recordedCurvePanel="true"]' in stylesheet
-    assert 'QCheckBox[recordedCurve="true"]' in stylesheet
+    assert 'QWidget[plotLegendRow="true"]' in stylesheet
+    assert 'QCheckBox[plotLegendCurve="true"]' in stylesheet
     assert 'QDialog[modernDenseDialog="true"] QTableView::item' in stylesheet
     assert 'QDialog[modernDialog="true"] QComboBox::drop-down' in stylesheet
     assert 'QDialog[modernDialog="true"] QComboBox QAbstractItemView' in stylesheet
@@ -119,7 +119,7 @@ def test_lcd_value_stylesheet_uses_self_contained_surface() -> None:
     assert 'border-radius: 6px' in stylesheet
     assert 'border-top-left-radius' not in stylesheet
     assert 'border-bottom-left-radius' not in stylesheet
-    assert 'padding: 6px 8px 6px 8px' in stylesheet
+    assert 'padding: 8px 8px 7px 8px' in stylesheet
     assert 'color: #123456' in stylesheet
     assert 'background-color: #abcdef' in stylesheet
 

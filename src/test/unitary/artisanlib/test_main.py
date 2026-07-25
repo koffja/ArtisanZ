@@ -1795,10 +1795,10 @@ class TestMakeLCDbox:
         layout = lcdframe.layout()
         margins = layout.contentsMargins()
         assert margins.left() == 6
-        assert margins.top() == 4
+        assert margins.top() == 5
         assert margins.right() == 6
-        assert margins.bottom() == 3
-        assert layout.spacing() == 3
+        assert margins.bottom() == 4
+        assert layout.spacing() == 4
 
     def test_makeLCDbox_value_surface_fills_bottom_row(self) -> None:
         """Test LCD value surface is not right-floated away from the card edge."""
@@ -1817,6 +1817,8 @@ class TestMakeLCDbox:
         assert lcd.sizePolicy().horizontalPolicy() == QSizePolicy.Policy.Expanding
         assert lcd.minimumWidth() == 100
         assert lcd.maximumWidth() == 100
+        assert lcd.minimumHeight() == 44
+        assert lcd.maximumHeight() == 44
 
     def test_configure_lcd_column_layout_adds_vertical_item_spacing(self) -> None:
         """Test LCD column layout keeps visible space between stacked cards."""
@@ -3505,9 +3507,10 @@ def test_roast_toolbar_visual_metrics_prevent_brand_clipping() -> None:
     assert metrics['toolbar_height'] >= (
         metrics['button_height'] + metrics['toolbar_vertical_padding'] * 2
     )
-    assert metrics['brand_width'] >= 140
+    assert metrics['brand_width'] == 70
     assert metrics['button_width'] >= metrics['button_height']
     assert metrics['icon_size'] >= 30
+    assert metrics['brand_icon_size'] == 18
     assert metrics['label_height'] >= metrics['button_height'] - 2
 
 

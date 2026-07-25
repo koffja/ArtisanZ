@@ -244,6 +244,7 @@ def test_build_roast_plot_snapshot_extracts_main_curves_and_axes() -> None:
     assert snapshot.temperature_axis == AxisSnapshot(minimum=70.0, maximum=270.0, label='Temperature')
     assert snapshot.ror_axis == AxisSnapshot(minimum=-15.0, maximum=25.0, label='RoR')
     assert [curve.name for curve in snapshot.curves] == ['BT', 'ET', 'Delta BT', 'Delta ET']
+    assert [curve.toggle_key for curve in snapshot.curves[:4]] == ['BT', 'ET', 'DeltaBT', 'DeltaET']
     assert [curve.name for curve in snapshot.visible_curves()] == ['BT', 'ET', 'Delta BT']
 
 

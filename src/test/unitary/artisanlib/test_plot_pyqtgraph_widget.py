@@ -16,6 +16,7 @@ from artisanlib.plot_snapshot import (
     CurveSnapshot,
     EventMarkerSnapshot,
     PhaseBandSnapshot,
+    ProjectionBandSnapshot,
     RoastPlotSnapshot,
     StatisticsBackgroundSnapshot,
     TimeRangeSnapshot,
@@ -66,6 +67,34 @@ def test_create_pyqtgraph_plot_target_renders_temperature_and_ror_curves() -> No
         assert target.ror_axis is not None
         assert _plot_data_item_count(target.temperature_plot) == 1
         assert _plot_data_item_count(target.ror_plot) == 1
+    finally:
+        target.close()
+
+
+def test_pyqtgraph_legend_embeds_curve_toggles_and_keeps_hidden_curves_recoverable() -> None:
+    target = create_pyqtgraph_plot_target(use_opengl=False, include_ror=True)
+    toggles: list[tuple[str, bool]] = []
+    try:
+        target.set_curve_toggle_callback(lambda curve, state: toggles.append((curve.toggle_key, state)))
+        target.renderer.set_snapshot(replace(
+            _snapshot(),
+            curves=(
+                CurveSnapshot.from_sequences(
+                    name='ET', toggle_key='ET', x=[0, 1], y=[150, 155], color='#B5644F', visible=False),
+                CurveSnapshot.from_sequences(
+                    name='BT', toggle_key='BT', x=[0, 1], y=[140, 145], color='#4E7180'),
+            ),
+        ))
+        _APPLICATION.processEvents()
+
+        legend = target.renderer._legend_item
+        assert callable(getattr(legend, 'set_curve_toggle_callback', None))
+        assert [checkbox.text() for _, checkbox in legend.items] == ['ET', 'BT']
+        assert legend.items[0][1].isChecked() is False
+
+        legend.items[0][1].setChecked(True)
+
+        assert toggles == [('ET', True)]
     finally:
         target.close()
 
@@ -130,6 +159,42 @@ def test_create_pyqtgraph_plot_target_renders_phase_band_overlay() -> None:
         _APPLICATION.processEvents()
 
         assert target.renderer.phase_item_count() == 1
+    finally:
+        target.close()
+
+
+def test_create_pyqtgraph_plot_target_renders_projection_corridor_path() -> None:
+    target = create_pyqtgraph_plot_target(use_opengl=False, include_ror=True)
+    try:
+        snapshot = RoastPlotSnapshot(
+            curves=(CurveSnapshot.from_sequences(
+                name='BT projection',
+                x=[0.0, 60.0, 120.0],
+                y=[180.0, 190.0, 205.0],
+                color='#4E7180',
+                line_style='-.',
+                line_width=8.0,
+                opacity=0.3,
+            ),),
+            time_axis=AxisSnapshot(minimum=0.0, maximum=120.0, label='Time'),
+            temperature_axis=AxisSnapshot(minimum=70.0, maximum=270.0, label='Temperature'),
+            ror_axis=AxisSnapshot(minimum=-15.0, maximum=25.0, label='RoR'),
+            projection_bands=(ProjectionBandSnapshot.from_sequences(
+                x=[0.0, 60.0, 120.0],
+                lower=[180.0, 188.0, 197.0],
+                upper=[180.0, 192.0, 213.0],
+                color='#4E7180',
+                opacity=0.18,
+            ),),
+        )
+        target.renderer.set_snapshot(snapshot)
+        _APPLICATION.processEvents()
+
+        fill = target.renderer._projection_band_items[-1][1]  # noqa: SLF001
+        path = fill.path()
+        assert path.isEmpty() is False
+        assert path.boundingRect().height() == pytest.approx(33.0)
+        assert fill.brush().color().alpha() == 46
     finally:
         target.close()
 

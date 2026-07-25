@@ -190,6 +190,7 @@ def _curve(
         x=_sequence(source, 'timex'),
         y=_sequence(source, y_attr),
         color=_palette_color(source, color_key),
+        toggle_key=_curve_toggle_key(name),
         visible=bool(getattr(source, visible_attr, False)),
         y_axis=y_axis,
         line_style=_line_style(source, _line_style_attr(name), '-'),
@@ -209,6 +210,7 @@ def _delta_curve(
         x=_sequence(source, 'timex'),
         y=_foreground_delta_values(source, _sequence(source, y_attr)),
         color=_palette_color(source, color_key),
+        toggle_key=_curve_toggle_key(name),
         visible=bool(getattr(source, visible_attr, False)),
         y_axis='ror',
         line_style=_line_style(source, _line_style_attr(name), '-'),
@@ -266,6 +268,7 @@ def _foreground_extra_curves(source: object) -> tuple[CurveSnapshot, ...]:
                 x=x_values,
                 y=values,
                 color=str(color),
+                toggle_key=f'extra:{device_index}:{channel}',
                 visible=visible,
                 y_axis=y_axis,
                 line_style=str(line_style),
@@ -603,6 +606,7 @@ def _curve_from_xy(
         x: list[Any],
         y: list[Any],
         color: str,
+        toggle_key: str = '',
         visible: bool,
         y_axis: YAxisName = 'temperature',
         line_style: str = '-',
@@ -615,6 +619,7 @@ def _curve_from_xy(
             x=(),
             y=(),
             color=color,
+            toggle_key=toggle_key,
             visible=False,
             y_axis=y_axis,
             line_style=line_style,
@@ -627,12 +632,20 @@ def _curve_from_xy(
         x=x[:limit],
         y=[_temperature_value(value) for value in y[:limit]],
         color=color,
+        toggle_key=toggle_key,
         visible=visible,
         y_axis=y_axis,
         line_style=line_style,
         line_width=line_width,
         opacity=opacity,
     )
+
+
+def _curve_toggle_key(name: str) -> str:
+    return {
+        'Delta ET': 'DeltaET',
+        'Delta BT': 'DeltaBT',
+    }.get(name, name)
 
 
 def _time_axis(source: object) -> AxisSnapshot:

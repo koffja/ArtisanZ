@@ -18,6 +18,7 @@ from artisanlib.plot_snapshot import (
     GuideLineSnapshot,
     PhaseBandSnapshot,
     PhaseSummarySnapshot,
+    ProjectionBandSnapshot,
     RendererViewState,
     RoastPlotSnapshot,
     RoRFlickAnnotationSnapshot,
@@ -34,6 +35,10 @@ PhaseItemFactory = Callable[[PhaseBandSnapshot, RoastPlotSnapshot], object | Non
 TimeRangeItemFactory = Callable[[TimeRangeSnapshot, RoastPlotSnapshot], object | tuple[object, ...] | None]
 PhaseSummaryItemFactory = Callable[[PhaseSummarySnapshot, RoastPlotSnapshot], object | tuple[object, ...] | None]
 AreaItemFactory = Callable[[AreaFillSnapshot, RoastPlotSnapshot], object | None]
+ProjectionBandItemFactory = Callable[
+    [ProjectionBandSnapshot, RoastPlotSnapshot],
+    object | tuple[object, ...] | None,
+]
 AnalysisMaskItemFactory = Callable[
     [AnalysisMaskSnapshot, RoastPlotSnapshot],
     object | tuple[object, ...] | None,
@@ -51,6 +56,7 @@ RoRFlickAnnotationItemFactory = Callable[
     object | tuple[object, ...] | None,
 ]
 CurvePenFactory = Callable[[CurveSnapshot], object]
+CurveToggleCallback = Callable[[CurveSnapshot, bool], None]
 
 _log = logging.getLogger(__name__)
 
@@ -100,10 +106,12 @@ class PyQtGraphSnapshotRenderer:
             time_range_factory: TimeRangeItemFactory | None = None,
             phase_summary_factory: PhaseSummaryItemFactory | None = None,
             area_item_factory: AreaItemFactory | None = None,
+            projection_band_factory: ProjectionBandItemFactory | None = None,
             analysis_mask_factory: AnalysisMaskItemFactory | None = None,
             statistics_background_factory: StatisticsBackgroundItemFactory | None = None,
             charge_target_annotation_factory: ChargeTargetAnnotationItemFactory | None = None,
             rorflick_annotation_factory: RoRFlickAnnotationItemFactory | None = None,
+            curve_toggle_callback: CurveToggleCallback | None = None,
             pen_factory: CurvePenFactory | None = None) -> None:
         self._temperature_plot = temperature_plot
         self._ror_plot = ror_plot
@@ -118,6 +126,7 @@ class PyQtGraphSnapshotRenderer:
         self._time_range_factory = time_range_factory or _default_time_range_item_factory
         self._phase_summary_factory = phase_summary_factory or _default_phase_summary_item_factory
         self._area_item_factory = area_item_factory or _default_area_item_factory
+        self._projection_band_factory = projection_band_factory or _default_projection_band_item_factory
         self._analysis_mask_factory = analysis_mask_factory or _default_analysis_mask_item_factory
         self._statistics_background_factory = (
             statistics_background_factory or _default_statistics_background_item_factory
@@ -126,12 +135,15 @@ class PyQtGraphSnapshotRenderer:
             charge_target_annotation_factory or _default_charge_target_annotation_factory
         )
         self._rorflick_annotation_factory = rorflick_annotation_factory or _default_rorflick_annotation_factory
+        self._curve_toggle_callback = curve_toggle_callback
         self._pen_factory = pen_factory or _default_pen_factory
         self._items: dict[str, object] = {}
+        self._legend_curve_by_item: dict[object, CurveSnapshot] = {}
         self._phase_items: list[object] = []
         self._time_range_items: list[object] = []
         self._phase_summary_items: list[object] = []
         self._area_items: list[tuple[object, object]] = []
+        self._projection_band_items: list[tuple[object, object]] = []
         self._analysis_mask_items: list[tuple[object, object]] = []
         self._statistics_background_items: list[object] = []
         self._event_items: list[object] = []
@@ -147,11 +159,13 @@ class PyQtGraphSnapshotRenderer:
 
     def set_snapshot(self, snapshot: RoastPlotSnapshot) -> None:
         self._apply_static_overlays(snapshot, force=True)
+        self._apply_projection_bands(snapshot)
         self._apply_curves(snapshot)
         self.reset_view(snapshot.export_view_state())
 
     def update_live_frame(self, snapshot: RoastPlotSnapshot) -> None:
         self._apply_static_overlays(snapshot, force=False)
+        self._apply_projection_bands(snapshot)
         self._apply_curves(snapshot)
 
     def reset_view(self, view_state: RendererViewState) -> None:
@@ -192,6 +206,9 @@ class PyQtGraphSnapshotRenderer:
     def area_item_count(self) -> int:
         return len(self._area_items)
 
+    def projection_band_item_count(self) -> int:
+        return len(self._projection_band_items)
+
     def analysis_mask_item_count(self) -> int:
         return len(self._analysis_mask_items)
 
@@ -214,6 +231,10 @@ class PyQtGraphSnapshotRenderer:
     ) -> None:
         """Set the callback used when an analysis result box is released."""
         self._statistics_background_drag_callback = callback
+
+    def set_curve_toggle_callback(self, callback: CurveToggleCallback | None) -> None:
+        """Set the callback used by the interactive plot legend."""
+        self._curve_toggle_callback = callback
 
     def _apply_static_overlays(self, snapshot: RoastPlotSnapshot, *, force: bool) -> None:
         signature = _static_overlay_signature(snapshot)
@@ -249,6 +270,23 @@ class PyQtGraphSnapshotRenderer:
                 _call_if_available(item, 'setVisible', False)
         self._apply_legend(snapshot)
 
+    def _apply_projection_bands(self, snapshot: RoastPlotSnapshot) -> None:
+        self._clear_projection_band_items()
+        for band in snapshot.projection_bands:
+            plot = self._plot_for_projection_band(band)
+            for item in _as_items(self._projection_band_factory(band, snapshot)):
+                _call_if_available(plot, 'addItem', item)
+                _call_if_available(item, 'setZValue', 35)
+                self._projection_band_items.append((plot, item))
+
+    def _clear_projection_band_items(self) -> None:
+        _clear_item_pairs(self._projection_band_items)
+
+    def _plot_for_projection_band(self, band: ProjectionBandSnapshot) -> object:
+        if band.y_axis == 'ror' and self._ror_plot is not None:
+            return self._ror_plot
+        return self._temperature_plot
+
     @staticmethod
     def _apply_shadow_pen(curve: CurveSnapshot, item: object, pen: object) -> None:
         """Apply a subtle shadow to foreground curves only.
@@ -256,7 +294,7 @@ class PyQtGraphSnapshotRenderer:
         Background curves already use reduced opacity. A wider black shadow
         would dominate their configured colors and make them appear black.
         """
-        if curve.name.startswith('Background '):
+        if curve.name.startswith('Background ') or 'projection' in curve.name.lower():
             _call_if_available(item, 'setShadowPen', None)
             return
         try:
@@ -274,15 +312,26 @@ class PyQtGraphSnapshotRenderer:
     def _apply_legend(self, snapshot: RoastPlotSnapshot) -> None:
         if self._legend_item is None:
             return
+        interactive = callable(getattr(self._legend_item, 'set_curve_toggle_callback', None))
+        if interactive:
+            self._legend_curve_by_item.clear()
+            self._legend_item.set_curve_toggle_callback(self._handle_legend_toggle)
         clear = getattr(self._legend_item, 'clear', None)
         if callable(clear):
             clear()
         for curve in snapshot.curves:
-            if not curve.visible or _legend_should_skip(curve):
+            if _legend_should_skip(curve) or (not interactive and not curve.visible):
                 continue
             item = self._items.get(curve.name)
             if item is not None:
+                if interactive:
+                    self._legend_curve_by_item[item] = curve
                 _call_if_available(self._legend_item, 'addItem', item, _legend_label(curve.name))
+
+    def _handle_legend_toggle(self, item: object, _: str, state: bool) -> None:
+        curve = self._legend_curve_by_item.get(item)
+        if curve is not None and self._curve_toggle_callback is not None:
+            self._curve_toggle_callback(curve, bool(state))
 
     def _create_item(self, curve: CurveSnapshot) -> object:
         plot = self._plot_for_curve(curve)
@@ -873,6 +922,34 @@ def _default_area_item_factory(area: AreaFillSnapshot, _: RoastPlotSnapshot) -> 
     )
     _call_if_available(item, 'setZValue', -15)
     return item
+
+
+def _default_projection_band_item_factory(
+        band: ProjectionBandSnapshot,
+        _: RoastPlotSnapshot) -> tuple[object, ...] | None:
+    try:
+        import pyqtgraph as pg  # type: ignore[import-not-found,unused-ignore]
+    except ImportError:
+        return None
+    lower_curve = pg.PlotDataItem(
+        band.x,
+        _pyqtgraph_y_values(band.lower),
+        # FillBetweenItem reads PlotDataItem.curve.getPath(). With pen=None,
+        # pyqtgraph keeps data in getData() but leaves the internal path empty.
+        # Transparent pens preserve the path without drawing band edges.
+        pen=pg.mkPen(color=_color_with_alpha(pg, band.color, 0.0), width=1),
+    )
+    upper_curve = pg.PlotDataItem(
+        band.x,
+        _pyqtgraph_y_values(band.upper),
+        pen=pg.mkPen(color=_color_with_alpha(pg, band.color, 0.0), width=1),
+    )
+    fill = pg.FillBetweenItem(
+        curve1=lower_curve,
+        curve2=upper_curve,
+        brush=pg.mkBrush(_color_with_alpha(pg, band.color, band.opacity)),
+    )
+    return lower_curve, upper_curve, fill
 
 
 def _default_analysis_mask_item_factory(

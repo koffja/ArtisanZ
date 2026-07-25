@@ -13,13 +13,14 @@ from artisanlib.plot_pyqtgraph_overlays import (
     RORFillOverlay,
 )
 from artisanlib.plot_comparison_overlay import ComparisonOverlay
-from artisanlib.plot_snapshot import EventMarkerSnapshot, StatisticsBackgroundSnapshot
+from artisanlib.plot_snapshot import CurveSnapshot, EventMarkerSnapshot, StatisticsBackgroundSnapshot
 
 CursorPositionCallback = Callable[[float, float, float | None], None]
 # right-click event-edit popup: receives (time, value) in plot-data coordinates
 RightClickCallback = Callable[[float, float], None]
 EventDragCallback = Callable[[EventMarkerSnapshot, float], None]
 StatisticsBackgroundDragCallback = Callable[[StatisticsBackgroundSnapshot, float, float], None]
+CurveToggleCallback = Callable[[CurveSnapshot, bool], None]
 
 
 @dataclass(slots=True)
@@ -134,6 +135,9 @@ class PyQtGraphPlotTarget:
             callback: StatisticsBackgroundDragCallback | None,
     ) -> None:
         self.renderer.set_statistics_background_drag_callback(callback)
+
+    def set_curve_toggle_callback(self, callback: CurveToggleCallback | None) -> None:
+        self.renderer.set_curve_toggle_callback(callback)
 
     def _emit_right_click(self, xdata: float, ydata: float) -> None:
         if self._right_click_callback is not None:
@@ -381,16 +385,105 @@ def _create_grid_overlay(plot: object, pg: Any) -> object | None:
 
 def _create_legend(plot: object, pg: Any) -> object | None:
     try:
-        legend = plot.addLegend(
+        from PyQt6.QtWidgets import QCheckBox, QFrame, QGraphicsProxyWidget, QHBoxLayout, QSizePolicy, QWidget
+
+        class InteractiveLegendItem(pg.LegendItem):
+            """Legend rows that toggle the corresponding curve in place."""
+
+            def __init__(self, *args: Any, **kwargs: Any) -> None:
+                super().__init__(*args, **kwargs)
+                self._curve_toggle_callback: Callable[[object, str, bool], None] | None = None
+                self._proxies: list[QGraphicsProxyWidget] = []
+
+            def set_curve_toggle_callback(
+                    self,
+                    callback: Callable[[object, str, bool], None] | None) -> None:
+                self._curve_toggle_callback = callback
+
+            def clear(self) -> None:
+                for proxy in self._proxies:
+                    self.layout.removeItem(proxy)
+                    proxy.setWidget(None)
+                    proxy.deleteLater()
+                self._proxies.clear()
+                self.items = []
+                self.rowCount = 1
+                self.updateSize()
+
+            def updateSize(self) -> None:  # noqa: N802
+                if self.size is not None:
+                    return
+                width = 0.0
+                height = 0.0
+                for proxy in self._proxies:
+                    bounds = proxy.boundingRect()
+                    width = max(width, bounds.width())
+                    height += bounds.height()
+                self.setGeometry(0, 0, width, height)
+
+            def addItem(self, item: object, name: str) -> None:  # noqa: N802
+                row_widget = QWidget()
+                row_widget.setProperty('plotLegendRow', True)
+                row_layout = QHBoxLayout(row_widget)
+                row_layout.setContentsMargins(6, 4, 6, 4)
+                row_layout.setSpacing(7)
+
+                swatch = QFrame(row_widget)
+                swatch.setObjectName('plotLegendSwatch')
+                swatch.setFixedSize(24, 3)
+                swatch.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+                swatch_color = _legend_item_color(item)
+                swatch.setStyleSheet(
+                    f'QFrame#plotLegendSwatch {{ background-color: {swatch_color}; border: 0; }}')
+                row_layout.addWidget(swatch, 0)
+
+                checkbox = QCheckBox(name, row_widget)
+                checkbox.setProperty('plotLegendCurve', True)
+                is_visible = getattr(item, 'isVisible', None)
+                checkbox.setChecked(bool(is_visible()) if callable(is_visible) else True)
+                row_layout.addWidget(checkbox, 1)
+
+                proxy = QGraphicsProxyWidget()
+                proxy.setWidget(row_widget)
+                row = max(0, self.layout.rowCount() - 1)
+                if self.layout.rowCount() > 0 and self.layout.itemAt(row, 0) is not None:
+                    row += 1
+                self.layout.addItem(proxy, row, 0, 1, max(1, self.columnCount * 2))
+                self.rowCount = max(self.rowCount, row + 1)
+                self._proxies.append(proxy)
+                self.items.append((proxy, checkbox))
+
+                callback = self._curve_toggle_callback
+                if callback is not None:
+                    checkbox.toggled.connect(
+                        lambda state, plot_item=item, label=name, handler=callback:
+                        handler(plot_item, label, bool(state)))
+                self.updateSize()
+
+        legend = InteractiveLegendItem(
             offset=(-12, -12),
             labelTextColor='#5E6B6E',
             brush=pg.mkBrush(_color_with_alpha(pg, '#FCFBF7', 0.82)),
             pen=pg.mkPen(_color_with_alpha(pg, '#CAD5D0', 0.88), width=1),
         )
+        view_box = getattr(plot, 'getViewBox', lambda: None)()
+        legend.setParentItem(view_box)
     except Exception: # pylint: disable=broad-exception-caught
         return None
     _call_if_available(legend, 'setZValue', 40)
     return legend
+
+
+def _legend_item_color(item: object) -> str:
+    options = getattr(item, 'opts', {})
+    pen = options.get('pen') if isinstance(options, dict) else None
+    color = getattr(pen, 'color', None)
+    if callable(color):
+        try:
+            return str(color().name())
+        except Exception:  # pylint: disable=broad-exception-caught
+            pass
+    return '#6B9298'
 
 
 def _configure_grid_overlay(

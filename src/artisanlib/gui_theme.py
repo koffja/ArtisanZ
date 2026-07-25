@@ -282,7 +282,7 @@ def lcd_value_stylesheet(text_color: str, background_color: str) -> str:
         'border-style: solid; '
         'border-color: transparent; '
         'border-radius: 6px; '
-        'padding: 6px 8px 6px 8px; '
+        'padding: 8px 8px 7px 8px; '
         f'color: {text_color}; '
         f'background-color: {background_color};'
         '}'
@@ -735,29 +735,34 @@ def modern_application_stylesheet(theme: ModernTheme | None = None) -> str:
             border: 0;
             border-radius: 0;
         }}
-        QFrame[recordedCurvePanel="true"] {{
-            background-color: #F1F6F3;
-            border: 1px solid #D7E3DE;
-            border-radius: 7px;
-        }}
-        QLabel[recordedCurvePanelTitle="true"] {{
-            color: {t.text_muted};
-            font-weight: 600;
-            padding: 0 0 2px 0;
-        }}
-        QCheckBox[recordedCurve="true"] {{
-            color: {t.text};
-            spacing: 5px;
-            padding: 2px 0;
-        }}
         QLCDNumber[lcdValue="true"] {{
             border-width: 0px;
             border-style: solid;
             border-color: transparent;
             border-radius: 6px;
-            padding: 6px 8px 6px 8px;
+            padding: 8px 8px 7px 8px;
             margin-top: 2px;
             margin-bottom: 0px;
+        }}
+        QWidget[plotLegendRow="true"] {{
+            background-color: transparent;
+        }}
+        QCheckBox[plotLegendCurve="true"] {{
+            color: {t.text_muted};
+            spacing: 5px;
+            min-height: 20px;
+            padding: 0;
+        }}
+        QCheckBox[plotLegendCurve="true"]::indicator {{
+            width: 13px;
+            height: 13px;
+            border: 1px solid #AABCB6;
+            border-radius: 4px;
+            background-color: #FCFBF7;
+        }}
+        QCheckBox[plotLegendCurve="true"]::indicator:checked {{
+            background-color: {t.primary};
+            border-color: {t.primary};
         }}
         QLabel[lcdLabel="true"] {{
             color: {t.text_muted};

@@ -25,6 +25,7 @@ from artisanlib.plot_snapshot import (
     GuideLineSnapshot,
     PhaseBandSnapshot,
     PhaseSummarySnapshot,
+    ProjectionBandSnapshot,
     RendererViewState,
     RoastPlotSnapshot,
     RoRFlickAnnotationSnapshot,
@@ -129,6 +130,7 @@ def _snapshot(
         phase_bands: tuple[PhaseBandSnapshot, ...] = (),
         time_ranges: tuple[TimeRangeSnapshot, ...] = (),
         phase_summaries: tuple[PhaseSummarySnapshot, ...] = (),
+        projection_bands: tuple[ProjectionBandSnapshot, ...] = (),
         areas: tuple[AreaFillSnapshot, ...] = (),
         analysis_masks: tuple[AnalysisMaskSnapshot, ...] = (),
         statistics_backgrounds: tuple[StatisticsBackgroundSnapshot, ...] = (),
@@ -141,6 +143,7 @@ def _snapshot(
         phase_bands=phase_bands,
         time_ranges=time_ranges,
         phase_summaries=phase_summaries,
+        projection_bands=projection_bands,
         areas=areas,
         analysis_masks=analysis_masks,
         statistics_backgrounds=statistics_backgrounds,
@@ -370,6 +373,47 @@ def test_projection_curves_preserve_style_visibility_routing_z_order_and_legend_
         assert item.z_value == 45
     assert ror_plot.items[1].visible is False
     assert legend.items == []
+
+
+def test_projection_bands_are_rendered_below_projection_curves() -> None:
+    temperature_plot = FakePlot()
+    created_bands: list[ProjectionBandSnapshot] = []
+
+    def band_factory(
+            band: ProjectionBandSnapshot,
+            _: RoastPlotSnapshot,
+    ) -> FakePlotDataItem:
+        created_bands.append(band)
+        return FakePlotDataItem(band.x, tuple(value or 0.0 for value in band.lower), None, 'BT projection range')
+
+    renderer = PyQtGraphSnapshotRenderer(
+        temperature_plot=temperature_plot,
+        projection_band_factory=band_factory,
+        pen_factory=_fake_pen_factory,
+    )
+    band = ProjectionBandSnapshot.from_sequences(
+        x=[0.0, 10.0],
+        lower=[140.0, 145.0],
+        upper=[140.0, 155.0],
+        color='#4E7180',
+    )
+    renderer.set_snapshot(_snapshot(
+        CurveSnapshot.from_sequences(
+            name='BT projection',
+            x=[0.0, 10.0],
+            y=[140.0, 150.0],
+            color='#4E7180',
+            line_style='-.',
+            line_width=8.0,
+            opacity=0.3,
+        ),
+        projection_bands=(band,),
+    ))
+
+    assert created_bands == [band]
+    assert renderer.projection_band_item_count() == 1
+    assert temperature_plot.added_items[0].z_value == 35
+    assert temperature_plot.items[0].z_value == 45
 
 
 def test_default_pen_factory_keeps_bt_visibly_stronger_than_secondary_curves() -> None:

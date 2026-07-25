@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+import math
 from typing import Literal, Protocol
 
 YAxisName = Literal['temperature', 'ror']
@@ -208,6 +209,7 @@ class CurveSnapshot:
     line_width: float = 1.0
     fill_to_zero: bool = False
     opacity: float = 1.0
+    toggle_key: str = ''
 
     @classmethod
     def from_sequences(
@@ -222,7 +224,8 @@ class CurveSnapshot:
             line_style: str = '-',
             line_width: float = 1.0,
             fill_to_zero: bool = False,
-            opacity: float = 1.0) -> CurveSnapshot:
+            opacity: float = 1.0,
+            toggle_key: str = '') -> CurveSnapshot:
         if len(x) != len(y):
             raise ValueError('x and y must have the same length')
         return cls(
@@ -230,6 +233,7 @@ class CurveSnapshot:
             x=tuple(float(value) for value in x),
             y=tuple(None if value is None else float(value) for value in y),
             color=color,
+            toggle_key=toggle_key,
             visible=visible,
             y_axis=y_axis,
             line_style=line_style,
@@ -237,6 +241,95 @@ class CurveSnapshot:
             fill_to_zero=fill_to_zero,
             opacity=max(0.0, min(1.0, float(opacity))),
         )
+
+
+@dataclass(frozen=True, slots=True)
+class ProjectionBandSnapshot:
+    """A translucent forecast corridor around a temperature projection."""
+
+    x: tuple[float, ...]
+    lower: tuple[float | None, ...]
+    upper: tuple[float | None, ...]
+    color: str
+    y_axis: YAxisName = 'temperature'
+    opacity: float = 0.18
+    label: str = ''
+
+    @classmethod
+    def from_sequences(
+            cls,
+            *,
+            x: Sequence[float],
+            lower: Sequence[float | None],
+            upper: Sequence[float | None],
+            color: str,
+            y_axis: YAxisName = 'temperature',
+            opacity: float = 0.18,
+            label: str = '') -> ProjectionBandSnapshot:
+        if len(x) != len(lower) or len(x) != len(upper):
+            raise ValueError('x, lower, and upper must have the same length')
+        return cls(
+            x=tuple(float(value) for value in x),
+            lower=tuple(None if value is None else float(value) for value in lower),
+            upper=tuple(None if value is None else float(value) for value in upper),
+            color=color,
+            y_axis=y_axis,
+            opacity=max(0.0, min(1.0, float(opacity))),
+            label=label,
+        )
+
+
+def projection_band_for_curve(
+        curve: CurveSnapshot,
+        temperature_axis: AxisSnapshot,
+        *,
+        max_axis_fraction: float = 0.035,
+        opacity: float = 0.18) -> ProjectionBandSnapshot | None:
+    """Build a restrained forecast corridor for BT/ET projection curves.
+
+    The corridor starts at the latest measured point and expands with forecast
+    distance. It is a visual uncertainty cue, not a statistical confidence
+    interval.
+    """
+    if curve.name not in {'BT projection', 'ET projection'} or curve.y_axis != 'temperature':
+        return None
+    if len(curve.x) < 2 or len(curve.x) != len(curve.y):
+        return None
+    finite_points = [
+        (x_value, y_value)
+        for x_value, y_value in zip(curve.x, curve.y, strict=True)
+        if math.isfinite(x_value) and y_value is not None and math.isfinite(y_value)
+    ]
+    if len(finite_points) < 2:
+        return None
+    start_x = finite_points[0][0]
+    end_x = finite_points[-1][0]
+    if math.isclose(start_x, end_x):
+        return None
+    axis_span = max(abs(float(temperature_axis.maximum) - float(temperature_axis.minimum)), 1.0)
+    max_half_width = max(axis_span * max(0.0, float(max_axis_fraction)), 1.5)
+    max_half_width = min(max_half_width, 8.0)
+    x_span = end_x - start_x
+    lower: list[float | None] = []
+    upper: list[float | None] = []
+    for x_value, y_value in zip(curve.x, curve.y, strict=True):
+        if y_value is None or not math.isfinite(y_value) or not math.isfinite(x_value):
+            lower.append(None)
+            upper.append(None)
+            continue
+        progress = max(0.0, min(1.0, (x_value - start_x) / x_span))
+        half_width = max_half_width * progress ** 1.2
+        lower.append(y_value - half_width)
+        upper.append(y_value + half_width)
+    return ProjectionBandSnapshot.from_sequences(
+        x=curve.x,
+        lower=lower,
+        upper=upper,
+        color=curve.color,
+        y_axis=curve.y_axis,
+        opacity=opacity,
+        label=f'{curve.name} range',
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -252,6 +345,7 @@ class RoastPlotSnapshot:
     temperature_axis: AxisSnapshot
     time_axis: AxisSnapshot
     ror_axis: AxisSnapshot | None = None
+    projection_bands: tuple[ProjectionBandSnapshot, ...] = ()
     events: tuple[EventMarkerSnapshot, ...] = ()
     event_values: tuple[EventValueSnapshot, ...] = ()
     phase_bands: tuple[PhaseBandSnapshot, ...] = ()
@@ -307,6 +401,8 @@ __all__ = [
     'LivePlotRenderer',
     'PhaseBandSnapshot',
     'PhaseSummarySnapshot',
+    'ProjectionBandSnapshot',
+    'projection_band_for_curve',
     'RendererViewState',
     'RoastPlotSnapshot',
     'RoRFlickAnnotationSnapshot',

@@ -122,6 +122,7 @@ from artisanlib.plot_live_frame import (
 )
 from artisanlib.plot_snapshot import (
     AxisSnapshot,
+    CurveSnapshot,
     EventMarkerSnapshot,
     RendererViewState,
     StatisticsBackgroundSnapshot,
@@ -5185,7 +5186,8 @@ class tgraphcanvas(QObject):
                             y=tuple(self.BTprojection_temp),
                             color=self.palette['bt'],
                             line_style='-.',
-                            line_width=4.0,
+                            line_width=8.0,
+                            opacity=0.3,
                         ),
                     )
                 if self.ETprojectFlag and self.ETcurve:
@@ -5196,7 +5198,8 @@ class tgraphcanvas(QObject):
                             y=tuple(self.ETprojection_temp),
                             color=self.palette['et'],
                             line_style='-.',
-                            line_width=4.0,
+                            line_width=8.0,
+                            opacity=0.3,
                         ),
                     )
                 if self.projectDeltaFlag and self.BTprojectFlag and self.DeltaBTflag:
@@ -5208,7 +5211,8 @@ class tgraphcanvas(QObject):
                             y_axis='ror',
                             color=self.palette['deltabt'],
                             line_style='-.',
-                            line_width=4.0,
+                            line_width=8.0,
+                            opacity=0.3,
                         ),
                     )
                 if self.projectDeltaFlag and self.ETprojectFlag and self.DeltaETflag:
@@ -5220,7 +5224,8 @@ class tgraphcanvas(QObject):
                             y_axis='ror',
                             color=self.palette['deltaet'],
                             line_style='-.',
-                            line_width=4.0,
+                            line_width=8.0,
+                            opacity=0.3,
                         ),
                     )
             if live_frame_curves:
@@ -6133,7 +6138,10 @@ class tgraphcanvas(QObject):
                                     if self.aw.extraCurveVisibility1[i] and len(self.extratemp1lines) > xtra_dev_lines1 and self.extratemp1lines[xtra_dev_lines1] is not None:
                                         extra_curve1_data = full_curve_data(sample_extractimex1[i], sample_extractemp1[i])
                                         extra_curve1 = LiveCurveData(
-                                            name=f'Extra {i + 1} 1',
+                                            name=self.device_name_subst(
+                                                self.extraname1[i]
+                                                if len(self.extraname1) > i and self.extraname1[i]
+                                                else f'Extra {i + 1} 1'),
                                             x=extra_curve1_data.times,
                                             y=extra_curve1_data.values,
                                             color=self.extradevicecolor1[i] if len(self.extradevicecolor1) > i else '#4E7180',
@@ -6149,7 +6157,10 @@ class tgraphcanvas(QObject):
                                     if self.aw.extraCurveVisibility2[i] and len(self.extratemp2lines) > xtra_dev_lines2 and self.extratemp2lines[xtra_dev_lines2] is not None:
                                         extra_curve2_data = full_curve_data(sample_extractimex2[i], sample_extractemp2[i])
                                         extra_curve2 = LiveCurveData(
-                                            name=f'Extra {i + 1} 2',
+                                            name=self.device_name_subst(
+                                                self.extraname2[i]
+                                                if len(self.extraname2) > i and self.extraname2[i]
+                                                else f'Extra {i + 1} 2'),
                                             x=extra_curve2_data.times,
                                             y=extra_curve2_data.values,
                                             color=self.extradevicecolor2[i] if len(self.extradevicecolor2) > i else '#4E7180',
@@ -6589,6 +6600,23 @@ class tgraphcanvas(QObject):
             return str(float2float(value))
         return str(int(round(value)))
 
+    def _handle_pyqtgraph_curve_toggle(self, curve: CurveSnapshot, state: bool) -> None:
+        """Route an in-plot legend toggle through the existing curve API."""
+        toggle_key = curve.toggle_key or curve.name
+        if toggle_key in {'ET', 'BT', 'DeltaET', 'DeltaBT'}:
+            self.showCurve(toggle_key, state)
+            return
+        if not toggle_key.startswith('extra:'):
+            return
+        parts = toggle_key.split(':', 2)
+        if len(parts) != 3:
+            return
+        try:
+            extra_device = int(parts[1])
+        except ValueError:
+            return
+        self.showExtraCurve(extra_device, parts[2], state)
+
     def enable_selected_plot_widget(self, parent: QWidget) -> None:
         if self.plot_renderer_selection.plugin.surface != 'pyqtgraph-plot':
             return
@@ -6612,6 +6640,9 @@ class tgraphcanvas(QObject):
                     temperature,
                     ror,
                 ))
+            set_curve_toggle_callback = getattr(target, 'set_curve_toggle_callback', None)
+            if callable(set_curve_toggle_callback):
+                set_curve_toggle_callback(self._handle_pyqtgraph_curve_toggle)
             # forward right-clicks on the pyqtgraph widget to the existing event-edit popup
             set_right_click_callback = getattr(target, 'set_right_click_callback', None)
             if callable(set_right_click_callback):
@@ -6742,6 +6773,10 @@ class tgraphcanvas(QObject):
             if not owns_snapshot_overlays:
                 phase_bands = getattr(target, 'phase_bands', None)
                 if phase_bands is not None and hasattr(phase_bands, 'update_phases'):
+                    set_palette = getattr(phase_bands, 'set_palette', None)
+                    palette = getattr(self, 'palette', None)
+                    if callable(set_palette) and palette is not None:
+                        set_palette(palette)
                     bounds = self._extract_phase_time_bounds()
                     phase_bands.update_phases(bounds)
                 event_markers = getattr(target, 'event_markers', None)
@@ -11250,13 +11285,13 @@ class tgraphcanvas(QObject):
                     #draw water marks for dry phase region, mid phase region, and finish phase region
                     if self.watermarksflag:
                         rect1 = patches.Rectangle((0,self.phases[0]), width=1, height=(self.phases[1]-self.phases[0]),
-                                                  transform=trans, color='#F5F5F0',alpha=0.15,  # Morandi forced
+                                                  transform=trans, color=self.palette['rect1'],alpha=0.15,
                                                   path_effects=[])
                         rect2 = patches.Rectangle((0,self.phases[1]), width=1, height=(self.phases[2]-self.phases[1]),
-                                                  transform=trans, color='#F5F0E1',alpha=0.15,  # Morandi forced
+                                                  transform=trans, color=self.palette['rect2'],alpha=0.15,
                                                   path_effects=[])
                         rect3 = patches.Rectangle((0,self.phases[2]), width=1, height=(self.phases[3] - self.phases[2]),
-                                                  transform=trans, color='#F4F2EC',alpha=0.15,  # Morandi forced
+                                                  transform=trans, color=self.palette['rect3'],alpha=0.15,
                                                   path_effects=[])
                         self.ax.add_patch(rect1)
                         self.ax.add_patch(rect2)
