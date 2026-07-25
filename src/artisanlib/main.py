@@ -128,7 +128,7 @@ except Exception: # pylint: disable=broad-except
 
 from PyQt6.QtWidgets import (QApplication, QWidget, QMessageBox, QLabel, QMainWindow, QFileDialog, QGraphicsDropShadowEffect,
                          QInputDialog, QGroupBox, QLineEdit,
-                         QSizePolicy, QVBoxLayout, QHBoxLayout, QPushButton,
+                         QSizePolicy, QVBoxLayout, QHBoxLayout, QPushButton, QCheckBox,
                          QLCDNumber, QSpinBox, QComboBox,
                          QSlider,
                          QColorDialog, QFrame, QScrollArea, QProgressDialog,
@@ -773,8 +773,9 @@ ROAST_TOOLBAR_VISUAL_METRICS: Final[dict[str, int]] = {
     'toolbar_vertical_padding': 6,
     'button_height': 44,
     'button_width': 48,
-    'brand_width': 140,
+    'brand_width': 70,
     'icon_size': 30,
+    'brand_icon_size': 18,
     'label_height': 44,
 }
 
@@ -981,7 +982,8 @@ class VMToolbar(NavigationToolbar): # pylint: disable=abstract-method
             )
         set_icon_size = getattr(button, 'setIconSize', None)
         if callable(set_icon_size):
-            set_icon_size(QSize(metrics['icon_size'], metrics['icon_size']))
+            icon_size = metrics['brand_icon_size'] if role == 'brand' else metrics['icon_size']
+            set_icon_size(QSize(icon_size, icon_size))
         target_width = metrics['brand_width'] if role == 'brand' else metrics['button_width']
         set_fixed_size = getattr(button, 'setFixedSize', None)
         if callable(set_fixed_size):
@@ -997,7 +999,7 @@ class VMToolbar(NavigationToolbar): # pylint: disable=abstract-method
                 QToolButton:hover {border:1px solid #D5DDDA; background-color:#EEF3F1;color:#2F4F55;} \
                 QToolButton:checked {border:1px solid transparent; background-color:' + selected_canvas_color + ';color:' + border_color + ';} \
                 QToolButton:checked:hover {border:1px solid #BFCAC6; background-color:' + selected_canvas_color + ';color:' + border_color + ';} \
-                QToolButton[modernToolbarRole="brand"] {min-width:' + str(metrics['brand_width']) + 'px; max-width:' + str(metrics['brand_width']) + 'px; min-height:' + str(metrics['button_height']) + 'px; max-height:' + str(metrics['button_height']) + 'px; font-weight:700; padding-left:6px; padding-right:8px; background-color:#F6FAF8;border:1px solid #CFE0DA;color:#2F5960;border-radius: 12px;} \
+                QToolButton[modernToolbarRole="brand"] {min-width:' + str(metrics['brand_width']) + 'px; max-width:' + str(metrics['brand_width']) + 'px; min-height:' + str(metrics['button_height']) + 'px; max-height:' + str(metrics['button_height']) + 'px; font-weight:700; padding-left:0; padding-right:0; background-color:#F6FAF8;border:1px solid #CFE0DA;color:#2F5960;border-radius: 12px;} \
                 QToolButton[modernToolbarRole="brand"]:hover {background-color:#EAF3F0;border:1px solid #BFD1CB;color:#234B52;}')
 
     def _apply_renderer_surface_toolbar_policy(self) -> None:
@@ -1764,7 +1766,7 @@ class ApplicationWindow(QMainWindow):
         'e7buttonbarLayout', 'e7buttondialog', 'e8buttonbarLayout', 'e8buttondialog', 'e9buttonbarLayout', 'e9buttondialog', 'e10buttonbarLayout', 'e10buttondialog',
         'keyboardmove', 'keyboardButtonList', 'keyboardmoveindex',
         'keyboardmoveflag', 'lastkeyboardcmd', 'error_dlg', 'serial_dlg', 'message_dlg', 'ETname', 'BTname', 'level1frame', 'level1layout', 'qpc', 'splitter', 'scroller', 'EventsGroupLayout',
-        'LCD2frame', 'LCD3frame', 'LCD4frame', 'LCD5frame', 'LCD6frame', 'LCD7frame', 'TPlabel', 'TPlcd', 'TPlcdFrame', 'TP2DRYlabel', 'TP2DRYframe',
+        'LCD2frame', 'LCD3frame', 'LCD4frame', 'LCD5frame', 'LCD6frame', 'LCD7frame', 'recordedCurvePanel', 'recordedCurveLayout', 'recordedCurveChecks', 'TPlabel', 'TPlcd', 'TPlcdFrame', 'TP2DRYlabel', 'TP2DRYframe',
         'DRYlabel', 'DRYlcd', 'DRYlcdFrame', 'DRY2FCslabel', 'DRY2FCsframe', 'FCslabel', 'FCslcd', 'FCslcdFrame', 'AUClabel', 'AUClcd', 'AUClcdFrame',
         'AUCLCD', 'phasesLCDs', 'extrabuttonsLayout', 'extrabuttondialogs', 'slider1', 'slider2', 'slider3', 'slider4', 'sliderLCD1', 'sliderLCD2', 'sliderLCD3',
         'sliderLCD4', 'sliderGrpBox1', 'sliderGrpBox2', 'sliderGrpBox3', 'sliderGrpBox4', 'sliderSV', 'sliderLCDSV', 'sliderGrpBoxSV', 'leftlayout',
@@ -4115,6 +4117,19 @@ class ApplicationWindow(QMainWindow):
         w = self.makeLCDbox(self.label3,self.lcd3,self.LCD3frame)
         LCDlayout.addWidget(w)
         LCDlayout.setAlignment(w,Qt.AlignmentFlag.AlignRight)
+
+        self.recordedCurveChecks:list[QCheckBox] = []
+        self.recordedCurvePanel:QFrame = QFrame()
+        self.recordedCurvePanel.setProperty('recordedCurvePanel', True)
+        self.recordedCurveLayout:QVBoxLayout = QVBoxLayout(self.recordedCurvePanel)
+        self.recordedCurveLayout.setContentsMargins(8, 7, 8, 7)
+        self.recordedCurveLayout.setSpacing(4)
+        recorded_curve_title = QLabel(QApplication.translate('Label', 'Curves'))
+        recorded_curve_title.setProperty('recordedCurvePanelTitle', True)
+        self.recordedCurveLayout.addWidget(recorded_curve_title)
+        LCDlayout.addWidget(self.recordedCurvePanel)
+        LCDlayout.setAlignment(self.recordedCurvePanel,Qt.AlignmentFlag.AlignRight)
+        self.recordedCurvePanel.setVisible(False)
 
         self.LCD4frame:ClickableLCDFrame = ClickableLCDFrame()
         self.LCD4frame.left_clicked.connect(self.toggleDeltaETlcdCurve)
@@ -12505,6 +12520,84 @@ class ApplicationWindow(QMainWindow):
     def showEventsMinieditor(self) -> None:
         self.EventsGroupLayout.setVisible(True)
 
+    @staticmethod
+    def _recorded_curve_has_data(x_values:object, y_values:object) -> bool:
+        try:
+            x = list(x_values)
+            y = list(y_values)
+        except (TypeError, ValueError):
+            return False
+        if len(x) < 2 or not y:
+            return False
+        for value in y:
+            try:
+                number = float(value)
+            except (TypeError, ValueError):
+                continue
+            if number != -1 and math.isfinite(number):
+                return True
+        return False
+
+    def refreshRecordedCurveControls(self) -> None:
+        """Rebuild historical-curve toggles from the loaded profile data."""
+        panel = getattr(self, 'recordedCurvePanel', None)
+        layout = getattr(self, 'recordedCurveLayout', None)
+        if panel is None or layout is None:
+            return
+        for checkbox in self.recordedCurveChecks:
+            checkbox.deleteLater()
+        self.recordedCurveChecks.clear()
+        while layout.count() > 1:
+            item = layout.takeAt(1)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+
+        if bool(getattr(self.qmc, 'flagon', False)):
+            panel.setVisible(False)
+            return
+
+        def add_curve(label:str, checked:bool, callback:Callable[[bool], None]) -> None:
+            checkbox = QCheckBox(label, panel)
+            checkbox.setProperty('recordedCurve', True)
+            checkbox.setChecked(checked)
+            checkbox.toggled.connect(callback)
+            layout.addWidget(checkbox)
+            self.recordedCurveChecks.append(checkbox)
+
+        if self._recorded_curve_has_data(self.qmc.timex, self.qmc.temp1):
+            add_curve(
+                QApplication.translate('Label', 'ET'),
+                bool(self.qmc.ETcurve),
+                lambda state: self.qmc.showCurve('ET', state),
+            )
+        if self._recorded_curve_has_data(self.qmc.timex, self.qmc.temp2):
+            add_curve(
+                QApplication.translate('Label', 'BT'),
+                bool(self.qmc.BTcurve),
+                lambda state: self.qmc.showCurve('BT', state),
+            )
+
+        for device_index, x_values in enumerate(getattr(self.qmc, 'extratimex', [])):
+            for channel, values_attr, names_attr, visibility in (
+                    ('T1', 'extratemp1', 'extraname1', self.extraCurveVisibility1),
+                    ('T2', 'extratemp2', 'extraname2', self.extraCurveVisibility2)):
+                values_by_device = getattr(self.qmc, values_attr, [])
+                if device_index >= len(values_by_device):
+                    continue
+                if not self._recorded_curve_has_data(x_values, values_by_device[device_index]):
+                    continue
+                names = getattr(self.qmc, names_attr, [])
+                label = names[device_index] if device_index < len(names) else f'Extra {channel[-1]}'
+                label = self.qmc.device_name_subst(str(label))
+                checked = visibility[device_index] if device_index < len(visibility) else True
+                add_curve(
+                    label,
+                    bool(checked),
+                    lambda state, index=device_index, curve=channel: self.qmc.showExtraCurve(index, curve, state),
+                )
+        panel.setVisible(bool(self.recordedCurveChecks))
+
     def updateLCDproperties(self) -> None:
         # clear intChannel cache
         self.qmc.intChannel.cache_clear()
@@ -12552,6 +12645,7 @@ class ApplicationWindow(QMainWindow):
         else:
             self.LCD6frame.setVisible(False)
             self.LCD7frame.setVisible(False)
+        self.refreshRecordedCurveControls()
         if self.qmc.LCDdecimalplaces:
             self.setLCDsDigitCount(5)
         else:

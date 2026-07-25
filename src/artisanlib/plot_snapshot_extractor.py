@@ -21,6 +21,8 @@ from artisanlib.plot_snapshot import (
     GuideLineSnapshot,
     PhaseBandSnapshot,
     PhaseSummarySnapshot,
+    ProjectionBandSnapshot,
+    projection_band_for_curve,
     RoastPlotSnapshot,
     RoRFlickAnnotationSnapshot,
     StatisticsBackgroundSnapshot,
@@ -40,9 +42,9 @@ _DEFAULT_COLORS = {
     'aucarea': '#767676',
     'grid': '#C9D2D4',
     'markers': '#5E6B6E',
-    'rect1': '#E5E5E5',
-    'rect2': '#B2B2B2',
-    'rect3': '#E5E5E5',
+    'rect1': '#D5DFD0',
+    'rect2': '#E0D0B8',
+    'rect3': '#F4F2EC',
     'specialeventtext': '#FFFFFF',
     'bgeventtext': '#5E6B6E',
 }
@@ -108,7 +110,7 @@ def build_roast_plot_snapshot(source: object) -> RoastPlotSnapshot:
             color_key='deltaet',
             visible_attr='DeltaETflag',
         ),
-    ) + _background_curves(source) + _projection_curves(source)
+    ) + _foreground_extra_curves(source) + _background_curves(source) + _projection_curves(source)
     time_axis = _time_axis(source)
     temperature_axis = _temperature_axis(source)
     return RoastPlotSnapshot(
@@ -116,6 +118,7 @@ def build_roast_plot_snapshot(source: object) -> RoastPlotSnapshot:
         time_axis=time_axis,
         temperature_axis=temperature_axis,
         ror_axis=_ror_axis(source, curves),
+        projection_bands=_projection_bands(curves, temperature_axis),
         events=events,
         event_values=_event_value_snapshots(source, events),
         phase_bands=_phase_bands(source),
@@ -145,11 +148,13 @@ def build_roast_plot_static_overlay_snapshot(
         temperature_axis: AxisSnapshot,
         ror_axis: AxisSnapshot | None = None) -> RoastPlotSnapshot:
     events = _event_markers(source)
+    curves = _background_curves(source) + _projection_curves(source)
     return RoastPlotSnapshot(
-        curves=_background_curves(source) + _projection_curves(source),
+        curves=curves,
         time_axis=time_axis,
         temperature_axis=temperature_axis,
         ror_axis=ror_axis,
+        projection_bands=_projection_bands(curves, temperature_axis),
         events=events,
         event_values=_event_value_snapshots(source, events),
         phase_bands=_phase_bands(source),
@@ -209,6 +214,122 @@ def _delta_curve(
         line_style=_line_style(source, _line_style_attr(name), '-'),
         line_width=_line_width(source, _line_width_attr(name), 1.0),
     )
+
+
+def _foreground_extra_curves(source: object) -> tuple[CurveSnapshot, ...]:
+    """Extract recorded extra-device channels for the historical plot."""
+    owner = getattr(source, 'aw', source)
+    time_series = _nested_series(source, 'extratimex')
+    if not time_series:
+        return ()
+
+    curves: list[CurveSnapshot] = []
+    used_names: set[str] = {'BT', 'ET', 'Delta BT', 'Delta ET'}
+    for device_index, x_values in enumerate(time_series):
+        if len(x_values) == 0:
+            continue
+        for channel, value_attr, smooth_attr in (
+                ('T1', 'extratemp1', 'extrastemp1'),
+                ('T2', 'extratemp2', 'extrastemp2')):
+            raw_values = _nested_series(source, value_attr, device_index)
+            smooth_values = _nested_series(source, smooth_attr, device_index)
+            values = raw_values if bool(getattr(source, 'flagon', False)) else smooth_values
+            if len(values) == 0:
+                values = raw_values
+            if len(values) == 0 or not any(_temperature_value(value) is not None for value in values):
+                continue
+
+            name = _extra_curve_name(source, device_index, channel)
+            unique_name = name
+            if unique_name in used_names:
+                unique_name = f'{name} [{channel}]'
+                suffix = 2
+                while unique_name in used_names:
+                    unique_name = f'{name} [{channel} {suffix}]'
+                    suffix += 1
+            used_names.add(unique_name)
+            visible = _indexed_bool(owner, 'extraCurveVisibility1' if channel == 'T1' else 'extraCurveVisibility2', device_index, True)
+            delta_attr = 'extraDelta1' if channel == 'T1' else 'extraDelta2'
+            color_attr = 'extradevicecolor1' if channel == 'T1' else 'extradevicecolor2'
+            style_attr = 'extralinestyles1' if channel == 'T1' else 'extralinestyles2'
+            width_attr = 'extralinewidths1' if channel == 'T1' else 'extralinewidths2'
+            y_axis: YAxisName = 'ror' if (
+                _indexed_bool(owner, delta_attr, device_index, False)
+                and getattr(source, 'delta_ax', None) is not None
+            ) else 'temperature'
+            color = _indexed_value(source, color_attr, device_index, _palette_color(source, 'xt'))
+            line_style = _indexed_value(source, style_attr, device_index, '-')
+            line_width = _indexed_float(source, width_attr, device_index, 1.0)
+            curve = _curve_from_xy(
+                source,
+                name=unique_name,
+                x=x_values,
+                y=values,
+                color=str(color),
+                visible=visible,
+                y_axis=y_axis,
+                line_style=str(line_style),
+                line_width=line_width,
+            )
+            if curve is not None:
+                curves.append(curve)
+    return tuple(curves)
+
+
+def _nested_series(source: object, attr_name: str, index: int | None = None) -> list[Any] | list[list[Any]]:
+    value = getattr(source, attr_name, None)
+    if value is None:
+        return []
+    try:
+        values = value if isinstance(value, list) else list(value)
+    except (TypeError, ValueError):
+        return []
+    if index is None:
+        return values
+    if index < 0 or index >= len(values):
+        return []
+    nested = values[index]
+    if isinstance(nested, list):
+        return nested
+    try:
+        return list(nested)
+    except TypeError:
+        return []
+
+
+def _indexed_value(source: object, attr_name: str, index: int, default: Any) -> Any:
+    values = _nested_series(source, attr_name)
+    if not isinstance(values, list) or index >= len(values):
+        return default
+    value = values[index]
+    return value if value is not None else default
+
+
+def _indexed_bool(source: object, attr_name: str, index: int, default: bool) -> bool:
+    value = _indexed_value(source, attr_name, index, default)
+    if isinstance(value, str):
+        return value.strip().lower() not in {'0', 'false', 'no', 'off'}
+    return bool(value)
+
+
+def _indexed_float(source: object, attr_name: str, index: int, default: float) -> float:
+    try:
+        return float(_indexed_value(source, attr_name, index, default))
+    except (TypeError, ValueError):
+        return default
+
+
+def _extra_curve_name(source: object, device_index: int, channel: str) -> str:
+    attr_name = 'extraname1' if channel == 'T1' else 'extraname2'
+    name = _indexed_value(source, attr_name, device_index, f'Extra {channel[-1]}')
+    name = str(name).strip() or f'Extra {channel[-1]}'
+    substitute = getattr(source, 'device_name_subst', None)
+    if callable(substitute):
+        try:
+            name = str(substitute(name)).strip() or name
+        except Exception:  # pylint: disable=broad-exception-caught
+            pass
+    return name
 
 
 def _background_curves(source: object) -> tuple[CurveSnapshot, ...]:
@@ -436,6 +557,16 @@ def _projection_curves(source: object) -> tuple[CurveSnapshot, ...]:
                 getattr(source, 'delta_ax', None) is not None),
             y_axis='ror'),
     ) if curve is not None)
+
+
+def _projection_bands(
+        curves: tuple[CurveSnapshot, ...],
+        temperature_axis: AxisSnapshot) -> tuple[ProjectionBandSnapshot, ...]:
+    return tuple(
+        band
+        for curve in curves
+        if (band := projection_band_for_curve(curve, temperature_axis)) is not None
+    )
 
 
 def _projection_curve(
@@ -783,9 +914,9 @@ def _time_ranges(source: object) -> tuple[TimeRangeSnapshot, ...]:
         phase_times.append(value if math.isfinite(value) else None)
 
     phase_specs = (
-        ('Drying', 'drying', 0, 1, '#F5F5F0'),
-        ('Maillard', 'maillard', 1, 2, '#F5F0E1'),
-        ('Development', 'development', 2, 3, '#F4F2EC'),
+        ('Drying', 'drying', 0, 1, _palette_color(source, 'rect1')),
+        ('Maillard', 'maillard', 1, 2, _palette_color(source, 'rect2')),
+        ('Development', 'development', 2, 3, _palette_color(source, 'rect3')),
     )
     ranges: list[TimeRangeSnapshot] = []
     for label, kind, start_index, end_index, color in phase_specs:
@@ -811,11 +942,14 @@ def _time_ranges(source: object) -> tuple[TimeRangeSnapshot, ...]:
 
 
 def _phase_summaries(source: object) -> tuple[PhaseSummarySnapshot, ...]:
-    if not _statistics_summary_enabled(source):
-        return ()
     phase_times = _phase_event_times(source)
     phase_indexes = _phase_event_indexes(source)
     if phase_times is None or phase_indexes is None:
+        return ()
+    # Completed historical records keep their phase bars visible even when an
+    # older settings file stored the legacy statistics-summary master flag as
+    # false. Live/incomplete roasts still honor that setting.
+    if not _statistics_summary_enabled(source) and not _completed_roast(source, phase_indexes[3]):
         return ()
     charge, dry, first_crack_start, drop = phase_times
     charge_index, dry_index, first_crack_index, drop_index = phase_indexes
@@ -831,7 +965,7 @@ def _phase_summaries(source: object) -> tuple[PhaseSummarySnapshot, ...]:
     drying_delta_start_index = (
         tp_index
         if tp_index is not None and charge_index < tp_index < dry_index
-        else charge_index
+        else max(0, charge_index)
     )
     phase_specs = (
         ('Drying', charge, dry, drying_delta_start_index, dry_index, 'roastphase1', '#F5F5F0'),
@@ -858,6 +992,10 @@ def _phase_summaries(source: object) -> tuple[PhaseSummarySnapshot, ...]:
             delta_visible=delta_visible,
         ))
     return tuple(summaries)
+
+
+def _completed_roast(source: object, drop_index: int) -> bool:
+    return not bool(getattr(source, 'flagon', False)) and drop_index > 0
 
 
 def _statistics_summary_enabled(source: object) -> bool:
@@ -947,10 +1085,11 @@ def _phase_event_times(source: object) -> tuple[float, float, float, float] | No
     if indexes is None:
         return None
     timex = _sequence(source, 'timex')
-    if any(index < 0 or index >= len(timex) for index in indexes):
+    charge_index, *phase_indexes = indexes
+    if charge_index < -1 or any(index <= 0 or index >= len(timex) for index in phase_indexes):
         return None
     try:
-        values = tuple(float(timex[index]) for index in indexes)
+        values = tuple(float(timex[max(0, index)]) for index in indexes)
     except (IndexError, TypeError, ValueError, OverflowError):
         return None
     if not all(math.isfinite(value) for value in values):
@@ -971,7 +1110,7 @@ def _phase_event_indexes(source: object) -> tuple[int, int, int, int] | None:
         drop_index = int(timeindex[6])
     except (TypeError, ValueError, OverflowError):
         return None
-    if charge_index < 0 or dry_index <= 0 or first_crack_index <= 0 or drop_index <= 0:
+    if charge_index < -1 or dry_index <= 0 or first_crack_index <= 0 or drop_index <= 0:
         return None
     return charge_index, dry_index, first_crack_index, drop_index
 
@@ -1593,9 +1732,8 @@ def _event_color(source: object, event_type: int) -> str:
 
 
 def _phase_band_color(source: object, color_key: str, index: int) -> str:  # noqa: ARG001
-    # Force Morandi light palette for phase bands — ignore saved palette overrides
-    # from .aset/QSettings to maintain the ArtisanZ visual design language.
-    return ('#F5F5F0', '#F5F0E1', '#F4F2EC')[index]
+    # Use the colors configured in Color -> Graph.
+    return _palette_color(source, color_key)
 
 
 def _background_available(source: object) -> bool:

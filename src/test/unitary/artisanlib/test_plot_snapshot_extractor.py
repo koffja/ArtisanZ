@@ -194,6 +194,30 @@ class FakeCompletedRoastCanvas(FakeOverlayCanvas):
     }
 
 
+class FakeRecordedExtraCanvas(FakeCompletedRoastCanvas):
+    extradevices = [127]
+    extratimex = [[0.0, 60.0, 120.0, 180.0]]
+    extratemp1 = [[150.0, 155.0, 160.0, 165.0]]
+    extratemp2 = [[100.0, 105.0, 110.0, 115.0]]
+    extrastemp1 = extratemp1
+    extrastemp2 = extratemp2
+    extraname1 = ['Exhaust']
+    extraname2 = ['Inlet']
+    extradevicecolor1 = ['#B87968']
+    extradevicecolor2 = ['#668B95']
+    extralinestyles1 = ['--']
+    extralinestyles2 = [':']
+    extralinewidths1 = [2.0]
+    extralinewidths2 = [1.5]
+    aw = SimpleNamespace(
+        findTP=lambda: 2,
+        extraCurveVisibility1=[True],
+        extraCurveVisibility2=[False],
+        extraDelta1=[False],
+        extraDelta2=[False],
+    )
+
+
 class FakeAnalysisCanvas(FakeCompletedRoastCanvas):
     analysisresultsstr = 'Fit result'
     segmentresultstr = 'Segment result'
@@ -258,7 +282,9 @@ def test_build_roast_plot_snapshot_extracts_foreground_event_markers() -> None:
     )
 
 
-def test_build_roast_plot_snapshot_extracts_overlay_curves_and_phase_bands() -> None:
+def test_build_roast_plot_snapshot_extracts_overlay_curves_and_phase_bands(
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(plot_snapshot_extractor, '_settings_float', lambda _keys, default: default)
     snapshot = build_roast_plot_snapshot(FakeOverlayCanvas())
     curves = {curve.name: curve for curve in snapshot.curves}
 
@@ -271,10 +297,13 @@ def test_build_roast_plot_snapshot_extracts_overlay_curves_and_phase_bands() -> 
     assert curves['BT projection'].x == (2.0, 12.0)
     assert curves['BT projection'].y == (144.0, 190.0)
     assert curves['Delta BT projection'].y_axis == 'ror'
+    assert len(snapshot.projection_bands) == 2
+    assert snapshot.projection_bands[0].lower[0] == pytest.approx(144.0)
+    assert snapshot.projection_bands[0].upper[-1] > snapshot.projection_bands[0].lower[-1]
     assert snapshot.phase_bands == (
-        PhaseBandSnapshot(minimum=100.0, maximum=150.0, color='#F5F5F0', opacity=0.3),
-        PhaseBandSnapshot(minimum=150.0, maximum=190.0, color='#F5F0E1', opacity=0.3),
-        PhaseBandSnapshot(minimum=190.0, maximum=230.0, color='#F4F2EC', opacity=0.3),
+        PhaseBandSnapshot(minimum=100.0, maximum=150.0, color='#A0A0A0', opacity=0.3),
+        PhaseBandSnapshot(minimum=150.0, maximum=190.0, color='#B0B0B0', opacity=0.3),
+        PhaseBandSnapshot(minimum=190.0, maximum=230.0, color='#C0C0C0', opacity=0.3),
     )
 
 
@@ -520,7 +549,7 @@ def test_build_roast_plot_snapshot_extracts_completed_phase_summary_and_phase_ra
         TimeRangeSnapshot(
             start=0.0,
             end=180.0,
-            color='#F5F5F0',
+            color='#A0A0A0',
             opacity=0.28,
             label='Drying',
             kind='drying',
@@ -528,7 +557,7 @@ def test_build_roast_plot_snapshot_extracts_completed_phase_summary_and_phase_ra
         TimeRangeSnapshot(
             start=180.0,
             end=420.0,
-            color='#F5F0E1',
+            color='#B0B0B0',
             opacity=0.28,
             label='Maillard',
             kind='maillard',
@@ -536,7 +565,7 @@ def test_build_roast_plot_snapshot_extracts_completed_phase_summary_and_phase_ra
         TimeRangeSnapshot(
             start=420.0,
             end=600.0,
-            color='#F4F2EC',
+            color='#C0C0C0',
             opacity=0.28,
             label='Development',
             kind='development',
@@ -573,6 +602,47 @@ def test_build_roast_plot_snapshot_extracts_completed_phase_summary_and_phase_ra
     )
 
 
+def test_build_roast_plot_snapshot_extracts_recorded_extra_curves_and_visibility() -> None:
+    snapshot = build_roast_plot_snapshot(FakeRecordedExtraCanvas())
+    curves = {curve.name: curve for curve in snapshot.curves}
+
+    assert curves['Exhaust'].x == (0.0, 60.0, 120.0, 180.0)
+    assert curves['Exhaust'].line_style == '--'
+    assert curves['Exhaust'].line_width == 2.0
+    assert curves['Exhaust'].visible
+    assert curves['Inlet'].line_style == ':'
+    assert not curves['Inlet'].visible
+
+
+def test_build_roast_plot_snapshot_keeps_duplicate_extra_names_unique() -> None:
+    class DuplicateExtraCanvas(FakeRecordedExtraCanvas):
+        extradevices = [127, 128]
+        extratimex = [FakeRecordedExtraCanvas.extratimex[0], FakeRecordedExtraCanvas.extratimex[0]]
+        extratemp1 = [FakeRecordedExtraCanvas.extratemp1[0], FakeRecordedExtraCanvas.extratemp1[0]]
+        extratemp2 = [FakeRecordedExtraCanvas.extratemp2[0], FakeRecordedExtraCanvas.extratemp2[0]]
+        extrastemp1 = extratemp1
+        extrastemp2 = extratemp2
+        extraname1 = ['Exhaust', 'Exhaust']
+        extraname2 = ['Inlet', 'Inlet']
+        extradevicecolor1 = ['#B87968', '#B87968']
+        extradevicecolor2 = ['#668B95', '#668B95']
+        extralinestyles1 = ['-', '-']
+        extralinestyles2 = ['-', '-']
+        extralinewidths1 = [1.0, 1.0]
+        extralinewidths2 = [1.0, 1.0]
+        aw = SimpleNamespace(
+            findTP=lambda: 2,
+            extraCurveVisibility1=[True, True],
+            extraCurveVisibility2=[True, True],
+            extraDelta1=[False, False],
+            extraDelta2=[False, False],
+        )
+
+    names = [curve.name for curve in build_roast_plot_snapshot(DuplicateExtraCanvas()).curves]
+
+    assert len(names) == len(set(names))
+
+
 def test_build_roast_plot_snapshot_keeps_partial_phase_ranges_during_live_roast() -> None:
     source = FakeCompletedRoastCanvas()
     source.timeindex = [0, 3, 0, 0, 0, 0, 0, 0]
@@ -583,7 +653,7 @@ def test_build_roast_plot_snapshot_keeps_partial_phase_ranges_during_live_roast(
         TimeRangeSnapshot(
             start=0.0,
             end=180.0,
-            color='#F5F5F0',
+            color='#A0A0A0',
             opacity=0.28,
             label='Drying',
             kind='drying',
@@ -599,7 +669,7 @@ def test_time_ranges_keep_charge_origin_and_reject_missing_or_non_monotonic_data
         TimeRangeSnapshot(
             start=0.0,
             end=180.0,
-            color='#F5F5F0',
+            color='#A0A0A0',
             opacity=0.28,
             label='Drying',
             kind='drying',
@@ -620,7 +690,7 @@ def test_time_ranges_keep_charge_origin_and_reject_missing_or_non_monotonic_data
         TimeRangeSnapshot(
             start=0.0,
             end=480.0,
-            color='#F5F5F0',
+            color='#A0A0A0',
             opacity=0.28,
             label='Drying',
             kind='drying',
@@ -701,7 +771,7 @@ def test_build_roast_plot_snapshot_rejects_invalid_phase_indexes_and_times() -> 
         TimeRangeSnapshot(
             start=0.0,
             end=180.0,
-            color='#F5F5F0',
+            color='#A0A0A0',
             opacity=0.28,
             label='Drying',
             kind='drying',
@@ -787,8 +857,25 @@ def test_phase_summary_visibility_flags_are_independent() -> None:
 def test_phase_summary_respects_statistics_summary_master_switch() -> None:
     class SummaryDisabledCanvas(FakeCompletedRoastCanvas):
         statssummary = False
+        flagon = True
 
     assert build_roast_plot_snapshot(SummaryDisabledCanvas()).phase_summaries == ()
+
+
+def test_completed_phase_summary_recovers_legacy_disabled_master_switch() -> None:
+    class LegacyCompletedCanvas(FakeCompletedRoastCanvas):
+        statssummary = False
+
+    assert len(build_roast_plot_snapshot(LegacyCompletedCanvas()).phase_summaries) == 3
+
+
+def test_completed_phase_summary_accepts_charge_before_first_sample() -> None:
+    class PrechargeCompletedCanvas(FakeCompletedRoastCanvas):
+        timeindex = [-1, 3, 7, 0, 0, 0, 10, 0]
+
+    snapshot = build_roast_plot_snapshot(PrechargeCompletedCanvas())
+
+    assert len(snapshot.phase_summaries) == 3
 
 
 def test_build_roast_plot_snapshot_extracts_turning_point_marker() -> None:
@@ -1222,14 +1309,14 @@ def test_charge_target_annotations_reuses_precomputed_axes():
     assert snap.y_limit_top == 888.0
 
 
-def test_phase_band_gray_fallback_uses_light_morandi_colors():
+def test_phase_band_color_uses_configured_palette():
     from artisanlib.plot_snapshot_extractor import _phase_band_color
     class FakeSource:
         palette = {'rect1': '#e5e5e5', 'rect2': '#b2b2b2', 'rect3': '#d3d3d3'}
     s = FakeSource()
-    assert _phase_band_color(s, 'rect1', 0) == '#F5F5F0'
-    assert _phase_band_color(s, 'rect2', 1) == '#F5F0E1'
-    assert _phase_band_color(s, 'rect3', 2) == '#F4F2EC'
+    assert _phase_band_color(s, 'rect1', 0) == '#e5e5e5'
+    assert _phase_band_color(s, 'rect2', 1) == '#b2b2b2'
+    assert _phase_band_color(s, 'rect3', 2) == '#d3d3d3'
 
 
 def test_background_curves_default_to_dashed_and_lower_alpha():

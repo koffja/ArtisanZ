@@ -143,6 +143,9 @@ def _polish_dialog_layout(layout: Any, *, margin: int, spacing: int) -> None:
     )
     current_spacing = layout.spacing()
     layout.setSpacing(max(current_spacing, spacing))
+    if getattr(layout, 'objectName', lambda: '')() == 'phaseFlagGrid':
+        layout.setHorizontalSpacing(18)
+        layout.setVerticalSpacing(12)
 
 
 def _polish_dialog_button(button_box: Any, button: Any) -> None:
@@ -229,7 +232,20 @@ def _polish_dialog_spin_box(spin_box: Any) -> None:
     size_hint = getattr(spin_box, 'minimumSizeHint', lambda: None)()
     hint_width = 0 if size_hint is None else int(size_hint.width())
     text_width = spin_box.fontMetrics().horizontalAdvance(spin_box.text())
-    minimum_width = max(110, hint_width, text_width + 40)
+    safe_zone = bool(spin_box.property('modernSpinBoxTextSafeZone'))
+    text_margin_right = 0
+    if safe_zone:
+        line_edit = getattr(spin_box, 'lineEdit', lambda: None)()
+        if line_edit is not None:
+            margins = line_edit.textMargins()
+            text_margin_right = max(margins.right(), 28)
+            line_edit.setTextMargins(
+                margins.left(), margins.top(), text_margin_right, margins.bottom())
+    minimum_width = max(
+        140 if safe_zone else 110,
+        hint_width,
+        text_width + text_margin_right + 40,
+    )
     maximum_width = spin_box.maximumWidth()
     if maximum_width < minimum_width:
         if bool(spin_box.property('modernExpandValueControl')):
@@ -266,7 +282,7 @@ def lcd_value_stylesheet(text_color: str, background_color: str) -> str:
         'border-style: solid; '
         'border-color: transparent; '
         'border-radius: 6px; '
-        'padding: 5px 8px 4px 8px; '
+        'padding: 6px 8px 6px 8px; '
         f'color: {text_color}; '
         f'background-color: {background_color};'
         '}'
@@ -466,6 +482,21 @@ def modern_application_stylesheet(theme: ModernTheme | None = None) -> str:
         QDialog[modernDialog="true"] QTimeEdit,
         QDialog[modernDialog="true"] QDateEdit {{
             padding-right: 32px;
+        }}
+        QDialog[modernDialog="true"] QSpinBox:disabled,
+        QDialog[modernDialog="true"] QDoubleSpinBox:disabled,
+        QDialog[modernDialog="true"] QTimeEdit:disabled,
+        QDialog[modernDialog="true"] QDateEdit:disabled {{
+            color: {t.text_muted};
+            background-color: {t.surface_muted};
+            border-color: {t.border};
+        }}
+        QDialog[modernDialog="true"] QSpinBox:disabled QLineEdit,
+        QDialog[modernDialog="true"] QDoubleSpinBox:disabled QLineEdit,
+        QDialog[modernDialog="true"] QTimeEdit:disabled QLineEdit,
+        QDialog[modernDialog="true"] QDateEdit:disabled QLineEdit {{
+            color: {t.text_muted};
+            background-color: transparent;
         }}
         QDialog[modernDialog="true"] QSpinBox[modernExpandValueControl="true"],
         QDialog[modernDialog="true"] QDoubleSpinBox[modernExpandValueControl="true"],
@@ -704,12 +735,27 @@ def modern_application_stylesheet(theme: ModernTheme | None = None) -> str:
             border: 0;
             border-radius: 0;
         }}
+        QFrame[recordedCurvePanel="true"] {{
+            background-color: #F1F6F3;
+            border: 1px solid #D7E3DE;
+            border-radius: 7px;
+        }}
+        QLabel[recordedCurvePanelTitle="true"] {{
+            color: {t.text_muted};
+            font-weight: 600;
+            padding: 0 0 2px 0;
+        }}
+        QCheckBox[recordedCurve="true"] {{
+            color: {t.text};
+            spacing: 5px;
+            padding: 2px 0;
+        }}
         QLCDNumber[lcdValue="true"] {{
             border-width: 0px;
             border-style: solid;
             border-color: transparent;
             border-radius: 6px;
-            padding: 5px 8px 4px 8px;
+            padding: 6px 8px 6px 8px;
             margin-top: 2px;
             margin-bottom: 0px;
         }}

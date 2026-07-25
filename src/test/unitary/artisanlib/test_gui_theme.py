@@ -12,6 +12,7 @@ from PyQt6.QtWidgets import (
     QDialogButtonBox,
     QGroupBox,
     QComboBox,
+    QGridLayout,
     QLineEdit,
     QSpinBox,
     QTableWidget,
@@ -50,7 +51,7 @@ def test_modern_application_stylesheet_contains_core_surfaces() -> None:
     assert 'QMenuBar' in stylesheet
     assert 'QPushButton' in stylesheet
     assert 'QLCDNumber[lcdValue="true"]' in stylesheet
-    assert 'padding: 5px 8px 4px 8px;' in stylesheet
+    assert 'padding: 6px 8px 6px 8px;' in stylesheet
     assert 'QFrame[lcdSurface="true"]' in stylesheet
     assert 'background-color: transparent;' in stylesheet
     assert 'QLabel[lcdLabel="true"]' in stylesheet
@@ -80,6 +81,8 @@ def test_modern_application_stylesheet_contains_core_surfaces() -> None:
     assert 'QDialog[modernDialogRole="roast_properties"] QTabBar::tab:selected' in stylesheet
     assert 'QDialog[modernDialogRole="roast_properties"] QFrame[modernFormSurface="true"]' in stylesheet
     assert 'QDialog[modernDialogRole="devices"] QFrame[modernDeviceHeaderBand="true"]' in stylesheet
+    assert 'QFrame[recordedCurvePanel="true"]' in stylesheet
+    assert 'QCheckBox[recordedCurve="true"]' in stylesheet
     assert 'QDialog[modernDenseDialog="true"] QTableView::item' in stylesheet
     assert 'QDialog[modernDialog="true"] QComboBox::drop-down' in stylesheet
     assert 'QDialog[modernDialog="true"] QComboBox QAbstractItemView' in stylesheet
@@ -116,7 +119,7 @@ def test_lcd_value_stylesheet_uses_self_contained_surface() -> None:
     assert 'border-radius: 6px' in stylesheet
     assert 'border-top-left-radius' not in stylesheet
     assert 'border-bottom-left-radius' not in stylesheet
-    assert 'padding: 5px 8px 4px 8px' in stylesheet
+    assert 'padding: 6px 8px 6px 8px' in stylesheet
     assert 'color: #123456' in stylesheet
     assert 'background-color: #abcdef' in stylesheet
 
@@ -416,6 +419,38 @@ def test_apply_modern_dialog_polish_preserves_explicit_narrow_widths(qapp: QAppl
     assert line_edit.minimumWidth() <= line_edit.maximumWidth()
     assert spin_box.maximumWidth() == 96
     assert spin_box.minimumWidth() <= spin_box.maximumWidth()
+
+
+def test_apply_modern_dialog_polish_reserves_spin_box_text_safe_zone(qapp: QApplication) -> None: # noqa: ARG001
+    dialog = QDialog()
+    dialog.setProperty('modernDialog', True)
+    layout = QVBoxLayout(dialog)
+    spin_box = QSpinBox()
+    spin_box.setValue(149)
+    spin_box.setSuffix(' C')
+    spin_box.setProperty('modernSpinBoxTextSafeZone', True)
+    layout.addWidget(spin_box)
+
+    apply_modern_dialog_polish(dialog)
+
+    assert spin_box.minimumWidth() >= 140
+    assert spin_box.lineEdit().textMargins().right() >= 28
+
+
+def test_apply_modern_dialog_polish_preserves_phase_flag_grid_spacing(qapp: QApplication) -> None: # noqa: ARG001
+    dialog = QDialog()
+    dialog.setProperty('modernDialog', True)
+    layout = QVBoxLayout(dialog)
+    grid = QGridLayout()
+    grid.setObjectName('phaseFlagGrid')
+    grid.setHorizontalSpacing(18)
+    grid.setVerticalSpacing(12)
+    layout.addLayout(grid)
+
+    apply_modern_dialog_polish(dialog)
+
+    assert grid.horizontalSpacing() == 18
+    assert grid.verticalSpacing() == 12
 
 
 def test_apply_modern_dialog_polish_respects_widths_with_application_stylesheet(
