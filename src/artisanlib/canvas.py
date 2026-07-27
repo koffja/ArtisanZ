@@ -15997,6 +15997,15 @@ class tgraphcanvas(QObject):
             self.aw.enableSaveActions()
             self.aw.resetCurveVisibilities()
             self.flagstart = False
+            # Stop the CHARGE button blink animation if it is still running.
+            # OnRecorder() starts it (waiting for the user to CHARGE);
+            # markCharge() stops it on a real CHARGE. But if recording stops
+            # *before* CHARGE is pressed, nothing stopped it and the looping
+            # QPropertyAnimation kept re-polishing the stylesheet at ~60 FPS
+            # (driving a CoreAnimation flush storm that stalled the whole
+            # machine). stopAnimation() is a no-op if the animation is not
+            # running, so an unconditional call is safe here.
+            self.aw.buttonCHARGE.stopAnimation()
             if self.aw.simulator:
                 self.aw.buttonSTARTSTOP.setStyleSheet(self.aw.pushbuttonstyles_simulator['STOP'])
             else:
