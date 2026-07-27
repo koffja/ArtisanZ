@@ -7,7 +7,13 @@ from typing import Literal
 
 import numpy
 
-from artisanlib.plot_snapshot import AxisSnapshot, CurveSnapshot, RoastPlotSnapshot, YAxisName
+from artisanlib.plot_snapshot import (
+    AxisSnapshot,
+    CurveSnapshot,
+    RoastPlotSnapshot,
+    YAxisName,
+    projection_band_for_curve,
+)
 from artisanlib.plot_renderer_registry import RendererSurface
 from artisanlib.plot_renderer_settings import MATPLOTLIB_RENDERER_ID, RendererSelection
 
@@ -37,6 +43,7 @@ class LiveCurveData:
     color: str = '#4E7180'
     line_style: str = '-'
     line_width: float = 1.0
+    opacity: float = 1.0
 
     @classmethod
     def from_sequences(
@@ -48,7 +55,8 @@ class LiveCurveData:
             y_axis: YAxisName = 'temperature',
             color: str = '#4E7180',
             line_style: str = '-',
-            line_width: float = 1.0) -> LiveCurveData:
+            line_width: float = 1.0,
+            opacity: float = 1.0) -> LiveCurveData:
         if len(x) != len(y):
             raise ValueError('x and y must have the same length')
         return cls(
@@ -59,6 +67,7 @@ class LiveCurveData:
             color=color,
             line_style=line_style,
             line_width=float(line_width),
+            opacity=max(0.0, min(1.0, float(opacity))),
         )
 
 
@@ -185,22 +194,29 @@ def live_frame_to_snapshot(
         time_axis: AxisSnapshot,
         temperature_axis: AxisSnapshot,
         ror_axis: AxisSnapshot | None = None) -> RoastPlotSnapshot:
+    curves = tuple(
+        CurveSnapshot(
+            name=curve.name,
+            x=curve.x,
+            y=curve.y,
+            color=curve.color,
+            y_axis=curve.y_axis,
+            line_style=curve.line_style,
+            line_width=curve.line_width,
+            opacity=curve.opacity,
+        )
+        for curve in frame.curves
+    )
     return RoastPlotSnapshot(
-        curves=tuple(
-            CurveSnapshot(
-                name=curve.name,
-                x=curve.x,
-                y=curve.y,
-                color=curve.color,
-                y_axis=curve.y_axis,
-                line_style=curve.line_style,
-                line_width=curve.line_width,
-            )
-            for curve in frame.curves
-        ),
+        curves=curves,
         time_axis=time_axis,
         temperature_axis=temperature_axis,
         ror_axis=ror_axis,
+        projection_bands=tuple(
+            band
+            for curve in curves
+            if (band := projection_band_for_curve(curve, temperature_axis)) is not None
+        ),
     )
 
 
@@ -212,6 +228,7 @@ def merge_static_plot_overlays(
         time_axis=live_snapshot.time_axis,
         temperature_axis=live_snapshot.temperature_axis,
         ror_axis=live_snapshot.ror_axis,
+        projection_bands=live_snapshot.projection_bands,
         events=static_snapshot.events,
         event_values=static_snapshot.event_values,
         phase_bands=static_snapshot.phase_bands,
