@@ -213,7 +213,7 @@ convert_from_bcd, convert_to_bcd, modbusport, ApplicationWindow = _import_modbus
 
 
 @pytest.fixture(scope='session', autouse=True)
-def ensure_modbus_qt_isolation() -> Generator[None, None, None]:
+def ensure_modbus_qt_isolation() -> Generator[None]:
     """
     Ensure Qt modules are properly isolated for modbus tests at session level.
 
@@ -244,7 +244,7 @@ def ensure_modbus_qt_isolation() -> Generator[None, None, None]:
 
 
 @pytest.fixture(autouse=True)
-def reset_modbus_state() -> Generator[None, None, None]:
+def reset_modbus_state() -> Generator[None]:
     """
     Reset all modbus module state before and after each test to ensure complete isolation.
 
@@ -392,15 +392,15 @@ class TestModbusPortInitialization:
     def test_initialization_channels_setup(self, client: Any) -> None:
         """Test that channels are properly initialized."""
         # Assert
-        assert client.channels == 10
-        assert len(client.inputDeviceIds) == 10
-        assert len(client.inputRegisters) == 10
-        assert len(client.inputFloats) == 10
-        assert len(client.inputBCDs) == 10
-        assert len(client.inputSigned) == 10
-        assert len(client.inputCodes) == 10
-        assert len(client.inputDivs) == 10
-        assert len(client.inputModes) == 10
+        assert client.channels == 12
+        assert len(client.inputDeviceIds) == 12
+        assert len(client.inputRegisters) == 12
+        assert len(client.inputFloats) == 12
+        assert len(client.inputBCDs) == 12
+        assert len(client.inputSigned) == 12
+        assert len(client.inputCodes) == 12
+        assert len(client.inputDivs) == 12
+        assert len(client.inputModes) == 12
 
         # Check default values
         assert all(slave == 0 for slave in client.inputDeviceIds)

@@ -1,6 +1,26 @@
 #
 # ABOUT
-# Stronghold XLS Roast Profile importer for Artisan
+# Stronghold XLS roast profile importer for artisan scope
+#
+# COPYRIGHT (C) 2010-2026 The artisan team represented by
+#   Marko Luther <marko.luther@gmx.net> (maintainer) and all contributors
+#
+# LICENSE
+# This program or module is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as
+# published by the Free Software Foundation, either version 3 of the
+# License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+#
+# MAINTAINER
+# Marko Luther, 2026
 
 import openpyxl
 import logging
@@ -140,7 +160,7 @@ def extractProfileStrongholdXLSX(file:str,
 
                 res['specialevents'] = [e[0] for e in events]
                 res['specialeventstype'] = [e[1] for e in events]
-                res['specialeventsvalue'] = [eventsExternal2InternalValue(int(round(float(e[2])))) for e in events]
+                res['specialeventsvalue'] = [eventsExternal2InternalValue(round(float(e[2]))) for e in events]
                 res['specialeventsStrings'] = ['']*len(events)
                 res['etypes'] = [encodeLocalStrict(etype) for etype in alt_etypesdefault]
                 res['etypes'][0] = res['etypes'][1] + 'H'

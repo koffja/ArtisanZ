@@ -35,7 +35,7 @@ import pytest
 
 
 @pytest.fixture(scope='session', autouse=True)
-def session_level_isolation() -> Generator[None, None, None]:
+def session_level_isolation() -> Generator[None]:
     """Session-level isolation fixture to prevent cross-file module contamination.
 
     This fixture ensures that external dependencies are properly isolated
@@ -504,8 +504,8 @@ class TestSerialportClass:
             ser = serialport(mock_aw)
 
             # Assert
-            # Should have 207 device functions (indices 0-206)
-            assert len(ser.devicefunctionlist) == 207
+            # Should have 212 device functions (indices 0-211)
+            assert len(ser.devicefunctionlist) == 212
             # All functions should be callable
             for i, func in enumerate(ser.devicefunctionlist):
                 assert callable(func), f"Function at index {i} is not callable"

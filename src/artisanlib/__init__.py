@@ -1,4 +1,4 @@
-__version__ = '4.2.1'
+__version__ = '5.0.1'
 __revision__ = ''
 __build__ = '0'
 import platform as _platform

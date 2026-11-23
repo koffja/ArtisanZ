@@ -1,19 +1,31 @@
 #
 # ABOUT
-# Generic asyncio communication for Artisan
-
+# Generic asyncio communication for artisan scope
+#
+# COPYRIGHT (C) 2010-2026 The artisan team represented by
+#   Marko Luther <marko.luther@gmx.net> (maintainer) and all contributors
+#
 # LICENSE
-# This program or module is free software: you can redistribute it and/or
-# modify it under the terms of the GNU General Public License as published
-# by the Free Software Foundation, either version 2 of the License, or
-# version 3 of the License, or (at your option) any later version. It is
-# provided for educational purposes and is distributed in the hope that
-# it will be useful, but WITHOUT ANY WARRANTY; without even the implied
-# warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See
-# the GNU General Public License for more details.
-
+# This program or module is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as
+# published by the Free Software Foundation, either version 3 of the
+# License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+#
+# MAINTAINER
+# Marko Luther, 2026
+#
 # AUTHOR
 # Marko Luther, 2026
+
+__lazy_modules__ = { 'contextlib', 'threading', 'asyncio', 'serial', 'serial.serialutil', 'pymodbus.transport.serialtransport' }
 
 import os
 import sys
@@ -24,7 +36,7 @@ import serial as pyserial
 from  serial.serialutil import SerialException
 
 from contextlib import suppress
-from threading import Thread
+from threading import Thread, current_thread
 from pymodbus.transport.serialtransport import SerialTransport # patched pyserial-asyncio
 from collections.abc import Callable, AsyncIterator
 from typing import Final, Any, TYPE_CHECKING
@@ -65,11 +77,35 @@ class AsyncLoopThread:
         self.__thread.start()
 
     def __del__(self) -> None:
+        self.stop(timeout=0.0)
+
+    ## A Bleak/CoreBluetooth callback must never outlive Python. Merely
+    ## scheduling loop.stop() from __del__ left the daemon thread running while
+    ## _Py_Finalize dismantled its callback objects. Explicit owners call this
+    ## method with a bounded wait; __del__ remains non-blocking as a fallback.
+    def stop(self, timeout: float | None = 5.0) -> bool:
+        if (timeout is None or timeout > 0) and current_thread() is not self.__thread and not self.__loop.is_closed():
+            async def cancel_pending_tasks() -> None:
+                current = asyncio.current_task()
+                pending = [task for task in asyncio.all_tasks() if task is not current and not task.done()]
+                for task in pending:
+                    task.cancel()
+                if pending:
+                    await asyncio.gather(*pending, return_exceptions=True)
+
+            try:
+                drain = asyncio.run_coroutine_threadsafe(cancel_pending_tasks(), self.__loop)
+                drain.result(timeout=timeout)
+            except Exception:  # pylint: disable=broad-except # the loop may already be stopping, or draining may time out
+                pass
         if not self.__loop.is_closed():
-            self.__loop.call_soon_threadsafe(self.__loop.stop)
-#        self.__thread.join()
-# WARNING: we don't join and expect the clients running on this thread to stop themself
-# (using self._running) to finally get rid of this thread to prevent hangs
+            try:
+                self.__loop.call_soon_threadsafe(self.__loop.stop)
+            except RuntimeError:
+                pass
+        if timeout is not None and current_thread() is not self.__thread:
+            self.__thread.join(timeout=max(0.0, timeout))
+        return not self.__thread.is_alive()
 
     @property
     def loop(self) -> asyncio.AbstractEventLoop:
@@ -235,8 +271,8 @@ async def create_serial_connection(
             _log.error(e)
 
     # in any case we open the serial port
-    if not transport.sync_serial.is_open:
-        transport.sync_serial.open()
+    if not transport.sync_serial.is_open: # ty:ignore[missing-union-attribute]
+        transport.sync_serial.open() # ty:ignore[missing-union-attribute]
 
     # and if clear_HUPCL, we immediately set the dtr/rts again
     if clear_HUPCL:
@@ -396,7 +432,7 @@ class AsyncComm:
         while self._running:
             try:
                 if self._serial is not None:
-#                    _log.debug('connecting to serial port: %s ...', self._serial['port'])
+                    _log.debug('connecting to serial port: %s ...', self._serial['port'])
                     connect = self.open_serial_connection(
                         url = self._serial['port'],
                         baudrate = self._serial['baudrate'],
@@ -447,7 +483,7 @@ class AsyncComm:
                 #_log.debug('serial exception: %s',e)
                 pass
             except Exception as e: # pylint: disable=broad-except
-                _log.error(e)
+                _log.error('exception 1: %s', e)
             finally:
                 self._ACK_received = None
                 self.reset_readings()
@@ -455,7 +491,7 @@ class AsyncComm:
                     try:
                         self._disconnected_handler()
                     except Exception as e: # pylint: disable=broad-except
-                        _log.error(e)
+                        _log.error('exception 2: %s', e)
                 if writer is not None:
                     try:
                         writer.close()
@@ -463,7 +499,7 @@ class AsyncComm:
                     except SerialException as e:
                         _log.debug('serial exception: %s',e)
                     except Exception as e: # pylint: disable=broad-except
-                        _log.error(e)
+                        _log.error('exception 3: %s', e)
             await asyncio.sleep(1)
 
     def send(self, message:bytes) -> None:
@@ -504,8 +540,9 @@ class AsyncComm:
                 return True
             except TimeoutError:
                 if self._logging:
-                    _log.info('write_await (msg=%s, send_timeout:%s)', message.strip(), send_timeout)
+                    _log.info('write_await (msg=%s, send_timeout:%s) timeout', message.strip(), send_timeout)
             if self.write_error_sem.locked():
+                _log.debug('write error count exhausted. Trigger disconnect.')
                 # trigger a disconnect as the allowed write errors count is exhausted
                 # disconnect by putting an empty message on the write queue which terminates the write handler
                 await self._write_queue.put(b'')

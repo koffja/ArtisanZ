@@ -1,17 +1,27 @@
 #
 # ABOUT
-# Artisan Large LCDs
-
+# artisan scope large LCDs
+#
+# COPYRIGHT (C) 2010-2026 The artisan team represented by
+#   Marko Luther <marko.luther@gmx.net> (maintainer) and all contributors
+#
 # LICENSE
-# This program or module is free software: you can redistribute it and/or
-# modify it under the terms of the GNU General Public License as published
-# by the Free Software Foundation, either version 2 of the License, or
-# version 3 of the License, or (at your option) any later version. It is
-# provided for educational purposes and is distributed in the hope that
-# it will be useful, but WITHOUT ANY WARRANTY; without even the implied
-# warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See
-# the GNU General Public License for more details.
-
+# This program or module is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as
+# published by the Free Software Foundation, either version 3 of the
+# License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+#
+# MAINTAINER
+# Marko Luther, 2026
+#
 # AUTHOR
 # Marko Luther, 2023
 
@@ -36,8 +46,9 @@ _log: Final[logging.Logger] = logging.getLogger(__name__)
 
 class LargeLCDs(ArtisanResizeablDialog):
 
-#    __slots__ = ['lcds1', 'lcds2', 'lcds1styles', 'lcds2styles', 'lcds1labelsUpper', 'lcds2labelsUpper', 'lcds1labelsLower', 'lcds2labelsLower',
-#        'lcds1frames', 'lcds2frames', 'visibleFrames', 'tight', 'layoutNr', 'swaplcds']
+    __slots__ = ['last_values1', 'last_values2', 'lcds1', 'lcds2', 'lcds1styles', 'lcds2styles', 'lcds1labelsUpper',
+        'lcds2labelsUpper', 'lcds1labelsLower', 'lcds2labelsLower',
+        'lcds1frames', 'lcds2frames', 'visibleFrames', 'tight', 'layoutNr', 'swaplcds']
 
     def __init__(self, parent:'QWidget', aw:'ApplicationWindow') -> None:
         if aw.get_os()[0] == 'RPi':
@@ -46,6 +57,8 @@ class LargeLCDs(ArtisanResizeablDialog):
             super().__init__(parent, aw) # if parent is set to None, largeLCD panels hide behind the main window in full screen mode on Windows!
         # it is assumed that both lists of lcds (lcd1 & lcd2) have the same length
         # the same is assumed for the other lists below:
+        self.last_values1:list[str|None] = []
+        self.last_values2:list[str|None] = []
         self.lcds1:list[QLCDNumber] = []
         self.lcds2:list[QLCDNumber] = []
         self.lcds1styles:list[str] = []
@@ -68,7 +81,7 @@ class LargeLCDs(ArtisanResizeablDialog):
         # we want minimize and close buttons, but no maximize buttons
         if not platform.system().startswith('Windows'):
             windowFlags = self.windowFlags()
-            windowFlags |= Qt.WindowType.Tool
+#            windowFlags |= Qt.WindowType.Tool # this keeps the window always on top which might not be what we want
             windowFlags |= Qt.WindowType.CustomizeWindowHint # needed to be able to customize the close/min/max controls (at least on macOS)
             windowFlags |= Qt.WindowType.WindowMinimizeButtonHint
             windowFlags |= Qt.WindowType.WindowCloseButtonHint # not needed on macOS, but maybe on Linux
@@ -82,11 +95,13 @@ class LargeLCDs(ArtisanResizeablDialog):
 
     @override
     def resizeEvent(self, a0:'QResizeEvent|None') -> None:
-        super().resizeEvent(a0)
+        self.setUpdatesEnabled(False)
         if a0 is not None:
             w = a0.size().width()
             h = a0.size().height()
             self.chooseLayout(w,h)
+        self.setUpdatesEnabled(True)
+        super().resizeEvent(a0)
 
     def landscapeLayout(self) -> 'QLayout':
         self.tight = False
@@ -125,7 +140,7 @@ class LargeLCDs(ArtisanResizeablDialog):
         else:
             self.lowerLabelssvisibility(True)
         if all(ll.text().strip() == '' for ll in (self.lcds1labelsUpper + self.lcds2labelsUpper)):
-            # all lower labels empty, hide them to gain space
+            # all upper labels empty, hide them to gain space
             self.upperLabelssvisibility(False)
         else:
             self.upperLabelssvisibility(True)
@@ -158,13 +173,13 @@ class LargeLCDs(ArtisanResizeablDialog):
     def lowerLabelssvisibility(self, b:bool) -> None:
         lower_labels = [val for pair in zip(self.lcds1labelsLower, self.lcds2labelsLower, strict=True) for val in pair]
         for i, ll in enumerate(lower_labels):
-            if len(self.visibleFrames) > i and ll.isHidden() == b:
+            if len(self.visibleFrames) > i and ll.isVisible() != b:
                 ll.setVisible(b)
 
     def upperLabelssvisibility(self, b:bool) -> None:
         upper_labels = [val for pair in zip(self.lcds1labelsUpper, self.lcds2labelsUpper, strict=True) for val in pair]
         for i, ll in enumerate(upper_labels):
-            if len(self.visibleFrames) > i and ll.isHidden() == b:
+            if len(self.visibleFrames) > i and ll.isVisible() != b:
                 ll.setVisible(b)
 
     # n the number of layout to be set (0: landscape, 1: portrait)
@@ -188,6 +203,7 @@ class LargeLCDs(ArtisanResizeablDialog):
             self.raise_()
             self.activateWindow()
             self.layoutNr = newLayoutNr
+            self.updateValues(self.last_values1, self.last_values2)
 
     def chooseLayout(self, w:int, h:int) -> None:
         if w > h:
@@ -240,33 +256,37 @@ class LargeLCDs(ArtisanResizeablDialog):
             except Exception: # pylint: disable=broad-except
                 pass
 
-    def updateStyles(self) -> None:
+    def updateStyles(self, update_labels:bool = True) -> None:
         for i,s in enumerate(self.lcds1styles):
-            try:
-                self.lcds1labelsUpper[i].setStyleSheet(f'QLabel {{ color: {self.aw.lcdpaletteF[s][:7]}; background-color: {self.aw.lcdpaletteB[s][:7]};}}')
-            except Exception: # pylint: disable=broad-except
-                pass
+            if update_labels:
+                try:
+                    self.lcds1labelsUpper[i].setStyleSheet(f'QLabel {{ color: {self.aw.lcdpaletteF[s][:7]}; background-color: {self.aw.lcdpaletteB[s][:7]};}}')
+                except Exception: # pylint: disable=broad-except
+                    pass
             try:
                 self.lcds1[i].setStyleSheet(f'QLCDNumber {{ color: {rgba_colorname2argb_colorname(self.aw.lcdpaletteF[s])}; background-color: {rgba_colorname2argb_colorname(self.aw.lcdpaletteB[s])};}}')
             except Exception: # pylint: disable=broad-except
                 pass
-            try:
-                self.lcds1labelsLower[i].setStyleSheet(f'QLabel {{ color: {self.aw.lcdpaletteF[s][:7]}; background-color: {self.aw.lcdpaletteB[s][:7]};}}')
-            except Exception: # pylint: disable=broad-except
-                pass
+            if update_labels:
+                try:
+                    self.lcds1labelsLower[i].setStyleSheet(f'QLabel {{ color: {self.aw.lcdpaletteF[s][:7]}; background-color: {self.aw.lcdpaletteB[s][:7]};}}')
+                except Exception: # pylint: disable=broad-except
+                    pass
         for i,s in enumerate(self.lcds2styles):
-            try:
-                self.lcds2labelsUpper[i].setStyleSheet(f'QLabel {{ color: {self.aw.lcdpaletteF[s][:7]}; background-color: {self.aw.lcdpaletteB[s][:7]};}}')
-            except Exception: # pylint: disable=broad-except
-                pass
+            if update_labels:
+                try:
+                    self.lcds2labelsUpper[i].setStyleSheet(f'QLabel {{ color: {self.aw.lcdpaletteF[s][:7]}; background-color: {self.aw.lcdpaletteB[s][:7]};}}')
+                except Exception: # pylint: disable=broad-except
+                    pass
             try:
                 self.lcds2[i].setStyleSheet(f'QLCDNumber {{ color: {rgba_colorname2argb_colorname(self.aw.lcdpaletteF[s])}; background-color: {rgba_colorname2argb_colorname(self.aw.lcdpaletteB[s])};}}')
             except Exception: # pylint: disable=broad-except
                 pass
-            try:
-                self.lcds2labelsLower[i].setStyleSheet(f'QLabel {{ color: {self.aw.lcdpaletteF[s][:7]}; background-color: {self.aw.lcdpaletteB[s][:7]};}}')
-            except Exception: # pylint: disable=broad-except
-                pass
+            if update_labels:
+                try:
+                    self.lcds2labelsLower[i].setStyleSheet(f'QLabel {{ color: {self.aw.lcdpaletteF[s][:7]}; background-color: {self.aw.lcdpaletteB[s][:7]};}}')
+                except Exception: # pylint: disable=broad-except
+                    pass
 
     # in horizontal layouts we add one more digit per LCD than needed as spacer for separation
     # in vertical layouts we add only the exact number of digits that are needed to fully display the number to save space (tight mode)
@@ -298,12 +318,18 @@ class LargeLCDs(ArtisanResizeablDialog):
             try:
                 if v1 is not None:
                     self.lcds1[i].display(v1)
+                    if len(self.last_values1) != len(self.lcds1):
+                        self.last_values1 = ['']*len(self.lcds1)
+                    self.last_values1[i] = v1
             except Exception: # pylint: disable=broad-except
                 pass
         for i,v2 in enumerate(values2):
             try:
                 if v2 is not None:
                     self.lcds2[i].display(v2)
+                    if len(self.last_values2) != len(self.lcds2):
+                        self.last_values2 = ['']*len(self.lcds2)
+                    self.last_values2[i] = v2
             except Exception: # pylint: disable=broad-except
                 pass
 
@@ -374,9 +400,9 @@ class LargeMainLCDs(LargeLCDs):
             self.lcd0.setStyleSheet(f'QLCDNumber {{ color: {rgba_colorname2argb_colorname(fc)}; background-color: {rgba_colorname2argb_colorname(bc)};}}')
 
     @override
-    def updateStyles(self) -> None:
+    def updateStyles(self, update_labels:bool = True) -> None:
         self.setTimerLCDcolor(self.aw.lcdpaletteF['timer'][:7],self.aw.lcdpaletteB['timer'][:7])
-        super().updateStyles()
+        super().updateStyles( update_labels = update_labels)
 
     @override
     def updateValues(self, values1:list[str|None], values2:list[str|None],
@@ -716,8 +742,8 @@ class LargeExtraLCDs(LargeLCDs):
         self.updateVisibilities(self.aw.extraLCDvisibility1,self.aw.extraLCDvisibility2)
 
     @override
-    def updateStyles(self) -> None:
-        super().updateStyles()
+    def updateStyles(self, update_labels:bool = True) -> None:
+        super().updateStyles(update_labels=False)
         for i,s in enumerate(self.lcds1styles):
             try:
                 self.lcds1labelsUpper[i].setStyleSheet(f'QLabel {{ color: {self.aw.qmc.extradevicecolor1[i][:7]}; background-color: {self.aw.lcdpaletteB[s][:7]};}}')
@@ -765,7 +791,7 @@ class LargePhasesLCDs(LargeLCDs):
 
     @override
     def makeLCDs(self) -> None:
-        self.lcds1styles = ['sv','sv']
+        self.lcds1styles = ['phases','phases']
         self.lcds1 = [
             self.makeLCD(self.lcds1styles[0]), # Phase 1
             self.makeLCD(self.lcds1styles[1])  # Phase 3
@@ -781,7 +807,7 @@ class LargePhasesLCDs(LargeLCDs):
             f.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
             f.customContextMenuRequested.connect(self.aw.PhaseslcdClicked)
         #
-        self.lcds2styles = ['sv','sv']
+        self.lcds2styles = ['phases','phases']
         self.lcds2 = [
             self.makeLCD(self.lcds2styles[0]), # Phase 2
             self.makeLCD(self.lcds2styles[1])  # AUC
@@ -897,7 +923,7 @@ class LargeScaleLCDs(LargeLCDs):
 
     @override
     def makeLCDs(self) -> None:
-        self.lcds1styles = ['rstimer']
+        self.lcds1styles = ['scale']
         self.lcd1 = self.makeLCD(self.lcds1styles[0])
         self.lcd1.clicked.connect(self.aw.scale_manager.tare_scale1_slot)
         self.lcds1 = [self.lcd1] # Scale 1 weight
@@ -907,7 +933,7 @@ class LargeScaleLCDs(LargeLCDs):
         self.lcds1labelsLower = [label1Lower]
         self.lcds1frames = [self.makeLCDframe(label1Upper,self.lcds1[0],label1Lower)]
         #
-        self.lcds2styles = ['rstimer']
+        self.lcds2styles = ['scale']
         self.lcd2 = self.makeLCD(self.lcds2styles[0])
         self.lcd2.clicked.connect(self.aw.scale_manager.tare_scale2_slot)
         self.lcds2 = [self.lcd2] # Scale 2 weight
@@ -917,12 +943,17 @@ class LargeScaleLCDs(LargeLCDs):
         self.lcds2labelsLower = [label2Lower]
         self.lcds2frames = [self.makeLCDframe(label2Upper,self.lcds2[0],label2Lower)]
         ##
-        self.updateVisiblitiesScale()
+        self.setVisiblitiesScale() # calling updateVisibilitiesScales() instead would loop via relayout()
         self.updateStyles()
         self.updateDecimals()
 
+    def setVisiblitiesScale(self) -> None:
+        self.updateVisibilities([self.aw.scale1_model is not None],[self.aw.scale2_model is not None])
+
     def updateVisiblitiesScale(self) -> None:
-        self.updateVisibilities([True],[True])
+        self.setVisiblitiesScale()
+        self.reLayout() # should not be called from makeLCDs as this triggers a loop
+        self.updateValues(self.last_values1, self.last_values2)
 
     @override
     def updateDecimals(self) -> None:
@@ -942,6 +973,7 @@ class LargeScaleLCDs(LargeLCDs):
         settings = QSettings()
         #save window geometry
         settings.setValue('ScaleLCDGeometry',self.saveGeometry())
+        self.aw.closeLargeScaleLCDs()
         self.aw.largeScaleLCDs_dialog = None
         self.aw.LargeScaleLCDsFlag = False
         self.aw.scalelcdsAction.setChecked(False)

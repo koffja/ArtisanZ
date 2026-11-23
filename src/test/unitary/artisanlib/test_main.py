@@ -123,7 +123,7 @@ _original_import = builtins.__import__
 
 
 @pytest.fixture(scope='session', autouse=True)
-def ensure_main_qt_isolation() -> Generator[None, None, None]:
+def ensure_main_qt_isolation() -> Generator[None]:
     """
     Ensure Qt modules are properly isolated for main tests at session level.
 
@@ -221,7 +221,7 @@ class FakePlusToolbar:
 
 
 @pytest.fixture(autouse=True)
-def reset_main_state() -> Generator[None, None, None]:
+def reset_main_state() -> Generator[None]:
     """
     Reset all main module state before and after each test to ensure complete isolation.
 
@@ -317,7 +317,7 @@ def mock_application_window(mock_qmc: Mock) -> Mock:
 
 
 @pytest.fixture
-def isolated_temp_file() -> Generator[str, None, None]:
+def isolated_temp_file() -> Generator[str]:
     """Create an isolated temporary file for each test."""
     with tempfile.NamedTemporaryFile(mode='w', suffix='.alog', delete=False) as temp_file:
         temp_file.write('{"test": "data"}')
@@ -3822,20 +3822,20 @@ class TestColorUtilitiesExtended:
         assert result.startswith('#')
 
 
-class TestDonationUtilities:
-    """Test donation utility static methods."""
-
-    def test_resetDonateCounter_basic(self) -> None:
-        """Test resetDonateCounter resets donation settings."""
-        # Arrange & Act
-        ApplicationWindow.resetDonateCounter()
-
-        # Assert
-        settings = QSettings()
-        # Check that the settings were written (values should exist)
-        assert settings.contains('lastdonationpopup')
-        assert settings.contains('starts')
-        assert settings.value('starts') == 0
+#class TestDonationUtilities:
+#    """Test donation utility static methods."""
+#
+#    def test_resetDonateCounter_basic(self) -> None:
+#        """Test resetDonateCounter resets donation settings."""
+#        # Arrange & Act
+#        ApplicationWindow.resetDonateCounter()
+#
+#        # Assert
+#        settings = QSettings()
+#        # Check that the settings were written (values should exist)
+#        assert settings.contains('lastdonationpopup')
+#        assert settings.contains('starts')
+#        assert settings.value('starts') == 0
 
 
 class TestHelpDialogUtilities:

@@ -1,19 +1,31 @@
 #
 # ABOUT
-# WebSocket support for Artisan
-
+# WebSocket support for artisan scope
+#
+# COPYRIGHT (C) 2010-2026 The artisan team represented by
+#   Marko Luther <marko.luther@gmx.net> (maintainer) and all contributors
+#
 # LICENSE
-# This program or module is free software: you can redistribute it and/or
-# modify it under the terms of the GNU General Public License as published
-# by the Free Software Foundation, either version 2 of the License, or
-# version 3 of the License, or (at your option) any later versison. It is
-# provided for educational purposes and is distributed in the hope that
-# it will be useful, but WITHOUT ANY WARRANTY; without even the implied
-# warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See
-# the GNU General Public License for more details.
-
+# This program or module is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as
+# published by the Free Software Foundation, either version 3 of the
+# License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+#
+# MAINTAINER
+# Marko Luther, 2026
+#
 # AUTHOR
 # Marko Luther, 2024
+
+__lazy_modules__ = { 'json', 'random', 'threading', 'contextlib', 'socket', 'websockets', 'asyncio' }
 
 import sys
 import random
@@ -24,7 +36,6 @@ import websockets
 import contextlib
 import socket
 
-from contextlib import suppress
 from threading import Thread
 from typing import Final, Any, TYPE_CHECKING
 
@@ -328,7 +339,7 @@ class wsport:
             for task in asyncio.all_tasks(loop):
                 task.cancel()
             for t in [t for t in asyncio.all_tasks(loop) if not (t.done() or t.cancelled())]:
-                with suppress(asyncio.CancelledError):
+                with contextlib.suppress(asyncio.CancelledError):
                     loop.run_until_complete(t)
             self.aw.sendmessageSignal.emit(QApplication.translate('Message', '{} disconnected').format('WebSocket'),True,None)
         except Exception as e:  # pylint: disable=broad-except

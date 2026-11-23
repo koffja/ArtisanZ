@@ -1,17 +1,37 @@
 #
 # ABOUT
-# HiBean JSON roast profile importer for Artisan
+# HiBean JSON roast profile importer for artisan scope
+#
+# COPYRIGHT (C) 2010-2026 The artisan team represented by
+#   Marko Luther <marko.luther@gmx.net> (maintainer) and all contributors
+#
+# LICENSE
+# This program or module is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as
+# published by the Free Software Foundation, either version 3 of the
+# License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+#
+# MAINTAINER
+# Marko Luther, 2026
 
-#from pathlib import Path
-#import os
+__lazy_modules__ = { 'json' }
+
 import time as libtime
 import json
-#import re
 import logging
 from collections.abc import Callable
 from typing import Final
 
 from PyQt6.QtCore import QDateTime, Qt
+from PyQt6.QtWidgets import QApplication
 
 from artisanlib.util import encodeLocalStrict, encodeLocal, weight_units, weight_units_lower
 from artisanlib.atypes import ProfileData
@@ -45,14 +65,14 @@ def extractProfileHiBeanJSON(file:str,
             roasttime:str|None = encodeLocal(date_time.time().toString())
             if roasttime is not None:
                 res['roasttime'] = roasttime
-            res['roastepoch'] = int(date_time.toSecsSinceEpoch())
+            res['roastepoch'] = date_time.toSecsSinceEpoch()
             res['roasttzoffset'] = libtime.timezone
 
         res['roastingnotes'] = hibean_data.get('notes', '')
 
         roast_context = hibean_data.get('roastContext', {})
 
-        res['title'] = roast_context.get('name', '')
+        res['title'] = roast_context.get('name', QApplication.translate('Scope Title', 'Roaster Scope'))
 
         res['weight'] = [0,0,weight_units[0]]
         res['weight'][0] = roast_context.get('greenBeanWeight', {}).get('value', 0.0) if roast_context.get('greenBeanWeight') is not None else 0.0
@@ -110,7 +130,7 @@ def extractProfileHiBeanJSON(file:str,
             roaster_params = data_point.get('roasterParams', [])
 
             try:
-                fan:int = int(round(next((float(param.get('value', 0.0)) for param in roaster_params if param.get('key') == 'FC'), 0.0)))
+                fan:int = round(next((float(param.get('value', 0.0)) for param in roaster_params if param.get('key') == 'FC'), 0.0))
                 if fan != last_fan:
                     last_fan = fan
                     specialeventsvalue.append(eventsExternal2InternalValue(fan))
@@ -121,7 +141,7 @@ def extractProfileHiBeanJSON(file:str,
                 pass
 
             try:
-                heat:int = int(round(next((float(param.get('value', 0.0)) for param in roaster_params if param.get('key') == 'HP'), 0.0)))
+                heat:int = round(next((float(param.get('value', 0.0)) for param in roaster_params if param.get('key') == 'HP'), 0.0))
                 if heat != last_heat:
                     last_heat = heat
                     specialeventsvalue.append(eventsExternal2InternalValue(heat))
@@ -132,7 +152,7 @@ def extractProfileHiBeanJSON(file:str,
                 pass
 
             try:
-                drum:int = int(round(next((float(param.get('value', 0.0)) for param in roaster_params if param.get('key') == 'RC'), 0.0)))
+                drum:int = round(next((float(param.get('value', 0.0)) for param in roaster_params if param.get('key') == 'RC'), 0.0))
                 if drum != last_drum:
                     last_drum = drum
                     specialeventsvalue.append(eventsExternal2InternalValue(drum))
@@ -143,7 +163,7 @@ def extractProfileHiBeanJSON(file:str,
                 pass
 
             try:
-                ts:int = int(round(next((float(param.get('value', 0.0)) for param in roaster_params if param.get('key') == 'TS'), 0.0)))
+                ts:int = round(next((float(param.get('value', 0.0)) for param in roaster_params if param.get('key') == 'TS'), 0.0))
                 if ts != last_ts:
                     last_ts = ts
                     specialeventsvalue.append(eventsExternal2InternalValue(ts))

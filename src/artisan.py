@@ -1,6 +1,26 @@
 #!/usr/bin/env python3
-"""Start the application.
+"""atart the application
 """
+
+# COPYRIGHT (C) 2010-2026 The artisan team represented by
+#   Marko Luther <marko.luther@gmx.net> (maintainer) and all contributors
+#
+# LICENSE
+# This program or module is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as
+# published by the Free Software Foundation, either version 3 of the
+# License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+#
+# MAINTAINER
+# Marko Luther, 2026
 
 import os
 import warnings
@@ -18,6 +38,9 @@ os.environ['NUMEXPR_NUM_THREADS'] = '1'   # covers numexpr (used by some pandas 
 # deactivate defusedexml in OPENPYXL as it might not be installed or bundled
 os.environ['OPENPYXL_DEFUSEDXML'] = 'False'
 
+# suppress Qt 6.12 warning "qt.gui.icc: fromIccProfile: Failed to parse description" on starting on a monitor with broken ICC color profile
+# (eg. ASCII count not containing the terminating NULL as on some Lenovo's default profiles)
+os.environ['QT_LOGGING_RULES'] = 'qt.gui.icc.warning=false'
 
 from artisanlib import main, command_utility
 

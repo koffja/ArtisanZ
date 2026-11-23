@@ -2,16 +2,25 @@
 # ABOUT
 # CI install shell script for Artisan macOS builds
 #
-# LICENSE
-# This program or module is free software: you can redistribute it and/or
-# modify it under the terms of the GNU General Public License as published
-# by the Free Software Foundation, either version 2 of the License, or
-# version 3 of the License, or (at your option) any later versison. It is
-# provided for educational purposes and is distributed in the hope that
-# it will be useful, but WITHOUT ANY WARRANTY; without even the implied
-# warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See
-# the GNU General Public License for more details.
+# COPYRIGHT (C) 2010-2026 The Artisan team represented by
+#   Marko Luther <marko.luther@gmx.net> (maintainer) and all contributors
 #
+# LICENSE
+# This program or module is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as
+# published by the Free Software Foundation, either version 3 of the
+# License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+#
+# MAINTAINER
+# Marko Luther, 2026
 # AUTHOR
 # Dave Baxter, Marko Luther 2025
 
@@ -20,33 +29,6 @@ set -e # reduced logging
 
 echo "** Running install-macos.sh"
 #.ci/silence.sh brew update # this seems to help to work around some homebrew issues; and fails on others
-
-# upgrade Python version when PYUPGRADE_MACOS_V exists and has a value
-if [ -n "${PYUPGRADE_MACOS_V:-}" ]; then
-    # first deactivate current venv
-    source ${VIRTUAL_ENV}/bin/activate
-    deactivate
-    # brew update Python
-    brew update
-    brew upgrade python # no "brew cleanup" here, not to delete libs needed by curl!
-    # relink Python
-    brew unlink python@${PYTHON_V} && brew link --force --overwrite python@${PYTHON_V}
-    hash -r
-    brew install jq
-    # add path
-    export PATH="$(brew --cellar python@${PYTHON_V})/$(brew info --json python@${PYTHON_V} | jq -r '.[0].installed[0].version')/bin:${PATH}"
-    echo $PATH
-    which python3
-    python3 --version
-    brew reinstall openssl # needed to get the ssl certificates properly installed for artisan.plus communication
-
-    # create new venv
-    python3 -m venv /Users/appveyor/venv${PYUPGRADE_MACOS_V}
-    source /Users/appveyor/venv${PYUPGRADE_MACOS_V}/bin/activate
-    # update symbolic link to point to our new venv
-    ln -vfns /Users/appveyor/venv${PYUPGRADE_MACOS_V} /Users/appveyor/venv${PYTHON_V}
-    export PATH=/Users/appveyor/venv${PYUPGRADE_MACOS_V}/bin:${PATH} # not exported?
-fi
 
 hash -r
 uname -srv

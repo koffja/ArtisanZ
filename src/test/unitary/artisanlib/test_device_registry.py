@@ -1,0 +1,75 @@
+"""Unit tests for artisanlib.device_registry module.
+
+Tests the device list extraction, category sets, and helper functions.
+All data is static — no Qt, no fixtures, no mocks.
+"""
+
+from artisanlib.device_registry import (DEVICES, BINARY_DEVICES, PHIDGET_DEVICES,
+    get_device_name, is_binary_device, is_non_serial_device,
+    is_phidget_device, is_special_device)
+
+
+def test_devices_length() -> None:
+    assert len(DEVICES) == 211
+
+
+def test_device_id_is_index_plus_one() -> None:
+    assert get_device_name(1) == 'Omega HH806AU'
+    assert get_device_name(18) == 'NONE'
+    assert get_device_name(138) == 'Kaleido BT/ET'
+    assert get_device_name(209) == 'SR900 BT/ET'
+    assert DEVICES[205] == '+MQTT 1112'
+
+
+def test_sr900_devices() -> None:
+    # the SR900 main device plus the two +devices carrying its readback channels
+    assert get_device_name(209) == 'SR900 BT/ET'
+    assert get_device_name(210) == '+SR900 Heater/Fan'
+    assert get_device_name(211) == '+SR900 State/Time'
+    # the roaster is reached over BLE, never over a serial port
+    assert is_non_serial_device(209)
+    assert not is_phidget_device(209)
+
+
+def test_get_device_name_edge_cases() -> None:
+    assert get_device_name(1) == DEVICES[0]
+    assert get_device_name(206) == DEVICES[205]
+
+
+def test_phidget_devices() -> None:
+    for did in PHIDGET_DEVICES:
+        assert is_phidget_device(did)
+        assert is_non_serial_device(did)
+    assert not is_phidget_device(138)
+    assert not is_phidget_device(1)
+
+
+def test_known_non_serial_devices() -> None:
+    assert is_non_serial_device(138)
+    assert is_non_serial_device(142)
+    assert not is_non_serial_device(1)
+
+
+def test_all_devices_index_consistent() -> None:
+    for i, name in enumerate(DEVICES):
+        assert get_device_name(i + 1) == name
+
+
+def test_special_devices() -> None:
+    assert is_special_device(18)
+    assert is_special_device(25)
+    assert is_special_device(50)
+    assert not is_special_device(138)
+
+
+def test_binary_devices() -> None:
+    assert len(BINARY_DEVICES) > 0
+    for did in BINARY_DEVICES:
+        assert is_binary_device(did)
+    assert not is_binary_device(138)
+
+
+def test_category_sets_no_overlap_serial_vs_non_serial() -> None:
+    known_serial = {1, 2, 3}
+    for did in known_serial:
+        assert not is_non_serial_device(did)

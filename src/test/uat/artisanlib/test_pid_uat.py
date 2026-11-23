@@ -192,7 +192,7 @@ with patch.dict('sys.modules', mock_modules, clear=False):
 
 
 @pytest.fixture(autouse=True)
-def reset_pid_uat_state() -> Generator[None, None, None]:
+def reset_pid_uat_state() -> Generator[None]:
     """
     Reset all PID UAT module state before and after each test to ensure complete isolation.
 
@@ -463,7 +463,7 @@ class TestPIDUserAcceptance:
         This ensures the derivative filter helps stabilize control in noisy environments.
         """
         with patch('artisanlib.pid.QSemaphore', return_value=_create_mock_semaphore()), patch(
-            'artisanlib.pid.LiveSosFilter', return_value=_create_mock_live_sos_filter()
+            'artisanlib.filters.LiveSosFilter', return_value=_create_mock_live_sos_filter()
         ):
             from artisanlib.pid import PID
 

@@ -1,19 +1,31 @@
 #
 # ABOUT
-# Oribter support for Artisan
-
+# Oribter support for artisan scope
+#
+# COPYRIGHT (C) 2010-2026 The artisan team represented by
+#   Marko Luther <marko.luther@gmx.net> (maintainer) and all contributors
+#
 # LICENSE
-# This program or module is free software: you can redistribute it and/or
-# modify it under the terms of the GNU General Public License as published
-# by the Free Software Foundation, either version 2 of the License, or
-# version 3 of the License, or (at your option) any later versison. It is
-# provided for educational purposes and is distributed in the hope that
-# it will be useful, but WITHOUT ANY WARRANTY; without even the implied
-# warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See
-# the GNU General Public License for more details.
-
+# This program or module is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as
+# published by the Free Software Foundation, either version 3 of the
+# License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+#
+# MAINTAINER
+# Marko Luther, 2026
+#
 # AUTHOR
 # Marko Luther, 2026
+
+__lazy_modules__ = { 'asyncio' }
 
 import io
 import os
@@ -137,13 +149,15 @@ class Orbiter(AsyncComm):
     # getBT triggers fetching a complete set of new readings
     # time is the preheat/roasting/cooling time in seconds send along the sync command to the machine
     def getBT(self, aw:'ApplicationWindow|None' = None, time:int = 0) -> float:
-        self.send_sync_await(time)
-        # check for critical cut of temperature and turn OFF the heater if needed
-        if aw is not None and self._BT > self.BT_CUTOFF_TEMP:
-            orbiter_cmd:bytes = bytes.fromhex('0D') # heater
-            orbiter_data:bytes = b'\x00\x00' # 0%
-            orbiter_param:bytes = b'\x00'
-            aw.orbiterSendMessageSignal.emit(orbiter_cmd, orbiter_data, orbiter_param, time)
+        if aw is not None and aw.qmc.flagon and not (aw.qmc.timeindex[0]>-1 and not aw.qmc.flagstart):
+            # don't send SYNC if OFF or after CHARGE when recording was already finished as time==0 in this cases and that might confuse the machine leading to a disconnect
+            self.send_sync_await(time) # don't send out a request while OFF as then the time == 0 and machine disconnects
+            # check for critical cut of temperature and turn OFF the heater if needed
+            if self._BT > self.BT_CUTOFF_TEMP:
+                orbiter_cmd:bytes = bytes.fromhex('0D') # heater
+                orbiter_data:bytes = b'\x00\x00' # 0%
+                orbiter_param:bytes = b'\x00'
+                aw.orbiterSendMessageSignal.emit(orbiter_cmd, orbiter_data, orbiter_param, time)
         return self._BT
     def getET(self) -> float:
         return self._ET
@@ -329,8 +343,13 @@ class Orbiter(AsyncComm):
                             (b'\x03', b'\x00\x00', b'\x00'),
                             (b'\x0F', b'\x00\x00', b'\x00'),
                             (b'\x06', b'\x00\x00', b'\x00')]:
-                        self.send_msg_await(cmd, data, param)
+                        res = self.send_msg_await(cmd, data, param)
                         libtime.sleep(.3)
+                        if not res:
+                            _log.debug('sending disconnect command %s failed', cmd)
+                            # sent failed, we wait a moment longer and retry one time
+                            libtime.sleep(.2)
+                            self.send_msg_await(cmd, data, param)
         except Exception as e: # pylint: disable=broad-except
             _log.exception(e)
         self.stop()
@@ -368,6 +387,14 @@ def extractProfileOrbiter(f:IO[bytes],
         alt_etypesdefault:list[str],
         _artisanflavordefaultlabels:list[str],
         eventsExternal2InternalValue:Callable[[int],float]) -> ProfileData:
+
+    def bytes2reading(b:bytes) -> float:
+        try:
+            return float(int.from_bytes(b, 'little', signed = True))
+        except Exception: # pylint: disable=broad-except
+            pass
+        return -1.0
+
     res:ProfileData = ProfileData() # the interpreted data set
     i = 0
     total_packets:int = 0
@@ -403,7 +430,7 @@ def extractProfileOrbiter(f:IO[bytes],
             data = packet[2:25]
             data_crc = packet[25]
             computed_crc = compute_crc(data)
-            if header == b'\xff\xff' and int(data_crc) == computed_crc:
+            if header == b'\xff\xff' and data_crc == computed_crc:
                 count = packet[2:4]
                 time = packet[4:6]
                 if total_packets == 0 and count == b'\x00\x00':
@@ -432,17 +459,17 @@ def extractProfileOrbiter(f:IO[bytes],
                     roasttime:str|None = encodeLocal(date.time().toString())
                     if roasttime is not None:
                         res['roasttime'] = roasttime
-                    res['roastepoch'] = int(date.toSecsSinceEpoch())
+                    res['roastepoch'] = date.toSecsSinceEpoch()
                     res['roasttzoffset'] = libtime.timezone
                     title = (title_raw + data[10:-1]).rstrip(b'\x00').decode('utf-8')
                     res['title'] = encodeLocalStrict(title)
                 elif not footer and i < total_packets - 2: # ignore data beyond total_packets and only process data between header and the two footers
                     # regular data
-                    BT = int.from_bytes(packet[6:8], 'little', signed = False)
-                    DT = int.from_bytes(packet[8:10], 'little', signed = False)
-                    IT = int.from_bytes(packet[10:12], 'little', signed = False)
-                    ET = int.from_bytes(packet[12:14], 'little', signed = False)
-#                    BT_target = int.from_bytes(packet[14:16], 'little', signed = False)
+                    BT = bytes2reading(packet[6:8])
+                    DT = bytes2reading(packet[8:10])
+                    IT = bytes2reading(packet[10:12])
+                    ET = bytes2reading(packet[12:14])
+#                    BT_target = bytes2reading(packet[14:16])
 
                     air = int.from_bytes(packet[16:18], 'little', signed = False)
                     heater = packet[20] * 10
@@ -505,11 +532,11 @@ def extractProfileOrbiter(f:IO[bytes],
         res['extratimex'] = [timex[:],timex[:],timex[:],timex[:]]
 
         res['extraname1'] = ['IT', 'Sound', '{2}', '{0}']
-        res['extratemp1'] = [extra1, extra3, extra5, extra7]
+        res['extratemp1'] = [replace_duplicates(extra1), extra3, extra5, extra7]
         res['extramathexpression1'] = ['', '', '', '']
 
         res['extraname2'] = ['DT', '{1}', '{3}', 'RoR']
-        res['extratemp2'] = [extra2, extra4, extra6, extra8]
+        res['extratemp2'] = [replace_duplicates(extra2), extra4, extra6, extra8]
         res['extramathexpression2'] = ['', '', '', '']
 
         res['extraLCDvisibility1'] = [True, False, False, True, True, True, True, True, True, True]
@@ -559,6 +586,14 @@ def saveOrbiterROP(filename:str, profile:ProfileData) -> bool:
 
 # store given profile in Orbiter format to outfile
 def saveOrbiter(filename:str, outfile:IO[bytes], profile:ProfileData) -> bool:
+
+    def reading2bytes(v:float) -> bytes:
+        try:
+            return round(v).to_bytes(2, 'little', signed = True)
+        except Exception: # pylint: disable=broad-except
+            pass
+        return b'\xff\xff' # corresponds to -1
+
     readings:list[bytes] = []
     try:
         default_title:str = QApplication.translate('Scope Title', 'Roaster Scope')
@@ -575,8 +610,8 @@ def saveOrbiter(filename:str, outfile:IO[bytes], profile:ProfileData) -> bool:
             weight_unit_idx = weight_units.index(unit)
         except ValueError:
             weight_unit_idx = 0
-        batchsize:int = int(round(convertWeight(float(weight[0]), weight_unit_idx, 0))) # in g
-        roasted_weight = int(round(convertWeight(float(weight[1]), weight_unit_idx, 0))) # in g
+        batchsize:int = round(convertWeight(float(weight[0]), weight_unit_idx, 0)) # in g
+        roasted_weight = round(convertWeight(float(weight[1]), weight_unit_idx, 0)) # in g
         #
         timeindex:list[int] = profile.get('timeindex', [-1,0,0,0,0,0,0,0])
         timex:list[float] = profile.get('timex', [])
@@ -623,11 +658,11 @@ def saveOrbiter(filename:str, outfile:IO[bytes], profile:ProfileData) -> bool:
                 if len(specialevents)>0 and idx >= specialevents[0]:
                     # we passed the next special event
                     if specialeventstype[0] == 0:
-                        damper = int(round(events_internal_to_external_value(specialeventsvalue[0])/10))
+                        damper = round(events_internal_to_external_value(specialeventsvalue[0])/10)
                     elif specialeventstype[0] == 1:
                         drum = events_internal_to_external_value(specialeventsvalue[0])
                     elif specialeventstype[0] == 3:
-                        heater = int(round(events_internal_to_external_value(specialeventsvalue[0])/10))
+                        heater = round(events_internal_to_external_value(specialeventsvalue[0])/10)
                     # we consume the event
                     specialevents = specialevents[1:]
                     specialeventstype = specialeventstype[1:]
@@ -653,19 +688,19 @@ def saveOrbiter(filename:str, outfile:IO[bytes], profile:ProfileData) -> bool:
                     event = 7
                     DROP = True
 
-                tx_new = int(round(tx - time_offset))
+                tx_new = round(tx - time_offset)
 
                 if tx_new != time:
                     # ignore readings with timestamps already used to prevent the introduction of duplicates
                     time = tx_new
 
                     values:bytes = time.to_bytes(2, 'little') + \
-                        int(float(temp2[idx])).to_bytes(2, 'little') + \
-                        (int(float(extratemp2[0][idx])).to_bytes(2, 'little') if len(extratemp2)>0 else b'\x00\x00') + \
-                        (int(float(extratemp1[0][idx])).to_bytes(2, 'little') if len(extratemp1)>0 else b'\x00\x00') + \
-                        int(float(temp1[idx])).to_bytes(2, 'little') + \
+                        reading2bytes(temp2[idx]) + \
+                        (reading2bytes(extratemp2[0][idx]) if len(extratemp2)>0 else b'\x00\x00') + \
+                        (reading2bytes(extratemp1[0][idx]) if len(extratemp1)>0 else b'\x00\x00') + \
+                        reading2bytes(temp1[idx]) + \
                         b'\x00\x00' + \
-                        (int(float(extratemp1[3][idx])).to_bytes(2, 'little') if len(extratemp1)>3 else b'\x00\x00') + \
+                        (reading2bytes(extratemp1[3][idx]) if len(extratemp1)>3 else b'\x00\x00') + \
                         b'\x00\x00' + \
                         heater.to_bytes(1, 'little') + \
                         drum.to_bytes(1, 'little') + \
@@ -677,8 +712,8 @@ def saveOrbiter(filename:str, outfile:IO[bytes], profile:ProfileData) -> bool:
 
         title_length:int = 30
         title_bytes = to_ascii(title).encode('utf-8')[:title_length].ljust(title_length, b'\00')
-        preheat_temperature = int(round(temp2[CHARGE_idx] if len(temp2)>CHARGE_idx else 0))
-        total_time_seconds:int = (int(round(timex[DROP_idx] - timex[CHARGE_idx])) if len(timex) > DROP_idx > CHARGE_idx else 0)
+        preheat_temperature = round(temp2[CHARGE_idx] if len(temp2)>CHARGE_idx else 0)
+        total_time_seconds:int = (round(timex[DROP_idx] - timex[CHARGE_idx]) if len(timex) > DROP_idx > CHARGE_idx else 0)
         header = b'\xff\xff'
         # header
         header_data = b'\x00\x00' + \

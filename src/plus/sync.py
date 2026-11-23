@@ -1,25 +1,33 @@
 #
 # sync.py
 #
-# Copyright (c) 2023, Paul Holleis, Marko Luther
-# All rights reserved.
-#
-#
 # ABOUT
 # This module connects to the Cotrix inventory management service
-
-# LICENSE
-# This program or module is free software: you can redistribute it and/or
-# modify it under the terms of the GNU General Public License as published
-# by the Free Software Foundation, either version 2 of the License, or
-# version 3 of the License, or (at your option) any later version. It is
-# provided for educational purposes and is distributed in the hope that
-# it will be useful, but WITHOUT ANY WARRANTY; without even the implied
-# warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See
-# the GNU General Public License for more details.
 #
-# You should have received a copy of the GNU General Public License
-# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+# COPYRIGHT (C) 2010-2026 The artisan team represented by
+#   Marko Luther <marko.luther@gmx.net> (maintainer) and all contributors
+#
+# LICENSE
+# This program or module is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as
+# published by the Free Software Foundation, either version 3 of the
+# License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+#
+# MAINTAINER
+# Marko Luther, 2026
+#
+# AUTHOR
+# Marko Luther
+
+__lazy_modules__ = { 'json', 'json.decoder', 'plus', 'plus.roast', 'plus.stock' }
 
 from PyQt6.QtCore import QSemaphore, QTimer, pyqtSlot
 from PyQt6.QtWidgets import QApplication
@@ -33,7 +41,10 @@ import time
 import logging
 import json
 import json.decoder
-from typing import Final, Any, IO
+from typing import Final, Any, IO, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import requests.models # noqa: F401 # pylint: disable=unused-import
 
 
 _log: Final[logging.Logger] = logging.getLogger(__name__)
@@ -77,7 +88,7 @@ def addSyncShelve(uuid: str, modified_at:float, fh:IO[str]) -> None:
             # remove all files name getSyncPath() with any extension as we
             # do not know which extension is chosen by shelve
             _log.info(
-                'register: clean uuid cache %s', str(getSyncPath())
+                'register: clean uuid cache %s', getSyncPath()
             )
             # note that this deletes all "uuid" files including those for
             # the Viewer and other files of that name prefix like uuid.db.org!!
@@ -121,7 +132,7 @@ def addSync(uuid:str, modified_at:float) -> None:
         _log.info('clean lock %s', str(lock_path))
         lock_path.unlink()
         _log.debug(
-            'retry sync:addSync(%s,%s)', str(uuid), str(modified_at)
+            'retry sync:addSync(%s,%s)', uuid, str(modified_at)
         )
         with portalocker.Lock(lock_path, timeout=0.3) as fh:
             addSyncShelve(uuid, modified_at, fh)
@@ -143,7 +154,7 @@ def getSync(uuid:str) -> float|None:
     db:shelve.Shelf[float]
     try:
         sync_cache_semaphore.acquire(1)
-        _log.debug('getSync(%s)', str(uuid))
+        _log.debug('getSync(%s)', uuid)
         with portalocker.Lock(getSyncPath(lock=True), timeout=0.5) as fh:
             try:
                 with shelve.open(getSyncPath()) as db:
@@ -168,7 +179,7 @@ def getSync(uuid:str) -> float|None:
         lock_path = Path(getSyncPath(lock=True))
         _log.info('clean lock %s', str(lock_path))
         lock_path.unlink()
-        _log.debug('retry sync:getSync(%s)', str(uuid))
+        _log.debug('retry sync:getSync(%s)', uuid)
         with portalocker.Lock(getSyncPath(lock=True), timeout=0.3) as fh:
             try:
                 with shelve.open(getSyncPath()) as db:
@@ -199,7 +210,7 @@ def delSync(uuid:str) -> None:
     fh:IO[str]
     try:
         sync_cache_semaphore.acquire(1)
-        _log.debug('delSync(%s)', str(uuid))
+        _log.debug('delSync(%s)', uuid)
         with portalocker.Lock(getSyncPath(lock=True), timeout=0.5) as fh:
             try:
                 with shelve.open(getSyncPath()) as db:
@@ -217,7 +228,7 @@ def delSync(uuid:str) -> None:
         lock_path = Path(getSyncPath(lock=True))
         _log.info('clean lock %s', str(lock_path))
         lock_path.unlink()
-        _log.debug('retry sync:delSync(%s)', str(uuid))
+        _log.debug('retry sync:delSync(%s)', uuid)
         with portalocker.Lock(getSyncPath(lock=True), timeout=0.3) as fh:
             try:
                 with shelve.open(getSyncPath()) as db:
@@ -734,7 +745,7 @@ def applyServerUpdates(data:dict[str, Any]) -> None:
         if aw is not None and dirty:
             aw.qmc.fileDirty()
             aw.sendmessageSignal.emit(
-                translatedServiceMessage('Updated data received from artisan.plus'),
+                  translatedServiceMessage('Updated data received from artisan platform'),
                 True,
                 None,
             )
@@ -751,8 +762,6 @@ def applyServerUpdates(data:dict[str, Any]) -> None:
 # if return_data is set, the received data is not applied via applyServerUpdates, but returned instead
 def fetchServerUpdate(uuid: str, file:str|None = None, return_data:bool = False) -> dict[str, Any]|None:
     aw = config.app_window
-    import requests
-    import requests.models
     import requests.exceptions
     res:requests.models.Response|None = None
     try:

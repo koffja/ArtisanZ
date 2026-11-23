@@ -1,19 +1,31 @@
 #
 # ABOUT
-# ColorTrack support for Artisan
-
+# ColorTrack support for artisan
+#
+# COPYRIGHT (C) 2010-2026 The artisan team represented by
+#   Marko Luther <marko.luther@gmx.net> (maintainer) and all contributors
+#
 # LICENSE
-# This program or module is free software: you can redistribute it and/or
-# modify it under the terms of the GNU General Public License as published
-# by the Free Software Foundation, either version 2 of the License, or
-# version 3 of the License, or (at your option) any later versison. It is
-# provided for educational purposes and is distributed in the hope that
-# it will be useful, but WITHOUT ANY WARRANTY; without even the implied
-# warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See
-# the GNU General Public License for more details.
-
+# This program or module is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as
+# published by the Free Software Foundation, either version 3 of the
+# License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+#
+# MAINTAINER
+# Marko Luther, 2026
+#
 # AUTHOR
 # Marko Luther, 2024
+
+__lazy_modules__ = { 'asyncio' }
 
 import asyncio
 import logging
@@ -33,7 +45,6 @@ if TYPE_CHECKING:
 
 from artisanlib.async_comm import AsyncComm
 from artisanlib.ble_port import ClientBLE
-from artisanlib.filters import LiveMean, LiveMedian
 
 _log: Final[logging.Logger] = logging.getLogger(__name__)
 
@@ -112,6 +123,8 @@ class ColorTrackBLE(ClientBLE):
                        disconnected_handler:Callable[[], None]|None = None):
         super().__init__()
 
+        from artisanlib.filters import LiveMean, LiveMedian
+
         # handlers
         self._connected_handler = connected_handler
         self._disconnected_handler = disconnected_handler
@@ -155,7 +168,7 @@ class ColorTrackBLE(ClientBLE):
 
     # second result is the raw average
     def getColor(self) -> tuple[float, float]:
-#        read_res = self.read(self.COLORTRACK_READ_NOTIFY_LASER_UUID) # returns 20 bytes (same format as via the notifications)
+#        read_res = self.read(self.COLORTRACK_READ_NOTIFY_LASER_UUID, timeout=1) # returns 20 bytes (same format as via the notifications)
 #        _log.debug('getLaser: %s',read_res)
 
 #        try:

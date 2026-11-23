@@ -1,30 +1,41 @@
 #
 # connection.py
 #
-# Copyright (c) 2023, Paul Holleis, Marko Luther
-# All rights reserved.
-#
-#
 # ABOUT
 # This module connects to the Cotrix inventory management service
-
-# LICENSE
-# This program or module is free software: you can redistribute it and/or
-# modify it under the terms of the GNU General Public License as published
-# by the Free Software Foundation, either version 2 of the License, or
-# version 3 of the License, or (at your option) any later version. It is
-# provided for educational purposes and is distributed in the hope that
-# it will be useful, but WITHOUT ANY WARRANTY; without even the implied
-# warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See
-# the GNU General Public License for more details.
 #
-# You should have received a copy of the GNU General Public License
-# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+# COPYRIGHT (C) 2010-2026 The artisan team represented by
+#   Marko Luther <marko.luther@gmx.net> (maintainer) and all contributors
+#
+# LICENSE
+# This program or module is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as
+# published by the Free Software Foundation, either version 3 of the
+# License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+#
+# MAINTAINER
+# Marko Luther, 2026
+#
+# AUTHOR
+# Marko Luther
+
+__lazy_modules__ = { 'json', 'json.decoder', 'cryptography.fernet' }
 
 from PyQt6.QtCore import QSemaphore
 
 from artisanlib import __version__
-from typing import Final, Any, Protocol
+from typing import Final, Any, Protocol, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import requests.models # pylint: disable=unused-import
 
 import time
 import uuid
@@ -35,9 +46,6 @@ import json
 import json.decoder
 import logging
 import dateutil.parser
-import requests
-import requests.models
-import requests.exceptions
 from cryptography.fernet import Fernet
 
 from plus import config, account, service_identity, util
@@ -182,6 +190,7 @@ def make_authentify() -> Authentifier:
         def seed() -> None:
             return None
 
+        import requests.exceptions
         try:
             aw = config.app_window
             if (
@@ -365,12 +374,12 @@ def make_authentify() -> Authentifier:
 authentify = make_authentify()
 
 def getHeaders(
-    authorized: bool = True, decompress: bool = True) -> dict[str, str]:
+        authorized: bool = True, decompress: bool = True) -> dict[str, str]:
     aw = config.app_window
     if aw is not None:
         os, os_version, os_arch = aw.get_os()  # @UndefinedVariable
         headers = {
-            'user-agent': f'Artisan/{__version__} ({os}; {os_version}; {os_arch})',
+            'user-agent': f'artisan/{__version__} ({os}; {os_version}; {os_arch})',
             'Accept-Charset': 'utf-8'
         }
         try:
@@ -412,7 +421,7 @@ def sendData(
     verb: str, # POST or PUT
     authorized: bool = True,
     compress: bool = config.compress_posts,
-) -> requests.models.Response:
+) -> 'requests.models.Response':
     # don't log POST data as it might contain credentials!
     _log.debug('sendData(%s,_data_,%s,%s)', url, verb, authorized)
     jsondata = json.dumps(data, indent=None, separators=(',', ':'), ensure_ascii=False).encode('utf8')
@@ -421,6 +430,8 @@ def sendData(
     headers, postdata = getHeadersAndData(authorized, compress, jsondata, verb)
 #    _log.debug("PRINT headers: %s",headers)
 
+    import requests
+    import requests.exceptions
     try:
         if verb == 'POST':
             r = requests.post(
@@ -473,7 +484,7 @@ def sendData(
         raise e
 
 
-def getData(url: str, authorized: bool = True, params:dict[str,str]|None = None) -> requests.models.Response|None:
+def getData(url: str, authorized: bool = True, params:dict[str,str]|None = None) -> 'requests.models.Response|None':
     _log.debug('getData(%s,%s,%s)', url, authorized, params)
     headers = getHeaders(authorized)
     if authorized and 'Authorization' not in headers:
@@ -482,7 +493,9 @@ def getData(url: str, authorized: bool = True, params:dict[str,str]|None = None)
         if not authentify():
             return None
     params = params or {}
-    #    _log.debug("-> request headers %s",headers)
+    # _log.debug("-> request headers %s",headers)
+    import requests
+    import requests.exceptions
     try:
         r:requests.models.Response = requests.get(
             url,
@@ -518,7 +531,7 @@ def getData(url: str, authorized: bool = True, params:dict[str,str]|None = None)
                 )
         try:
             _log.debug('-> size %s', len(r.content))
-    #        _log.debug("-> data %s",r.json())
+#            _log.debug("-> data %s",r.json())
         except Exception:  # pylint: disable=broad-except
             pass
         return r

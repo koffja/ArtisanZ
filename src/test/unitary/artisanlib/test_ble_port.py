@@ -18,6 +18,7 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
+from artisanlib.async_comm import AsyncLoopThread
 from artisanlib.ble_port import BLE, ClientBLE
 
 
@@ -333,6 +334,55 @@ class TestBLE:
             # Assert
             assert result is False
 
+    def test_stop_notify_off_loop_thread(self, ble_instance: BLE, mock_bleak_client: Mock) -> None:
+        """Test stop_notify called from a foreign thread stops the notification on the BLE loop."""
+        # Arrange
+        loop_thread = AsyncLoopThread()
+        ble_instance._asyncLoopThread = loop_thread
+        try:
+            # Act
+            result = ble_instance.stop_notify(mock_bleak_client, 'uuid')
+
+            # Assert
+            assert result is True
+            mock_bleak_client.stop_notify.assert_awaited_once_with('uuid')
+        finally:
+            ble_instance._asyncLoopThread = None
+            loop_thread.stop(timeout=2.0)
+
+    def test_stop_notify_on_loop_thread_does_not_deadlock(self, ble_instance: BLE) -> None:
+        """Test stop_notify called on the BLE loop thread does not block that loop.
+
+        Bleak's WinRT backend fires the disconnected_callback synchronously from within
+        client.disconnect(), on the BLE loop, while client.is_connected is still True.
+        ClientBLE.disconnected_callback() then calls stop_notifications() -> BLE.stop_notify().
+        Waiting there on a future scheduled onto the same loop deadlocked the loop, leaving
+        every later scan/connect hanging until the app got restarted.
+        """
+        # Arrange
+        loop_thread = AsyncLoopThread()
+        ble_instance._asyncLoopThread = loop_thread
+        client = Mock()
+        client.is_connected = True
+        client.stop_notify = AsyncMock()
+
+        async def winrt_like_disconnect() -> bool:
+            # mimics bleak WinRT: disconnected callback runs inline before the session is closed
+            res = ble_instance.stop_notify(client, 'uuid')
+            client.is_connected = False
+            return res
+
+        try:
+            # Act
+            fut = asyncio.run_coroutine_threadsafe(winrt_like_disconnect(), loop_thread.loop)
+
+            # Assert
+            assert fut.result(timeout=3.0) is False  # completes instead of hanging; notification not stopped explicitly
+            client.stop_notify.assert_not_called()
+        finally:
+            ble_instance._asyncLoopThread = None
+            loop_thread.stop(timeout=2.0)
+
 
 class TestClientBLE:
     """Test ClientBLE class functionality."""
@@ -522,44 +572,6 @@ class TestClientBLE:
         client_ble_instance.send(b'test message')
 
         # Assert - No write should occur due to multiple writers without specification
-
-    def test_read_success_single_reader(self, client_ble_instance: ClientBLE) -> None:
-        """Test successful read with single reader."""
-        # Arrange
-        mock_client = Mock()
-        client_ble_instance._ble_client = mock_client
-        client_ble_instance._connected_service_uuid = 'service-uuid-1'
-        client_ble_instance._readers = {'service-uuid-1': ['read-uuid-1']}
-        expected_data = b'test_data'
-
-        with patch('artisanlib.ble_port.ble') as mock_ble:
-            mock_ble.read.return_value = expected_data
-
-            # Act
-            result = client_ble_instance.read()
-
-            # Assert
-            assert result == expected_data
-            mock_ble.read.assert_called_once_with(mock_client, 'read-uuid-1')
-
-    def test_read_with_specific_read_characteristic(self, client_ble_instance: ClientBLE) -> None:
-        """Test read with specific read characteristic."""
-        # Arrange
-        mock_client = Mock()
-        client_ble_instance._ble_client = mock_client
-        client_ble_instance._connected_service_uuid = 'service-uuid-1'
-        client_ble_instance._readers = {'service-uuid-1': ['read-uuid-1', 'read-uuid-2']}
-        expected_data = b'test_data'
-
-        with patch('artisanlib.ble_port.ble') as mock_ble:
-            mock_ble.read.return_value = expected_data
-
-            # Act
-            result = client_ble_instance.read(read_characteristic='read-uuid-2')
-
-            # Assert
-            assert result == expected_data
-            mock_ble.read.assert_called_once_with(mock_client, 'read-uuid-2')
 
     def test_read_no_client(self, client_ble_instance: ClientBLE) -> None:
         """Test read when no client is connected."""

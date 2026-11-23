@@ -1,16 +1,26 @@
 ### -*- mode: python ; coding: utf-8 -*-
 # ABOUT
-# artisan-mac.spec script for Artisan macOS builds using pyinstaller
+# artisan-mac.spec script for artisan macOS builds using pyinstaller
+#
+# COPYRIGHT (C) 2010-2026 The artisan team represented by
+#   Marko Luther <marko.luther@gmx.net> (maintainer) and all contributors
 #
 # LICENSE
-# This program or module is free software: you can redistribute it and/or
-# modify it under the terms of the GNU General Public License as published
-# by the Free Software Foundation, either version 2 of the License, or
-# version 3 of the License, or (at your option) any later versison. It is
-# provided for educational purposes and is distributed in the hope that
-# it will be useful, but WITHOUT ANY WARRANTY; without even the implied
-# warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See
-# the GNU General Public License for more details.
+# This program or module is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as
+# published by the Free Software Foundation, either version 3 of the
+# License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+#
+# MAINTAINER
+# Marko Luther, 2026
 #
 # AUTHOR
 # Dave Baxter, Marko Luther 2026
@@ -71,7 +81,25 @@ DATA_FILES = [
         (r'includes/roboto-600.woff2', '.'),
         (r'includes/roboto-regular.woff2', '.'),
         (r'includes/artisan.tpl', '.'),
-        (r'includes/scale_widget.tpl', '.'),
+        (r'includes/green_scale_widget.tpl', '.'),
+        (r'includes/green-android-chrome-192x192.png', '.'),
+        (r'includes/green-android-chrome-512x512.png', '.'),
+        (r'includes/green-apple-touch-icon.png', '.'),
+        (r'includes/green-favicon-16x16.png', '.'),
+        (r'includes/green-favicon-32x32.png', '.'),
+        (r'includes/green-favicon-48x48.png', '.'),
+        (r'includes/green-favicon.ico', '.'),
+        (r'includes/green-site.webmanifest', '.'),
+        (r'includes/roasted_scale_widget.tpl', '.'),
+        (r'includes/roasted-android-chrome-192x192.png', '.'),
+        (r'includes/roasted-android-chrome-512x512.png', '.'),
+        (r'includes/roasted-apple-touch-icon.png', '.'),
+        (r'includes/roasted-favicon-16x16.png', '.'),
+        (r'includes/roasted-favicon-32x32.png', '.'),
+        (r'includes/roasted-favicon-48x48.png', '.'),
+        (r'includes/roasted-favicon.ico', '.'),
+        (r'includes/roasted-site.webmanifest', '.'),
+        (r'includes/artisan-combo-mark-white.svg', '.'),
         (r'includes/fitty_patched.js', '.'),
         (r'includes/bigtext.js', '.'),
         (r'includes/fitty_patched.js', '.'),
@@ -82,7 +110,6 @@ DATA_FILES = [
         (r'includes/browserconfig.xml', '.'),
         (r'includes/favicon-16x16.png', '.'),
         (r'includes/favicon-32x32.png', '.'),
-        (r'includes/favicon-96x96.png', '.'),
         (r'includes/favicon.ico', '.'),
         (r'includes/favicon.svg', '.'),
         (r'includes/mstile-70x70.png', '.'),
@@ -93,8 +120,11 @@ DATA_FILES = [
         (r'includes/site.webmanifest', '.'),
         (r'includes/sorttable.js', '.'),
         (r'includes/report-template.htm', '.'),
+        (r'includes/report-template-pdf.htm', '.'),
         (r'includes/roast-template.htm', '.'),
+        (r'includes/roast-template-pdf.htm', '.'),
         (r'includes/ranking-template.htm', '.'),
+        (r'includes/ranking-template-pdf.htm', '.'),
         (r'includes/Humor-Sans.ttf', '.'),
         (r'includes/WenQuanYiZenHei-01.ttf', '.'),
         (r'includes/WenQuanYiZenHeiMonoMedium.ttf', '.'),
@@ -106,19 +136,24 @@ DATA_FILES = [
         (r'includes/dijkstra.ttf', '.'),
         (r'includes/ComicNeue-Regular.ttf', '.'),
         (r'includes/xkcd-script.ttf', '.'),
+        (r'includes/Nunito-Regular.ttf', '.'),
+        (r'includes/Nunito-SemiBold.ttf', '.'),
+        (r'includes/Nunito-ExtraBold.ttf', '.'),
+        (r'includes/NotoSansMono-Regular.ttf', '.'),
         (r'includes/artisan_public_key.pem', '.'),
         (r'includes/Machines', './Machines'),
         (r'includes/Themes', './Themes'),
         (r'includes/Icons', './Icons'),
-        (r'includes/logging.yaml', '.')
+        (r'includes/logging.json', '.'),
+	(r'includes/release-sponsor-logo.svg', '.'),
+	(r'includes/release-sponsor-logo-dark.svg', '.')
 ]
 
 # add Artisan translations to DATA_FILES
 DATA_FILES.extend(
     [(f'translations/{file}', './translations') for root,dirs,files in os.walk('translations') for file in files if (file.split('.')[1]) == 'qm'])
 
-# add snap7 libs
-BINARIES = [(os.path.join(get_package_paths('snap7')[1], 'lib/libsnap7.dylib'), 'snap7/lib' )]
+BINARIES = []
 # add yocto libs
 yocto_lib_path = os.path.join(get_package_paths('yoctopuce')[1], 'cdll')
 BINARIES.extend([(os.path.join(yocto_lib_path, fn),'yoctopuce/cdll') for fn in os.listdir(yocto_lib_path) if fn.endswith('.dylib')])
@@ -154,7 +189,13 @@ a = Analysis(['artisan.py'],
              hookspath=[],
              runtime_hooks=['./pyinstaller_hooks/rthooks/pyi_rth_mplconfig.py'], # overwrites default MPL runtime hook which keeps loading font cache from (new) temp directory
              additional_hooks_dir=[],
-             excludes= ['tkinter', 'mypy', 'pkg_resources'],
+             excludes=['tkinter', 'mypy', 'hypothesis', 'tornado', 'pkg_resources', 'setuptools', 'curses', 'matplotlib.tests', 'numpy.tests',
+                'scipy.tests', 'numpy.lib.tests', 'numpy.ma.tests', 'numpy.matrixlib.tests', 'numpy.polynomial.tests', 'numpy.random.tests',
+                'numpy.testing.tests', 'numpy.typing.tests', 'scipy._lib.tests', 'scipy.constants.tests', 'scipy.datasets.tests', 'scipy.fft.tests',
+                'scipy.fftpack.tests', 'scipy.integrate._ivp.tests', 'scipy.interpolate.tests', 'scipy.io._harwell_boeing.tests', 'scipy.io.arff.tests',
+                'scipy.io.matlab.tests', 'scipy.io.tests', 'scipy.linalg.tests', 'scipy.ndimage.tests', 'scipy.odr.tests', 'scipy.optimize.tests',
+                'scipy.signal.tests', 'scipy.sparse.linalg._isolve.tests', 'scipy.sparse.linalg.tests', 'scipy.sparse.tests', 'scipy.spatial.tests',
+                'scipy.spatial.transform.tests', 'scipy.special.tests', 'scipy.stats.tests'],
              win_no_prefer_redirects=False,
              win_private_assemblies=False,
              cipher=block_cipher,
@@ -170,7 +211,7 @@ exe = EXE(pyz,
             a.datas if onefile else [],
             options=[], # runtime python options
             exclude_binaries=not onefile,
-            name='Artisan',
+            name='artisan',
             debug=False,
             bootloader_ignore_signals=False,
             strip=True, # not recommended for Windows
@@ -188,16 +229,16 @@ exe = EXE(pyz,
 try:
     minimumSystemVersion = os.environ['MACOSX_DEPLOYMENT_TARGET']
 except Exception: # pylint: disable=broad-except
-    minimumSystemVersion = '13.0' # assuming the new-style numpy/scipy libs which define the minimum; Qt 6.10 requires >= 13.0
+    minimumSystemVersion = '14.4' # assuming the new-style numpy/scipy libs which define the minimum; Qt 6.12 requires >= 14.4
 
 plist = {}
 with open('Info.plist', 'rb') as infile:
     plist = plistlib.load(infile)
-    plist.update({ 'CFBundleDisplayName': 'Artisan',
-                    'CFBundleGetInfoString': 'Artisan, Roast Logger',
+    plist.update({ 'CFBundleDisplayName': 'artisan',
+                    'CFBundleGetInfoString': 'artisan scope',
                     'CFBundleIdentifier': 'org.artisan-scope.artisan',
                     'CFBundleShortVersionString': VERSION,
-                    'CFBundleVersion': 'Artisan ' + VERSION,
+                    'CFBundleVersion': 'artisan ' + VERSION,
                     'LSMinimumSystemVersion': minimumSystemVersion,
                     'LSMultipleInstancesProhibited': False,
                     'LSArchitecturePriority': ['arm64'],
@@ -223,14 +264,14 @@ if not onefile:
     bundle_obj = coll
 
 app = BUNDLE(bundle_obj,
-          name='Artisan.app',
+          name='artisan.app',
           icon='artisan.icns',
           bundle_identifier='org.artisan-scope.artisan',
           info_plist=plist)
 
 #------
 
-subprocess.check_call(r'mv dist/Artisan.app/Contents/Resources/translations dist/Artisan.app/Contents/',shell = True)
+subprocess.check_call(r'mv dist/artisan.app/Contents/Resources/translations dist/artisan.app/Contents/',shell = True)
 subprocess.check_call(r'rm -rf dist/Test/_internal/babel/*',shell = True) # unclear: without this line, the next fails
 subprocess.check_call(r'rm -rf dist/Test',shell = True)
 subprocess.check_call(r'cp README.txt dist',shell = True)
@@ -243,7 +284,7 @@ subprocess.check_call(r'cp Wheels/Cupping/* dist/Wheels/Cupping',shell = True)
 subprocess.check_call(r'cp Wheels/Other/* dist/Wheels/Other',shell = True)
 subprocess.check_call(r'cp Wheels/Roasting/* dist/Wheels/Roasting',shell = True)
 try:
-    subprocess.check_call('rm -rf dist/Artisan.app/Contents/Resources/matplotlib/mpl-data/sample_data',shell = True)
+    subprocess.check_call('rm -rf dist/artisan.app/Contents/Resources/matplotlib/mpl-data/sample_data',shell = True)
 except Exception: # pylint: disable=broad-except
     pass
 
@@ -252,7 +293,7 @@ os.chdir('./dist')
 
 # add localization stubs to make macOS translate the systems menu item and native dialogs
 for lang in SUPPORTED_LANGUAGES:
-    loc_dir = r'Artisan.app/Contents/Resources/' + lang + r'.lproj'
+    loc_dir = r'artisan.app/Contents/Resources/' + lang + r'.lproj'
     subprocess.check_call(r'mkdir ' + loc_dir,shell = True)
     subprocess.check_call(r'touch ' + loc_dir + r'/Localizable.string',shell = True)
 
@@ -273,22 +314,8 @@ Qt_modules = [
     'QtPrintSupport',
     'QtNetwork',
     'QtDBus',
-#    'QtBluetooth', # replaced by bleak
-#    'QtConcurrent', # not on PyQt6.2, but PyQt6.4 and PyQt5.x
-# needed for QtWebEngine HTML2PDF export:
-    'QtWebEngineCore',
-#    'QtWebEngine', # only on PyQt5, does not exists for PyQt6
-    'QtWebEngineWidgets', # required by QtWebEngineCore
-# the following are required by QtWebEngineWidgets and thus by QtWebEngine for the HTML2PDF export
-    'QtQuick',
-    'QtQuickWidgets',
-    'QtQml',
-    'QtQmlModels',
-    'QtQmlMeta',
-    'QtQmlWorkerScript',
-    'QtWebChannel',
-    'QtPositioning',
-    'QtOpenGL'
+    'QtPdf',
+    'QtSvgWidgets',
 ]
 Qt_frameworks = [module + '.framework' for module in Qt_modules]
 
@@ -318,7 +345,7 @@ qt_plugin_files = [
 ]
 
 ## remove unused Qt frameworks libs (not in Qt_modules_frameworks)
-for subdir, dirs, _files in os.walk('./Artisan.app/Contents/Frameworks/PyQt6/Qt6/lib'):
+for subdir, dirs, _files in os.walk('./artisan.app/Contents/Frameworks/PyQt6/Qt6/lib'):
     for di in dirs:
         if di.startswith('Qt') and di.endswith('.framework') and di not in Qt_frameworks:
             file_path = os.path.join(subdir, di)
@@ -327,7 +354,7 @@ for subdir, dirs, _files in os.walk('./Artisan.app/Contents/Frameworks/PyQt6/Qt6
 
 
 ## remove unused plugins
-for root, dirs, _ in os.walk('./Artisan.app/Contents/Frameworks/PyQt6/Qt6/plugins'):
+for root, dirs, _ in os.walk('./artisan.app/Contents/Frameworks/PyQt6/Qt6/plugins'):
     for d in dirs:
         if d not in qt_plugin_dirs:
             print(f'rm -rf {os.path.join(root,d)}')
@@ -340,11 +367,11 @@ for root, dirs, _ in os.walk('./Artisan.app/Contents/Frameworks/PyQt6/Qt6/plugin
                         print(f'rm -rf {file_path}')
                         subprocess.check_call(f'rm -rf {file_path}',shell = True)
 
-subprocess.check_call(r'rm -rf ./Artisan.app/Contents/Frameworks/PyQt6/Qt6/qml',shell = True)
+subprocess.check_call(r'rm -rf ./artisan.app/Contents/Frameworks/PyQt6/Qt6/qml',shell = True)
 
 
 
-rootdir = f'./Artisan.app/Contents/Resources'
+rootdir = f'./artisan.app/Contents/Resources'
 
 # remove Qt artefacts
 for qt_dir in [
@@ -355,7 +382,6 @@ for qt_dir in [
 #        'PyQt6/Qt6/translations', # qt translations are kept and loaded from their standard dir
         'PyQt6/Qt6/qml',
         'PyQt6/Qt6/qsci',
-#        'PyQt6/Qt6/lib', # comment for the non-Framework variant
     ]:
     try:
         subprocess.check_call(f'rm -rf {rootdir}/{qt_dir}',shell = True)
@@ -381,23 +407,11 @@ for qt_dir in ['PyQt6/Qt6/translations']:
                 subprocess.check_call(f'rm -rf {file_path}',shell = True)
 
 
-print('*** Removing QtWebEngine translations ***')
-
-for qtwebengine_dir in ['PyQt6/Qt6/lib/QtWebEngineCore.framework/Versions/A/Resources/qtwebengine_locales/']:
-    qtwebengine = f'{rootdir}/{qtwebengine_dir}'
-    for root, _, files in os.walk(qtwebengine):
-        for file in files:
-            if not file == 'en-US.pak':
-                file_path = os.path.join(root, file)
-                print(f'rm -rf {file_path}')
-                subprocess.check_call(f'rm {file_path}',shell = True)
-
-print('*** Removing QtWebEngine remote debug lib ***')
-
-try:
-    subprocess.check_call(f'rm -rf {rootdir}/PyQt6/Qt6/lib/QtWebEngineCore.framework/Versions/A/Resources/qtwebengine_devtools_resources.pak',shell = True)
-except Exception: # pylint: disable=broad-except
-    pass
+print('*** Fix symbolic link to Qt translations ***')
+# remove Framework/translations symbolic link to translations -> Resources/translations
+subprocess.check_call(f'unlink ./artisan.app/Contents/Frameworks/translations',shell = True)
+# add symbolic link Frameworks/translations -> Resources/PyQt6/Qt6/translations
+os.symlink(f'../Resources/PyQt6/Qt6/translations', f'./artisan.app/Contents/Frameworks/translations')
 
 
 print('*** Removing unused files ***')
@@ -443,7 +457,7 @@ for root, dirs, files in os.walk('.'):
 
 print('*** Removing unused language support from babel ***')
 
-for root, _, files in os.walk(f'./Artisan.app/Contents/Resources/babel/locale-data'):
+for root, _, files in os.walk(f'./artisan.app/Contents/Resources/babel/locale-data'):
     for file in files:
         if (file.endswith('.dat') and
             file != 'root.dat' and not (file.startswith('zh') and file.endswith('.dat')) and
@@ -452,17 +466,10 @@ for root, _, files in os.walk(f'./Artisan.app/Contents/Resources/babel/locale-da
 #            print('Deleting', file)
             os.remove(os.path.join(root,file))
 
-# NOT NEEDED for pyinstaller builds
-#print('*** Removing Phidget driver libs not for this platforms ***')
-#try:
-#    subprocess.check_call(f'rm -f ./Artisan.app/Contents/Frameworks/phidget22.dll',shell = True)
-#except Exception: # pylint: disable=broad-except
-#    pass
-
 
 print('*** Removing mypy completely ***')
 try:
-    subprocess.check_call(f'rm -rf ./Artisan.app/Contents/Frameworks/mypy',shell = True)
+    subprocess.check_call(f'rm -rf ./artisan.app/Contents/Frameworks/mypy',shell = True)
 except Exception: # pylint: disable=broad-except
     pass
 
@@ -482,4 +489,4 @@ for subdir, _dirs, files in os.walk('.', followlinks=False):
 dist_name = r'artisan-mac-' + VERSION + r'.dmg'
 os.chdir('..')
 os.system(r'rm ' + dist_name)
-os.system(r'hdiutil create ' + dist_name + r' -volname "Artisan" -fs HFS+ -srcfolder "dist"')
+os.system(r'hdiutil create ' + dist_name + r' -volname "artisan" -fs HFS+ -srcfolder "dist"')

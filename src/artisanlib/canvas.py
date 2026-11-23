@@ -1,32 +1,40 @@
 #
 # ABOUT
-# Artisan Main Canvas
-
+# artisan main canvas
+#
+# COPYRIGHT (C) 2010-2026 The artisan team represented by
+#   Marko Luther <marko.luther@gmx.net> (maintainer) and all contributors
+#
 # LICENSE
-# This program or module is free software: you can redistribute it and/or
-# modify it under the terms of the GNU General Public License as published
-# by the Free Software Foundation, either version 2 of the License, or
-# version 3 of the License, or (at your option) any later version. It is
-# provided for educational purposes and is distributed in the hope that
-# it will be useful, but WITHOUT ANY WARRANTY; without even the implied
-# warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See
-# the GNU General Public License for more details.
-
+# This program or module is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as
+# published by the Free Software Foundation, either version 3 of the
+# License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+#
+# MAINTAINER
+# Marko Luther, 2026
+#
 # AUTHOR
 # Marko Luther, 2023
+
+__lazy_modules__ = { 'json', 're', 'psutil', 'psutil._common', 'plus', 'plus.queue', 'plus.sync' }
 
 from artisanlib import __version__
 from artisanlib import __revision__
 from artisanlib import __build__
 
-from artisanlib import __release_sponsor_domain__
-from artisanlib import __release_sponsor_url__
-
 #import gc
 import time as libtime
 import os
 import sys  # @UnusedImport
-import ast
 import platform
 import math
 import warnings
@@ -36,9 +44,7 @@ import logging
 import re
 import textwrap
 import functools
-import psutil
-from psutil._common import bytes2human # pyright:ignore[reportPrivateImportUsage]
-from babel.units import get_unit_name
+
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, replace
@@ -50,6 +56,7 @@ if TYPE_CHECKING:
     from artisanlib.comm import serialport # pylint: disable=unused-import
     from artisanlib.atypes import ProfileData, BTU # pylint: disable=unused-import
     from artisanlib.main import ApplicationWindow # pylint: disable=unused-import
+    from artisanlib import pid # pylint: disable=unused-import
     from plus.stock import Blend # pylint: disable=unused-import
     from plus.blend import CustomBlend # pylint: disable=unused-import
     from matplotlib.collections import PolyCollection # type:ignore[untyped-import,unused-ignore] # pylint: disable=unused-import
@@ -67,17 +74,20 @@ from artisanlib.util import (to_ascii, uchr, fill_gaps, deltaLabelPrefix, deltaL
         fromFtoC, fromFtoCstrict, fromCtoF, fromCtoFstrict, RoRfromFtoC, RoRfromFtoCstrict, RoRfromCtoF, RoRfromCtoFstrict, toInt, toString,
         toFloat, application_name, getResourcePath, getDirectory, convertWeight, right_to_left, float2str,
         abbrevString, scaleFloat2String, is_proper_temp, weight_units, render_weight, volume_units, float2float, timearray2index,
-        events_internal_to_external_value, events_external_to_internal_value)
-from artisanlib import pid
+        events_internal_to_external_value, events_external_to_internal_value, smooth_list, computeDeltas, debugLogLevelActive)
 from artisanlib.time import ArtisanTime
 #from artisanlib.filters import LiveMedian
-from artisanlib.dialogs import ArtisanMessageBox
+from artisanlib.dialogs import (DesignerSplineNodesDlg, ArtisanMessageBox, artisan_information, artisan_question,
+    artisan_confirm_save_dialog, artisan_confirmation_dialog)
 from artisanlib.atypes import SerialSettings, BTBreakParams, BbpCache, AlarmSet, EnergyMetrics
+from artisanlib.styles import push_button_style
+from artisanlib.device_registry import is_special_device, is_non_temp_device, is_non_temp_device_chan, is_phidget_device, is_binary_device
 
 # import artisan.plus modules
 from plus.util import roastLink
-from plus.queue import sendLockSchedule
+from plus.queue import addRoast, sendLockSchedule
 from plus.sync import clearSyncRecordHash
+from plus.controller import is_synced, is_connected
 
 from PyQt6.QtWidgets import (QApplication, QWidget, QMessageBox,
                          QGraphicsEffect,
@@ -182,15 +192,7 @@ from artisanlib.sample_processing import (
     windowed_curve_data,
 )
 
-from Phidget22.VoltageRange import VoltageRange # type: ignore[import-untyped]
-
-try:
-    # spanning a second multiprocessing instance on macOS falils to import the YAPI interface
-    from yoctopuce.yocto_api import YAPI # type: ignore[import-untyped]
-except Exception: # pylint: disable=broad-except
-    pass
-
-
+#from Phidget22.VoltageRange import VoltageRange
 
 _log: Final[logging.Logger] = logging.getLogger(__name__)
 
@@ -443,6 +445,7 @@ class _DeferredSampleInput:
 
 # NOTE: to have pylint to verify proper __slot__ definitions using pylint one has to remove the super class FigureCanvas here temporarily
 #   as this does not has __slot__ definitions and thus __dict__ is contained which suppresses the warnings
+#class tgraphcanvas:
 class tgraphcanvas(QObject):
     updategraphicsSignal = pyqtSignal()
     updateLargeLCDsTimeSignal = pyqtSignal(str)
@@ -478,6 +481,8 @@ class tgraphcanvas(QObject):
     redrawSignal = pyqtSignal(bool,bool,bool,bool,bool)
     redrawKeepViewSignal = pyqtSignal(bool,bool,bool,bool,bool)
     monitorClosedDown = pyqtSignal()
+    canvasZoomSignal = pyqtSignal(float, float)
+    canvasPanSignal = pyqtSignal(float, float, int)
 
     umlaute_dict : Final[dict[str, str]] = {
        uchr(228): 'ae',  # U+00E4   \xc3\xa4
@@ -511,7 +516,7 @@ class tgraphcanvas(QObject):
         'YOCTO_dataRate', 'YOCTO_dataRatesStrings', 'YOCTO_dataRatesValues', 'phidget1018valueFactor', 'phidget1018_async', 'phidget1018_ratio', 'phidget1018_dataRates',
         'phidget1018_changeTriggers', 'phidget1018_changeTriggersValues', 'phidget1018_changeTriggersStrings', 'phidgetVCP100x_voltageRanges', 'phidgetVCP100x_voltageRangeValues',
         'phidgetVCP100x_voltageRangeStrings', 'phidgetDAQ1400_powerSupplyStrings', 'phidgetDAQ1400_powerSupply', 'phidgetDAQ1400_inputModeStrings', 'phidgetDAQ1400_inputMode',
-        'devices', 'phidgetDevices', 'nonSerialDevices', 'nonTempDevices', 'specialDevices', 'binaryDevices', 'extradevices', 'extratimex', 'extradevicecolor1', 'extradevicecolor2', 'extratemp1',
+        'extradevices', 'extratimex', 'extradevicecolor1', 'extradevicecolor2', 'extratemp1',
         'extratemp2', 'extrastemp1', 'extrastemp2', 'extractimex1', 'extractimex2', 'extractemp1', 'extractemp2', 'extratemp1lines', 'extratemp2lines', 'extrafill1lines', 'extrafill2lines',
         'extraname1', 'extraname2', 'extramathexpression1', 'extramathexpression2', 'extralinestyles1', 'extralinestyles2', 'extradrawstyles1', 'extradrawstyles2',
         'extralinewidths1', 'extralinewidths2', 'extramarkers1', 'extramarkers2', 'extramarkersizes1', 'extramarkersizes2', 'devicetablecolumnwidths', 'energytablecolumnwidths', 'extraNoneTempHint1',
@@ -601,10 +606,10 @@ class tgraphcanvas(QObject):
         'ax_background', 'block_update', 'fmt_data_RoR', 'fmt_data_curve', 'running_LCDs', 'plotterstack', 'plotterequationresults', 'plottermessage', 'alarm_popup_timout',
         'RTtemp1', 'RTtemp2', 'RTextratemp1', 'RTextratemp2', 'RTextratx', 'idx_met', 'showmet', 'met_annotate', 'met_timex_temp1_delta',
         'extendevents', 'statssummary', 'showtimeguide', 'statsmaxchrperline', 'energyunits', 'powerunits', 'sourcenames', 'loadlabels_setup',
-        'loadratings_setup', 'ratingunits_setup', 'sourcetypes_setup', 'load_etypes_setup', 'presssure_percents_setup', 'loadevent_zeropcts_setup',
+        'loadratings_setup', 'ratingunits_setup', 'sourcetypes_setup', 'load_etypes_setup', 'pressure_percents_setup', 'loadevent_zeropcts_setup',
         'loadevent_hundpcts_setup', 'preheatDuration_setup', 'preheatenergies_setup', 'betweenbatchDuration_setup', 'betweenbatchenergies_setup',
         'coolingDuration_setup', 'coolingenergies_setup', 'betweenbatch_after_preheat_setup', 'electricEnergyMix_setup', 'gasMix_setup', 'energyresultunit_setup',
-        'kind_list', 'perKgRoastMode', 'loadlabels', 'loadratings', 'ratingunits', 'sourcetypes', 'load_etypes', 'presssure_percents', 'loadevent_zeropcts',
+        'kind_list', 'perKgRoastMode', 'loadlabels', 'loadratings', 'ratingunits', 'sourcetypes', 'load_etypes', 'pressure_percents', 'loadevent_zeropcts',
         'loadevent_hundpcts', 'preheatDuration', 'preheatenergies', 'betweenbatchDuration', 'betweenbatchenergies', 'coolingDuration', 'coolingenergies',
         'betweenbatch_after_preheat', 'electricEnergyMix', 'gasMix', 'baseX', 'baseY', 'base_horizontalcrossline', 'base_verticalcrossline',
         'base_messagevisible', 'colorDifferenceThreshold', 'handles', 'labels', 'legend_lines', 'eventmessage', 'backgroundeventmessage',
@@ -624,6 +629,9 @@ class tgraphcanvas(QObject):
         'single_click_mpl_upperleft_corner_timer', 'single_click_mpl_upperleft_corner_TIMEOUT',
         'plot_renderer_selection', 'plot_live_frame_apply_result', 'plot_pyqtgraph_target',
         'plot_display_widget', 'plot_renderer_embed_fallback_reason'
+        'profile_upload_limit', 'last_profile_upload_times',
+        'zoom_follow_pan_x', 'zoom_follow_pan_y', 'main_event_buttons_undo_enabled', 'plus_beans_reminder_on_start',
+        'last_fit_title_max_chars', 'designer_dashboard_was_active_on_open', 'designer_background_mode', 'designer_loaded_foreground_profile_file'
         ]
 
 
@@ -668,6 +676,7 @@ class tgraphcanvas(QObject):
             'pow':math.pow,'exp':math.exp,'pi':math.pi,'e':math.e,
             'abs':abs,'acos':math.acos,'asin':math.asin,'atan':math.atan,
             'log':math.log,'radians':math.radians,
+            'round':round,
             'sqrt':math.sqrt,'degrees':math.degrees,'bit':lambda n,x:min(1,(int(x) & (1<<int(n))))} # pyright:ignore[reportUnknownArgumentType]
 
 
@@ -850,7 +859,7 @@ class tgraphcanvas(QObject):
         self.errorlog:list[str] = []
 
         # default delay between readings in milliseconds
-        self.default_delay: Final[int] = 2000 # default 2s
+        self.default_delay: Final[int] = 1000 # default 1s
         self.delay:int = self.default_delay
         self.min_delay: Final[int] = 100 #250 # 1000 # Note that already a 0.25s min delay puts a lot of performance pressure on the app
 
@@ -858,8 +867,8 @@ class tgraphcanvas(QObject):
         self.extra_event_sampling_delay:int = 0 # sync, 0.5s, 1.0s, 1.5s,.., 5s => 0, 500, 1000, 1500, .. # 0, 500, 1000, 1500, ...
 
         #watermarks limits: dryphase1, dryphase2 (DRY), midphase (FCs), and finish phase Y limits
-        self.phases_fahrenheit_defaults: Final[list[int]] = [300,300,390,450]
-        self.phases_celsius_defaults: Final[list[int]] = [150,150,200,230]
+        self.phases_fahrenheit_defaults: Final[list[int]] = [212,300,390,450]
+        self.phases_celsius_defaults: Final[list[int]] = [100,150,200,230]
         self.phases:list[int] = self.phases_fahrenheit_defaults # contains either the phases_filter or phases_espresso, depending on the mode
         #this flag makes the main push buttons DryEnd, and FCstart change the phases[1] and phases[2] respectively
         self.phasesbuttonflag:bool = True #False no change; True make the DRY and FC buttons change the phases during roast automatically
@@ -1003,19 +1012,32 @@ class tgraphcanvas(QObject):
         self.phidget1018_changeTriggersValues: Final[list[int]] = list(range(0,51,1))
         self.phidget1018_changeTriggersStrings: Final[list[str]] = [f'{x*10}mV' for x in self.phidget1018_changeTriggersValues]
 
-        self.phidgetVCP100x_voltageRanges: list[int] = [VoltageRange.VOLTAGE_RANGE_AUTO]*8
+        self.phidgetVCP100x_voltageRanges: list[int] = [11]*8 # [int(VoltageRange.VOLTAGE_RANGE_AUTO)]*8
+#        self.phidgetVCP100x_voltageRangeValues: Final[list[VoltageRange]] = [
+#            VoltageRange.VOLTAGE_RANGE_AUTO,
+#            VoltageRange.VOLTAGE_RANGE_10mV,
+#            VoltageRange.VOLTAGE_RANGE_40mV,
+#            VoltageRange.VOLTAGE_RANGE_200mV,
+#            VoltageRange.VOLTAGE_RANGE_312_5mV,
+#            VoltageRange.VOLTAGE_RANGE_400mV,
+#            VoltageRange.VOLTAGE_RANGE_1000mV,
+#            VoltageRange.VOLTAGE_RANGE_2V,
+#            VoltageRange.VOLTAGE_RANGE_5V,
+#            VoltageRange.VOLTAGE_RANGE_15V,
+#            VoltageRange.VOLTAGE_RANGE_40V
+#        ]
         self.phidgetVCP100x_voltageRangeValues: Final[list[int]] = [
-            VoltageRange.VOLTAGE_RANGE_AUTO,
-            VoltageRange.VOLTAGE_RANGE_10mV,
-            VoltageRange.VOLTAGE_RANGE_40mV,
-            VoltageRange.VOLTAGE_RANGE_200mV,
-            VoltageRange.VOLTAGE_RANGE_312_5mV,
-            VoltageRange.VOLTAGE_RANGE_400mV,
-            VoltageRange.VOLTAGE_RANGE_1000mV,
-            VoltageRange.VOLTAGE_RANGE_2V,
-            VoltageRange.VOLTAGE_RANGE_5V,
-            VoltageRange.VOLTAGE_RANGE_15V,
-            VoltageRange.VOLTAGE_RANGE_40V
+            11,#VoltageRange.VOLTAGE_RANGE_AUTO,
+            1, #VoltageRange.VOLTAGE_RANGE_10mV,
+            2, #VoltageRange.VOLTAGE_RANGE_40mV,
+            3, #VoltageRange.VOLTAGE_RANGE_200mV,
+            4, #VoltageRange.VOLTAGE_RANGE_312_5mV,
+            5, #VoltageRange.VOLTAGE_RANGE_400mV,
+            6, #VoltageRange.VOLTAGE_RANGE_1000mV,
+            7, #VoltageRange.VOLTAGE_RANGE_2V,
+            8, #VoltageRange.VOLTAGE_RANGE_5V,
+            9, #VoltageRange.VOLTAGE_RANGE_15V,
+            10 #VoltageRange.VOLTAGE_RANGE_40V
         ]
         self.phidgetVCP100x_voltageRangeStrings: Final[list[str]] = [
             'Auto',
@@ -1036,414 +1058,6 @@ class tgraphcanvas(QObject):
         self.phidgetDAQ1400_inputModeStrings: Final[list[str]] = ['NPN','PNP']
         self.phidgetDAQ1400_inputMode:int = 0
 
-        #menu of thermocouple devices
-        #device with first letter + only shows in extra device tab
-        #device with first letter - does not show in any tab (but its position in the list is important)
-        # device labels (used in Dialog config).
-
-        # ADD DEVICE: to add a device you have to modify several places. Search for the tag "ADD DEVICE:" in the code
-        # (check also the tags in comm.py and devices.py!!)
-        # - add to self.devices
-        self.devices: Final[list[str]] = [  # NOTE: the index of the elements in this list is one less than the device id indicated in the comments below
-                                            # The index of device "NONE" in self.devices is 17 not 18!
-                        #Fuji PID               #0
-                       'Omega HH806AU',         #1
-                       'Omega HH506RA',         #2
-                       'CENTER 309',            #3
-                       'CENTER 306',            #4
-                       'CENTER 305',            #5
-                       'CENTER 304',            #6
-                       'CENTER 303',            #7
-                       'CENTER 302',            #8
-                       'CENTER 301',            #9
-                       'CENTER 300',            #10
-                       'VOLTCRAFT K204',        #11
-                       'VOLTCRAFT K202',        #12
-                       'VOLTCRAFT 300K',        #13
-                       'VOLTCRAFT 302KJ',       #14
-                       'EXTECH 421509',         #15
-                       'Omega HH802U',          #16
-                       'Omega HH309',           #17
-                       'NONE',                  #18
-                       '-ARDUINOTC4',           #19
-                       'TE VA18B',              #20
-                       '+CENTER 309 34',        #21
-                       '+PID SV/DUTY %',        #22
-                       'Omega HHM28[6]',        #23
-                       '+VOLTCRAFT K204 34',    #24
-                       '+Virtual',              #25
-                       '-DTAtemperature',       #26
-                       'Program',               #27
-                       '+ArduinoTC4 34',        #28
-                       'MODBUS',                #29
-                       'VOLTCRAFT K201',        #30
-                       'Amprobe TMD-56',        #31
-                       '+ArduinoTC4 56',        #32
-                       '+MODBUS 34',            #33
-                       'Phidget 1048 4xTC 01',  #34
-                       '+Phidget 1048 4xTC 23', #35
-                       '+Phidget 1048 4xTC AT', #36
-                       'Phidget 1046 4xRTD 01', #37
-                       '+Phidget 1046 4xRTD 23',#38
-                       'Mastech MS6514',        #39
-                       'Phidget IO 01',         #40
-                       '+Phidget IO 23',        #41
-                       '+Phidget IO 45',        #42
-                       '+Phidget IO 67',        #43
-                       '+ArduinoTC4 78',        #44
-                       'Yocto Thermocouple',    #45
-                       'Yocto PT100',           #46
-                       'Phidget 1045 IR',       #47
-                       '+Program 34',           #48
-                       '+Program 56',           #49
-                       'DUMMY',                 #50
-                       '+CENTER 304 34',        #51
-                       'Phidget 1051 1xTC 01',  #52
-                       'Hottop BT/ET',          #53
-                       '+Hottop Heater/Fan',    #54
-                       '+MODBUS 56',            #55
-                       'Apollo DT301',          #56
-                       'EXTECH 755',            #57
-                       'Phidget TMP1101 4xTC 01',  #58
-                       '+Phidget TMP1101 4xTC 23', #59
-                       '+Phidget TMP1101 4xTC AT', #60
-                       'Phidget TMP1100 1xTC',     #61
-                       'Phidget 1011 IO 01',       #62
-                       'Phidget HUB IO 01',        #63
-                       '+Phidget HUB IO 23',       #64
-                       '+Phidget HUB IO 45',       #65
-                       '-Omega HH806W',            #66 NOT WORKING
-                       'VOLTCRAFT PL-125-T2',      #67
-                       'Phidget TMP1200 1xRTD A',  #68
-                       'Phidget IO Digital 01',    #69
-                       '+Phidget IO Digital 23',   #70
-                       '+Phidget IO Digital 45',   #71
-                       '+Phidget IO Digital 67',   #72
-                       'Phidget 1011 IO Digital 01', #73
-                       'Phidget HUB IO Digital 01', #74
-                       '+Phidget HUB IO Digital 23',#75
-                       '+Phidget HUB IO Digital 45',#76
-                       'VOLTCRAFT PL-125-T4',       #77
-                       '+VOLTCRAFT PL-125-T4 34',   #78
-                       'S7',                        #79
-                       '+S7 34',                    #80
-                       '+S7 56',                    #81
-                       '+S7 78',                    #82
-                       'Aillio Bullet R1 BT/DT',             #83
-                       '+Aillio Bullet R1 Heater/Fan',       #84
-                       '+Aillio Bullet R1 BT RoR/Drum',      #85
-                       '+Aillio Bullet R1 Voltage/Exhaust',  #86
-                       '+Aillio Bullet R1 State/Fan RPM',    #87
-                       '+Program 78',               #88
-                       '+Program 910',              #89
-                       '+Slider 01',                #90
-                       '+Slider 23',                #91
-                       '-Probat Middleware',                 #92
-                       '-Probat Middleware burner/drum',     #93
-                       '-Probat Middleware fan/pressure',    #94
-                       'Phidget DAQ1400 Current',   #95
-                       'Phidget DAQ1400 Frequency', #96
-                       'Phidget DAQ1400 Digital',   #97
-                       'Phidget DAQ1400 Voltage',   #98
-                       'Aillio Bullet R1 IBTS/BT',  #99
-                       'Yocto IR',                  #100
-                       'Behmor BT/CT',              #101
-                       '+Behmor 34',                #102
-                       'VICTOR 86B',                #103
-                       '+Behmor 56',                #104
-                       '+Behmor 78',                #105
-                       'Phidget HUB IO 0',          #106
-                       'Phidget HUB IO Digital 0',  #107
-                       'Yocto 4-20mA Rx',           #108
-                       '+MODBUS 78',                #109
-                       '+S7 910',                   #110
-                       'WebSocket',                 #111
-                       '+WebSocket 34',             #112
-                       '+WebSocket 56',             #113
-                       '+Phidget TMP1200 1xRTD B',  #114
-                       'HB BT/ET',                  #115
-                       '+HB DT/IT',                 #116
-                       '+HB AT',                    #117
-                       '+WebSocket 78',             #118
-                       '+WebSocket 910',            #119
-                       'Yocto 0-10V Rx',            #120
-                       'Yocto milliVolt Rx',        #121
-                       'Yocto Serial',              #122
-                       'Phidget VCP1000',           #123
-                       'Phidget VCP1001',           #124
-                       'Phidget VCP1002',           #125
-                       'ARC BT/ET',                 #126
-                       '+ARC MET/IT',               #127
-                       '+ARC AT',                   #128
-                       'Yocto Power',               #129
-                       'Yocto Energy',              #130
-                       'Yocto Voltage',             #131
-                       'Yocto Current',             #132
-                       'Yocto Sensor',              #133
-                       'Santoker BT/ET',            #134
-                       '+Santoker Power/Fan',       #135
-                       '+Santoker Drum',            #136
-                       'Phidget DAQ1500',           #137
-                       'Kaleido BT/ET',             #138
-                       '+Kaleido SV/AT',            #139
-                       '+Kaleido Drum/AH',          #140
-                       '+Kaleido Heater/Fan',       #141
-                       'IKAWA',                     #142
-                       '+IKAWA SET/RPM',            #143
-                       '+IKAWA Heater/Fan',         #144
-                       '+IKAWA State/Humidity',     #145
-                       'Phidget DAQ1000 01',        #146
-                       '+Phidget DAQ1000 23',       #147
-                       '+Phidget DAQ1000 45',       #148
-                       '+Phidget DAQ1000 67',       #149
-                       '+MODBUS 910',               #150
-                       '+S7 1112',                  #151
-                       'Phidget DAQ1200 01',        #152
-                       '+Phidget DAQ1200 23',       #153
-                       'Phidget DAQ1300 01',        #154
-                       '+Phidget DAQ1300 23',       #155
-                       'Phidget DAQ1301 01',        #156
-                       '+Phidget DAQ1301 23',       #157
-                       '+Phidget DAQ1301 45',       #158
-                       '+Phidget DAQ1301 67',       #159
-                       f'+IKAWA {deltaLabelUTF8}Humidity/{deltaLabelUTF8}Humidity Dir.',    #160
-                       '+Omega HH309 34',           #161
-                       'Digi-Sense 20250-07',       #162
-                       'Extech 42570',              #163
-                       'Mugma BT/ET',               #164
-                       '+Mugma Heater/Fan',         #165
-                       '+Mugma Heater/Catalyzer',   #166
-                       '+Mugma SV',                 #167
-                       'Phidget TMP1202 1xRTD A',   #168
-                       '+Phidget TMP1202 1xRTD B',  #169
-                       'ColorTrack Serial',         #170
-                       'Santoker R BT/ET',          #171
-                       '+Santoker IR/Board',        #172
-                       '+Santoker DelatBT/DeltaET', #173
-                       'ColorTrack BT',             #174
-                       'Thermoworks BlueDOT',       #175
-                       'Aillio Bullet R2',          #176
-                       '+PID P/I',                  #177
-                       '+PID D/Error',              #178
-                       '+Shelly 3EM Pro Energy/Return', #179
-                       '+Shelly Plug Energy/Last',      #180
-                       '+Shelly 3EM Pro Power/S',       #181
-                       '+Shelly Plug Power/Temp',       #182
-                       '+Shelly Plug Voltage/Current',  #183
-                       'TASI TA612C',                   #184
-                       '+TASI TA612C 34',               #185
-                       '+CM ET/BT',                     #186
-                       '+RoastSeeNEXT Agtron/Crack',    #187
-                       '+RoastSeeNEXT RoR/FoR',         #188
-                       '+RoastSeeNEXT Distance/Time',   #189
-                       '+RoastSeeNEXT Yellow',          #190
-                       '+Phidget TMP1000',           #191
-                       '+Phidget HUM1000 Hum/Temp',  #192
-                       '+Phidget PRE1000',           #193
-                       '+Yocto Meteo Hum/Temp',      #194
-                       '+Yocto Meteo Pressure',      #195
-                       'Orbiter BT/ET',              #196
-                       '+Orbiter IT/DT',             #197
-                       '+Orbiter Sound/Drum',        #198
-                       '+Orbiter Damper/Heater',     #199
-                       '+Orbiter Air/RoR',           #200
-                       'MQTT',                       #201
-                       '+MQTT 34',                   #202
-                       '+MQTT 56',                   #203
-                       '+MQTT 78',                   #204
-                       '+MQTT 910',                  #205
-                       '+MQTT 1112',                 #206
-                       ]
-
-        # ADD DEVICE:
-        # ids of (main) Phidget devices (without a + in front of their name string) as well as Phidget TMP100, HUM100 or PRE1000
-        self.phidgetDevices : Final[list[int]] = [
-            34, # Phidget 1048
-            37, # Phidget 1046
-            40, # Phidget IO
-            47, # Phidget 1045
-            52, # Phidget 1051
-            58, # Phidget TMP1101
-            61, # Phidget TMP1100
-            62, # Phidget 1011
-            63, # Phidget HUB IO 01
-            64, # Phidget HUB IO 23 # + device but need to be mounted directly
-            65, # Phidget HUB IO 45 # + device but need to be mounted directly
-            68, # Phidget TMP1200
-            69, # Phidget IO Digital
-            73, # Phidget 1011 IO Digital
-            74, # Phidget HUB IO Digital 01
-            75, # Phidget HUB IO Digital 23 # + device but need to be mounted directly
-            76, # Phidget HUB IO Digital 45 # + device but need to be mounted directly
-            95, # Phidget DAQ1400 Current
-            96, # Phidget DAQ1400 Frequency
-            97, # Phidget DAQ1400 Digital
-            98, # Phidget DAQ1400 Voltage
-            106, # Phidget HUB IO 0
-            107, # Phidget HUB IO Digital 0
-            123, # Phidget VCP1000
-            124, # Phidget VCP1001
-            125, # Phidget VCP1002
-            137, # Phidget DAQ1500
-            146, # Phidget DAQ1000 01
-            152, # Phidget DAQ1200 01
-            154, # Phidget DAQ1300 01
-            156, # Phidget DAQ1301 01
-            168, # Phidget TMP1202
-            191, # +Phidget TMP1000
-            192, # +Phidget HUM1000 Hum/Temp
-            193, # +Phidget PRE1000
-        ]
-
-        # ADD DEVICE:
-        # ids of (main) devices (without a + in front of their name string)
-        # that do NOT communicate via any serial port thus do not need any serial port configuration
-        self.nonSerialDevices : Final[list[int]] = self.phidgetDevices + [
-            18, # NONE (manual)
-            27, # Program
-            45, # Yocto Thermocouple
-            46, # Yocto PT100
-            79, # S7
-            83, # Aillio Bullet R1 BT/DT
-            99, # Aillio Bullet R1 IBTS/BT
-            100, # Yocto IR
-            108, # Yocto 4-20mA Rx
-            111, # WebSocket
-            120, # Yocto-0-10V-Rx
-            121, # Yocto-milliVolt-Rx
-            122, # Yocto-Serial
-            129, # Yocto Power
-            130, # Yocto Energy
-            131, # Yocto Voltage
-            132, # Yocto Current
-            133, # Yocto Sensor
-            134, # Santoker BT/ET
-            138, # Kaleido BT/ET
-            142, # IKAWA,
-            164, # Mugma BT/ET
-            171, # Santoker R BT/ET
-            174, # ColorTrack BT
-            175, # Thermoworks BlueDOT
-            176, # Aillio Bullet R2
-            194, # +Yocto Meteo Hum/Temp
-            195  # +Yocto Meteo Pressure
-        ]
-
-        # ADD DEVICE:
-        # ids of devices temperature conversions should not be applied
-        self.nonTempDevices : Final[list[int]] = [
-            22, # +PID SV/DUTY %
-            25, # +Virtual
-            40, # Phidget IO 01
-            41, # +Phidget IO 23
-            42, # +Phidget IO 45
-            43, # +Phidget IO 67
-            50, # DUMMY
-            54, # +Hottop Heater/Fan
-            57, # EXTECH 755
-            62, # Phidget 1011 IO 01
-            63, # Phidget HUB IO 01
-            64, # +Phidget HUB IO 23
-            65, # +Phidget HUB IO 45
-            69, # Phidget IO Digital 01
-            70, # +Phidget IO Digital 23
-            71, # +Phidget IO Digital 45
-            72, # +Phidget IO Digital 67
-            73, # Phidget 1011 IO Digital 01
-            74, # Phidget HUB IO Digital 0
-            75, # +Phidget HUB IO Digital 23
-            76, # +Phidget HUB IO Digital 45
-            84, # +Aillio Bullet R1 Heater/Fan
-            87, # +Aillio Bullet R1 State
-            90, # +Slider 01
-            91, # +Slider 23
-            95, # Phidget DAQ1400 Current
-            96, # Phidget DAQ1400 Frequency
-            97, # Phidget DAQ1400 Digital
-            98, # Phidget DAQ1400 Voltage
-            106, # Phidget HUB IO 0
-            107, # Phidget HUB IO Digital 0
-            108, # Yocto 4-20mA Rx
-            120, # Yocto-0-10V-Rx
-            121, # Yocto-milliVolt-Rx
-            122, # Yocto-Serial
-            123, # Phidget VCP1000
-            124, # Phidget VCP1001
-            125, # Phidget VCP1002
-            129, # Yocto Power
-            130, # Yocto Energy
-            131, # Yocto Voltage
-            132, # Yocto Current
-            133, # Yocto Sensor
-            135, # Santoker Power/Fan
-            136, # Santoker Drum
-            137, # Phidget DAQ1500
-            140, # Kaleido Drum/AH
-            141, # Kaleido Heater/Fan
-            143, # IKAWA Set/RPM
-            144, # IKAWA Heater/Fan
-            145, # IKAWA State/Humidity
-            146, # Phidget DAQ1000 01
-            147, # +Phidget DAQ1000 23
-            148, # +Phidget DAQ1000 45
-            149, # +Phidget DAQ1000 67
-            152, # Phidget DAQ1200 01
-            153, # +Phidget DAQ1200 23
-            154, # Phidget DAQ1300 01
-            155, # +Phidget DAQ1300 23
-            156, # Phidget DAQ1301 01
-            157, # +Phidget DAQ1301 23
-            158, # +Phidget DAQ1301 45
-            159, # +Phidget DAQ1301 67
-            160, # IKAWA \Delta Humidity / \Delat Humidity direction
-            165, # +Mugma Heater/Fan
-            166, # +Mugma Heater/Catalyzer
-            170, # ColorTrack Serial
-            173, # +Santoker BT RoR / ET RoR
-            174, # ColorTrack BT
-            177, # +PID P/I
-            178, # +PID D/Error
-            179, # +Shelly 3EM Pro Energy/Return
-            180, # +Shelly Plug Total/Last
-            181, # +Shelly 3EM Pro Power/S
-            182, # +Shelly Plug Power/Temp
-            183, # +Shelly Plug Voltage/Current
-            187, # +RoastSeeNEXT Agtron/Crack
-            188, # +RoastSeeNEXT RoR/FOR
-            189, # +RoastSeeNEXT Distance/Time
-            190, # +RoastSeeNEXT Yellow
-            191, # +Phidget TMP1000
-            192, # +Phidget HUM1000 Hum/Temp
-            193, # +Phidget PRE1000
-            194, # +Yocto Meteo Hum/Temp
-            195, # +Yocto Meteo Pressure
-            198, # +Orbiter Sound/Drum
-            199, # +Orbiter Damper/Heater
-            200  # +Orbiter Air/RoR
-        ]
-
-        # ADD DEVICE:
-        # ids of special devices certain input filters should not be applied
-        self.specialDevices : Final[list[int]] = [
-            18, # NONE (Manual)
-            25, # Virtual
-            50, # Dummy
-            90, # Slider01
-            91  # Slider23
-        ]
-
-        # ADD DEVICE:
-        # ids of devices with binary results (0 and 1) certain input filters should not be applied
-        self.binaryDevices : Final[list[int]] = [
-            69, # Phidget IO Digital 01
-            70, # Phidget IO Digital 23
-            71, # Phidget IO Digital 45
-            72, # Phidget IO Digital 67
-            73, # Phidget 1011 IO Digital 01
-            74, # Phidget HUB IO Digital 01
-            75, # Phidget HUB IO Digital 23
-            76  # Phidget HUB IO Digital 45
-        ]
 
         #extra devices
         self.extradevices:list[int] = []                            # list with indexes for extra devices
@@ -1500,12 +1114,14 @@ class tgraphcanvas(QObject):
         # with tight_layout=True, the matplotlib canvas expands to the maximum using figure.autolayout
         self.fig:Figure = self.canvas.fig
 
-        self.fig.patch.set_facecolor(str(self.palette['canvas']))
+        self.fig.patch.set_facecolor(self.palette['canvas'])
 
         self.ax:Axes|None
         self.ax = self.fig.add_subplot(111,facecolor=self.palette['background'])
         self.delta_ax:_AxesBase|None = None
         self.delta_ax = self.ax.twinx()
+
+        self.last_fit_title_max_chars:int|None = None # remembers the title max chars as computed in fit_titles for on-screen rendering for pdf creation
 
         #legend location
         self.legendloc:int = 4
@@ -1570,6 +1186,10 @@ class tgraphcanvas(QObject):
 
         self.zoom_follow:bool = False # if True, Artisan "follows" BT in the center by panning during recording. Activated via a click on the HOME icon
         self.zoom_follow_onET:bool = False # if True, the Zoom Follow follows ET (or ET RoR if fmt_data_RoR is set) instead of BT (or BT RoR if fmt_data_RoR is set)
+        # panning factor relative to the distance (xmax - xmin) applied after centering
+        #   0: no panning, 1: pan canvas one full screen to the left/bottom, -1: pan canvas one full screen to the right/top
+        self.zoom_follow_pan_x:float = 0
+        self.zoom_follow_pan_y:float = 0
 
         self.alignEvent = 0 # 0:CHARGE, 1:DRY, 2:FCs, 3:FCe, 4:SCs, 5:SCe, 6:DROP, 7:ALL
         self.alignnames = [
@@ -1747,7 +1367,7 @@ class tgraphcanvas(QObject):
         #ATTENTION: never change this flag directly. Use the methods self.fileDirty() and self.fileClean() instead!!
         self.safesaveflag:bool = False
 
-        self.pid = pid.PID()
+        self.pid:pid.PID|None = None
 
         #background profile
         self.background:bool = False # set to True if loaded background profile is shown and False if hidden
@@ -1915,8 +1535,8 @@ class tgraphcanvas(QObject):
         self.BTlcd:bool = True
         self.swaplcds:bool = False # if set draw ET curver on top of BT curve and show ET LCD above BT LCD by default
         self.LCDdecimalplaces = 1
-        self.foregroundShowFullflag:bool = True
-        self.interpolateDropsflag:bool = True
+        self.foregroundShowFullflag:bool = False
+        self.interpolateDropsflag:bool = False
         self.DeltaETflag:bool = False
         self.DeltaBTflag:bool = True
         self.DeltaETlcdflag:bool = False
@@ -1946,6 +1566,20 @@ class tgraphcanvas(QObject):
         self.glow:int = 0
         self.graphstyle:int = 0
         self.graphfont:int = 0
+        # 0: Qt system default (system)
+        # 1: Humor (included)
+        # 2: Comic (system)
+        # 3: WenQuanYi Zen Hei (included)
+        # 4: Source Han Sans CN (included)
+        # 5: Source Han Sans TW (included)
+        # 6: Source Han Sans HK (included)
+        # 7: Source Han Sans KR (included)
+        # 8: Source Han Sans JP (included)
+        # 9: Dijkstra (included)
+        # 10: xkcd Script (included)
+        # 11: Comic Neue (included)
+        # 12: Nunito  (included)
+        # 13: Noto Sans Mono  (included)
 
         #variables to configure the 8 default buttons
         # button = 0:CHARGE, 1:DRY_END, 2:FC_START, 3:FC_END, 4:SC_START, 5:SC_END, 6:DROP, 7:COOL_END;
@@ -2084,7 +1718,7 @@ class tgraphcanvas(QObject):
         self.EvalueColor:list[str] = self.EvalueColor_default.copy()
         self.EvalueTextColor:list[str] = self.EvalueTextColor_default.copy()
         self.EvalueMarker:list[str] = ['o','s','h','D']
-        self.EvalueMarkerSize:list[float] = [4,4,4,4]
+        self.EvalueMarkerSize:list[float] = [3,3,3,3]
         self.Evaluelinethickness:list[float] = [1,1,1,1]
         self.Evaluealpha:list[float] = [.8,.8,.8,.8]
         #the event value position bars are calculated at redraw()
@@ -2104,21 +1738,21 @@ class tgraphcanvas(QObject):
         self.linestyle_default: Final[str] = '-'
         self.drawstyle_default: Final[str] = 'default'
         self.linewidth_default: Final[float] = 1.5
-        self.back_linewidth_default: Final[float] = 2
-        self.delta_linewidth_default: Final[float] = 1
-        self.back_delta_linewidth_default: Final[float] = 1.5
+        self.back_linewidth_default: Final[float] = 1.8
+        self.delta_linewidth_default: Final[float] = 0.8
+        self.back_delta_linewidth_default: Final[float] = 1.3
         self.extra_linewidth_default: Final[float] = 1
         self.marker_default: Final[str] = 'None'
         self.markersize_default: Final[float] = 6
 
         self.BTlinestyle:str = self.linestyle_default
         self.BTdrawstyle:str = self.drawstyle_default
-        self.BTlinewidth:float = self.linewidth_default
+        self.BTlinewidth:float = 2 # self.linewidth_default
         self.BTmarker:str = self.marker_default
         self.BTmarkersize:float = self.markersize_default
         self.ETlinestyle:str = self.linestyle_default
         self.ETdrawstyle:str = self.drawstyle_default
-        self.ETlinewidth:float = self.linewidth_default
+        self.ETlinewidth:float = 1.5 # self.linewidth_default
         self.ETmarker:str = self.marker_default
         self.ETmarkersize:float = self.markersize_default
         self.BTdeltalinestyle:str = self.linestyle_default
@@ -2249,8 +1883,8 @@ class tgraphcanvas(QObject):
         # RoR display limits
         # user configurable RoR limits (only applied if flag is True; applied before TP during recording as well as full redraw)
         self.RoRlimitFlag:bool = True
-        self.RoRlimit:int = int(round(RoRfromCtoFstrict(45))) # 81F/min = 45C/min # was 95F/min
-        self.RoRlimitm:int = int(round(RoRfromCtoFstrict(-10))) # -18F/min = -10C/min # was: -95F/min
+        self.RoRlimit:int = round(RoRfromCtoFstrict(83)) # 150F/min = 83C/min
+        self.RoRlimitm:int = round(RoRfromCtoFstrict(-10)) # -18F/min = -10C/min
         # system fixed RoR limits (only applied if flag is True; usually higher than the user configurable once and always applied)
         self.maxRoRlimit: Final[int] = 170
         # axis limits
@@ -2458,7 +2092,10 @@ class tgraphcanvas(QObject):
 
 
         ##########################     Designer variables       #################################
-        self.designerflag:bool = False
+        self.designerflag:bool = False # True if in designer mode
+        self.designer_dashboard_was_active_on_open:bool = False # visibility of dashboard on start of the designer to reconstruct this state on exit
+        self.designer_background_mode: bool = False # flag indicating if designer was started from dashboard to edit background profile
+        self.designer_loaded_foreground_profile_file:str|None = None # the foreground profile that was loaded on starting the designer
         self.designerconnections:list[int|None] = [None,None,None,None]   #mouse event ids
         self.mousepress:bool = False
         self.indexpoint:int = 0
@@ -2682,7 +2319,7 @@ class tgraphcanvas(QObject):
         # flag to toggle between Temp and RoR scale of xy-display
         self.fmt_data_RoR:bool = False
         self.fmt_data_ON:bool = True #; if False, the xy-display is deactivated
-        # toggle between using the 0: y-cursor pos, 1: BT@x, 2: ET@x, 3: BTB@x, 4: ETB@x (thus BT, ET or the corresponding background curve data at cursor position x)
+        # toggle between using the 0: y-cursor pos, 1: BT@x, 2: ET@x, 3: BTB@x, 4: ETB@x (thus BT, ET or the corresponding background curve data at cursor position
         # to display the y of the cursor coordinates
         self.fmt_data_curve = 0
         self.running_LCDs = 0 # if not 0 and not sampling visible LCDs show the readings at the cursor position of 1: foreground profile, 2: background profile
@@ -2745,7 +2382,7 @@ class tgraphcanvas(QObject):
         self.ratingunits_setup:list[int] = [0]*4                   # index in list self.powerunits
         self.sourcetypes_setup:list[int] = [0]*4                   # index in list self.sourcenames
         self.load_etypes_setup:list[int] = [0]*4                   # index of the etype that is the gas/burner setting (if idx > 4, the PID Duty extra dev is selected as source)
-        self.presssure_percents_setup:list[bool] = [False]*4       # event value in pressure percent
+        self.pressure_percents_setup:list[bool] = [False]*4       # event value in pressure percent
         self.loadevent_zeropcts_setup:list[int] = [0]*4            # event value corresponding to 0 percent
         self.loadevent_hundpcts_setup:list[int] = [100]*4          # event value corresponding to 100 percent
         # Meters
@@ -2803,7 +2440,7 @@ class tgraphcanvas(QObject):
         self.ratingunits = self.ratingunits_setup[:]             # index in list self.heatunits
         self.sourcetypes = self.sourcetypes_setup[:]             # index in list self.sourcetypes
         self.load_etypes = self.load_etypes_setup[:]             # index of the etype that is the gas/burner setting (if idx > 4, the PID Duty extra dev is selected as source)
-        self.presssure_percents = self.presssure_percents_setup[:]  # event value in pressure percent
+        self.pressure_percents = self.pressure_percents_setup[:]  # event value in pressure percent
         self.loadevent_zeropcts = self.loadevent_zeropcts_setup[:]  # event value corresponding to 0 percent
         self.loadevent_hundpcts = self.loadevent_hundpcts_setup[:]  # event value corresponding to 100 percent
         # Meters
@@ -2846,6 +2483,7 @@ class tgraphcanvas(QObject):
         self.single_click_mpl_upperleft_corner_timer = QTimer()
         self.single_click_mpl_upperleft_corner_timer.setSingleShot(True)
         self.single_click_mpl_upperleft_corner_timer.timeout.connect(self.aw.open_roast_properties_dialog)
+
         self.single_click_mpl_upperleft_corner_TIMEOUT:Final[int] = 200 # time in milliseconds before disconnect state is terminated by a 'reset'
 
         self.resizeredrawing = 0 # holds timestamp of last resize triggered redraw
@@ -2884,7 +2522,10 @@ class tgraphcanvas(QObject):
         self.xlabel_artist:Text|None = None
         self.xlabel_width:float|None = None
 
-        self.updategraphicsSignal.connect(self.updategraphics, type=Qt.ConnectionType.QueuedConnection) # type: ignore[call-arg]
+        self.profile_upload_limit:float = 1 # maximum upload frequency in seconds
+        self.last_profile_upload_times:float = 0
+
+        self.updategraphicsSignal.connect(self.updategraphics, type=Qt.ConnectionType.QueuedConnection) # Xtype: ignore[call-arg]
         self.updateLargeLCDsSignal.connect(self.updateLargeLCDs)
         self.updateLargeLCDsReadingsSignal.connect(self.updateLargeLCDsReadings)
         self.setTimerLargeLCDcolorSignal.connect(self.setTimerLargeLCDcolor)
@@ -2893,30 +2534,32 @@ class tgraphcanvas(QObject):
         self.fileDirtySignal.connect(self.fileDirty)
         self.fileCleanSignal.connect(self.fileClean)
         self.markChargeDelaySignal.connect(self.markChargeDelay)
-        self.markChargeSignal.connect(self.markCharge, type=Qt.ConnectionType.QueuedConnection) # type: ignore[call-arg]
-        self.markTPSignal.connect(self.markTPTrigger, type=Qt.ConnectionType.QueuedConnection) # type: ignore[call-arg]
-        self.markDRYSignal.connect(self.markDryEnd, type=Qt.ConnectionType.QueuedConnection) # type: ignore[call-arg]
-        self.markFCsSignal.connect(self.mark1Cstart, type=Qt.ConnectionType.QueuedConnection) # type: ignore[call-arg]
-        self.markFCeSignal.connect(self.mark1Cend, type=Qt.ConnectionType.QueuedConnection) # type: ignore[call-arg]
-        self.markSCsSignal.connect(self.mark2Cstart, type=Qt.ConnectionType.QueuedConnection) # type: ignore[call-arg]
-        self.markSCeSignal.connect(self.mark2Cend, type=Qt.ConnectionType.QueuedConnection) # type: ignore[call-arg]
-        self.markDropSignal.connect(self.markDrop, type=Qt.ConnectionType.QueuedConnection) # type: ignore[call-arg]
-        self.markCoolSignal.connect(self.markCoolEnd, type=Qt.ConnectionType.QueuedConnection) # type: ignore[call-arg]
-        self.onMonitorSignal.connect(self.OnMonitor, type=Qt.ConnectionType.QueuedConnection) # type: ignore[call-arg]
+        self.markChargeSignal.connect(self.markCharge, type=Qt.ConnectionType.QueuedConnection) # Xtype: ignore[call-arg]
+        self.markTPSignal.connect(self.markTPTrigger, type=Qt.ConnectionType.QueuedConnection) # Xtype: ignore[call-arg]
+        self.markDRYSignal.connect(self.markDryEnd, type=Qt.ConnectionType.QueuedConnection) # Xtype: ignore[call-arg]
+        self.markFCsSignal.connect(self.mark1Cstart, type=Qt.ConnectionType.QueuedConnection) # Xtype: ignore[call-arg]
+        self.markFCeSignal.connect(self.mark1Cend, type=Qt.ConnectionType.QueuedConnection) # Xtype: ignore[call-arg]
+        self.markSCsSignal.connect(self.mark2Cstart, type=Qt.ConnectionType.QueuedConnection) # Xtype: ignore[call-arg]
+        self.markSCeSignal.connect(self.mark2Cend, type=Qt.ConnectionType.QueuedConnection) # Xtype: ignore[call-arg]
+        self.markDropSignal.connect(self.markDrop, type=Qt.ConnectionType.QueuedConnection) # Xtype: ignore[call-arg]
+        self.markCoolSignal.connect(self.markCoolEnd, type=Qt.ConnectionType.QueuedConnection) # Xtype: ignore[call-arg]
+        self.onMonitorSignal.connect(self.OnMonitor, type=Qt.ConnectionType.QueuedConnection) # Xtype: ignore[call-arg]
         self.toggleMonitorSignal.connect(self.toggleMonitorTigger)
         self.toggleRecorderSignal.connect(self.toggleRecorderTigger)
-        self.processAlarmSignal.connect(self.processAlarm, type=Qt.ConnectionType.QueuedConnection) # type: ignore[call-arg] # queued to avoid deadlock between RampSoak processing and EventRecordAction, both accessing the same critical section protected by profileDataSemaphore
+        self.processAlarmSignal.connect(self.processAlarm, type=Qt.ConnectionType.QueuedConnection) # Xtype: ignore[call-arg] # queued to avoid deadlock between RampSoak processing and EventRecordAction, both accessing the same critical section protected by profileDataSemaphore
         self.alarmsetSignal.connect(self.selectAlarmSet)
         self.moveBackgroundSignal.connect(self.moveBackgroundAndRedraw)
         self.eventRecordSignal.connect(self.EventRecordSlot)
         self.eventRecordOverwriteValueSignal.connect(self.EventRecordOverwriteValueSlot)
-        self.eventRecordActionSignal.connect(self.EventRecordActionSlot, type=Qt.ConnectionType.QueuedConnection) # type: ignore[call-arg] # queued to avoid deadlock between PID processing and EventRecordAction, both accessing the same critical section protected by profileDataSemaphore
+        self.eventRecordActionSignal.connect(self.EventRecordActionSlot, type=Qt.ConnectionType.QueuedConnection) # Xtype: ignore[call-arg] # queued to avoid deadlock between PID processing and EventRecordAction, both accessing the same critical section protected by profileDataSemaphore
         self.showCurveSignal.connect(self.showCurve)
         self.showExtraCurveSignal.connect(self.showExtraCurve)
         self.showEventsSignal.connect(self.showEvents)
         self.showBackgroundEventsSignal.connect(self.showBackgroundEvents)
-        self.redrawSignal.connect(self.redraw, type=Qt.ConnectionType.QueuedConnection) # type: ignore[call-arg]
-        self.redrawKeepViewSignal.connect(self.redraw_keep_view, type=Qt.ConnectionType.QueuedConnection) # type: ignore[call-arg]
+        self.redrawSignal.connect(self.redraw, type=Qt.ConnectionType.QueuedConnection) # Xtype: ignore[call-arg]
+        self.redrawKeepViewSignal.connect(self.redraw_keep_view, type=Qt.ConnectionType.QueuedConnection) # Xtype: ignore[call-arg]
+        self.canvasZoomSignal.connect(self.canvas_zoom, type=Qt.ConnectionType.QueuedConnection) # Xtype: ignore[call-arg]
+        self.canvasPanSignal.connect(self.canvas_pan, type=Qt.ConnectionType.QueuedConnection) # Xtype: ignore[call-arg]
 
     #NOTE: empty Figure is initially drawn at the end of self.awsettingsload()
     #################################    FUNCTIONS    ###################################
@@ -2936,10 +2579,140 @@ class tgraphcanvas(QObject):
              (device_id == 83 and 2 < self.aw.s7.type[8+channel_offset] < 11) or # S7 910
              (device_id == 151 and 2 < self.aw.s7.type[8+channel_offset] < 11) or # S7 1112
               # any other binary device
-             device_id in self.binaryDevices or
+             is_binary_device(device_id) or
               # special device
-             device_id in self.specialDevices
+             is_special_device(device_id)
              )
+
+    @pyqtSlot(float, float)
+    def canvas_zoom(self, factor_x:float, factor_y:float) -> None:
+        try:
+            if self.fig.canvas.toolbar is not None and self.ax is not None:
+                if self.fig.canvas.toolbar._nav_stack() is None:  # type:ignore[attr-defined] # pylint: disable=protected-access
+                    self.fig.canvas.toolbar.push_current()   # Set the home button to this view.
+                xmin, xmax = self.ax.get_xlim()
+                ymin, ymax = self.ax.get_ylim()
+                if self.twoAxisMode() and self.delta_ax is not None:
+                    zmin, zmax = self.delta_ax.get_ylim()
+                else:
+                    zmin = ymin
+                    zmax = ymax
+                # update
+                if factor_x != 0:
+                    new_x_range = (xmax - xmin)/(2*factor_x)
+                    mid_x = (xmax - xmin)/2 + xmin
+                    xmin = mid_x - new_x_range
+                    xmax = mid_x + new_x_range
+                    # update state
+                    self.ax.set_xlim(xmin, xmax)
+                if factor_y != 0:
+                    new_y_range = (ymax - ymin)/(2*factor_y)
+                    mid_y = (ymax - ymin)/2 + ymin
+                    ymin = mid_y -  new_y_range
+                    ymax = mid_y + new_y_range
+                    # update state
+                    self.ax.set_ylim(ymin, ymax)
+                    # delta axis
+                    if self.twoAxisMode() and self.delta_ax is not None:
+                        new_z_range = (zmax - zmin)/(2*factor_y)
+                        mid_z = (zmax - zmin)/2 + zmin
+                        zmin = mid_z - new_z_range
+                        zmax = mid_z + new_z_range
+                        self.delta_ax.set_ylim(zmin, zmax)
+#                        self.delta_ax.set_xlim(xmin, xmax)
+
+                # remember current state in history
+                self.fig.canvas.toolbar.push_current()
+                self.fig.canvas.draw_idle()
+        except Exception as e:  # pylint: disable=broad-except
+            _log.exception(e)
+
+    # the center argument is interpreted as
+    # -2: don't center, just pan (for use by pan Artisan Command)
+    # -1: center to current time only during recording and otherwise like 0, center to current axis limits
+    #  0: center to current axis limits
+    #  during recording the following are actually follow-time only and keep y/z-achses to defaults:
+    #  1: current time and BT
+    #  2: current time and ET
+    #  3: current time and BT RoR (delta BT)
+    #  4: current time and ET RoR (delta ET)
+    # mode 1-4 are ignored if not recording and default to 0
+    @pyqtSlot(float, float, int)
+    def canvas_pan(self, factor_x:float, factor_y:float, center:int) -> None:
+        try:
+            if self.fig.canvas.toolbar is not None and self.ax is not None:
+                if self.fig.canvas.toolbar._nav_stack() is None:  # type:ignore[attr-defined] # pylint: disable=protected-access
+                    self.fig.canvas.toolbar.push_current()   # Set the home button to this view.
+                xmin, xmax = self.ax.get_xlim()
+                ymin, ymax = self.ax.get_ylim()
+                if self.twoAxisMode() and self.delta_ax is not None:
+                    zmin, zmax = self.delta_ax.get_ylim()
+                else:
+                    zmin = ymin
+                    zmax = ymax
+                # center
+                if center != -2:
+                    if center in {-1, 0} or not self.flagstart:
+                        chargetime = (self.timex[self.timeindex[0]] if -1 < self.timeindex[0] < len(self.timex) else 0)
+                        xmin = self.startofx
+                        xmax = self.endofx + chargetime
+                        if center != -1:
+                            ymin = self.ylimit_min
+                            ymax = self.ylimit
+                    elif (center == -1 or center>0) and len(self.timex)>0 and len(self.temp1)>0 and len(self.temp2)> 0:
+                        # only during recording we center relative to current time and optional to temp/RoR
+                        tx = self.timex[-1]
+                        xoffset = (xmax - xmin) / 2.
+                        xmin = tx - xoffset
+                        xmax = tx + xoffset
+                        if center in {1, 2}:
+                            # center on ET or BT
+                            yoffset = (ymax - ymin) / 2.
+                            yvalue = (self.temp1[-1] if center == 2 else self.temp2[-1])
+                            ymin = yvalue - yoffset
+                            ymax = yvalue + yoffset
+                            if self.twoAxisMode() and self.delta_ax is not None:
+                                zoffset = (zmax - zmin) / 2.
+                                zvalued = float(self.delta_ax.transData.inverted().transform((0,self.ax.transData.transform((0,yvalue))[1]))[1])
+                                zmin = zvalued - zoffset
+                                zmax = zvalued + zoffset
+                        elif center in {3, 4} and self.twoAxisMode() and self.delta_ax is not None:
+                            # center on ET RoR or BT RoR
+                            ror:float|None = None
+                            if center == 4 and len(self.delta1)>0:
+                                ror = self.delta1[-1]
+                            elif center == 3 and len(self.delta2)>0:
+                                ror = self.delta2[-1]
+                            if ror is not None:
+                                zoffset = (zmax - zmin) / 2.
+                                zmin = ror - zoffset
+                                zmax = ror + zoffset
+                                yoffset = (ymax - ymin) / 2.
+                                zvalue = float(self.ax.transData.inverted().transform((0,self.delta_ax.transData.transform((0,ror))[1]))[1])
+                                ymin = zvalue - yoffset
+                                ymax = zvalue + yoffset
+                # shift from center
+                shift_x = (xmax - xmin)*factor_x
+                xmin += shift_x
+                xmax += shift_x
+                shift_y = (ymax - ymin)*factor_y
+                ymin += shift_y
+                ymax += shift_y
+                # update state
+                self.ax.set_xlim(xmin, xmax)
+                self.ax.set_ylim(ymin, ymax)
+                # delta axis
+                if self.twoAxisMode() and self.delta_ax is not None:
+                    shift_z = (zmax - zmin)*factor_y
+                    zmin += shift_z
+                    zmax += shift_z
+                    self.delta_ax.set_ylim(zmin, zmax)
+#                    self.delta_ax.set_xlim(xmin, xmax)
+                # remember current state in history
+                self.fig.canvas.toolbar.push_current()
+                self.fig.canvas.draw_idle()
+        except Exception as e:   # pylint: disable=broad-except
+            _log.exception(e)
 
     # returns None if there is no weight at the given container_idx registered
     def get_container_weight(self, container_idx:int) -> float|None:
@@ -2947,16 +2720,7 @@ class tgraphcanvas(QObject):
             return self.container_weights[container_idx]
         return None
 
-    # toggles the y cursor coordinate see self.fmt_data_curve
-    def nextFmtDataCurve(self) -> None:
-        self.fmt_data_curve = (self.fmt_data_curve+1) % 5
-        if self.backgroundprofile is None and self.fmt_data_curve in {3, 4}:
-            self.fmt_data_curve = 0
-        if len(self.timex)<3 and self.fmt_data_curve in {1, 2}:
-            if self.backgroundprofile is None:
-                self.fmt_data_curve = 0
-            else:
-                self.fmt_data_curve = 3
+    def xy_cursor_setting(self) -> str:
         s = 'cursor position'
         if self.fmt_data_curve == 1:
             s = self.aw.BTname
@@ -2966,8 +2730,20 @@ class tgraphcanvas(QObject):
             s = f"{QApplication.translate('Label','Background')} {self.aw.BTname}"
         elif self.fmt_data_curve == 4:
             s = f"{QApplication.translate('Label','Background')} {self.aw.ETname}"
+        return QApplication.translate('Message', 'set y-coordinate to {}').format(s)
+
+    # toggles the xy cursor coordinate see self.fmt_data_curve
+    def nextFmtDataCurve(self) -> None:
+        self.fmt_data_curve = (self.fmt_data_curve+1) % 5
+        if self.backgroundprofile is None and self.fmt_data_curve in {3, 4}:
+            self.fmt_data_curve = 0
+        if len(self.timex)<3 and self.fmt_data_curve in {1, 2}:
+            if self.backgroundprofile is None:
+                self.fmt_data_curve = 0
+            else:
+                self.fmt_data_curve = 3
         self.aw.ntb.update_message()
-        self.aw.sendmessage(QApplication.translate('Message', 'set y-coordinate to {}').format(s))
+        self.aw.sendmessage(self.xy_cursor_setting())
 
     @pyqtSlot(str, bool)
     def showCurve(self, name: str, state: bool) -> None:
@@ -3044,7 +2820,7 @@ class tgraphcanvas(QObject):
         self.ratingunits_setup = self.ratingunits[:]
         self.sourcetypes_setup = self.sourcetypes[:]
         self.load_etypes_setup = self.load_etypes[:]
-        self.presssure_percents_setup = self.presssure_percents[:]
+        self.pressure_percents_setup = self.pressure_percents[:]
         self.loadevent_zeropcts_setup = self.loadevent_zeropcts[:]
         self.loadevent_hundpcts_setup = self.loadevent_hundpcts[:]
         self.meterlabels_setup = self.meterlabels[:]
@@ -3061,7 +2837,7 @@ class tgraphcanvas(QObject):
         self.ratingunits = self.ratingunits_setup[:]
         self.sourcetypes = self.sourcetypes_setup[:]
         self.load_etypes = self.load_etypes_setup[:]
-        self.presssure_percents = self.presssure_percents_setup[:]
+        self.pressure_percents = self.pressure_percents_setup[:]
         self.loadevent_zeropcts = self.loadevent_zeropcts_setup[:]
         self.loadevent_hundpcts = self.loadevent_hundpcts_setup[:]
         self.meterlabels = self.meterlabels_setup[:]
@@ -3111,8 +2887,8 @@ class tgraphcanvas(QObject):
             interval = speed * (self.delay / 1000)
         else:
             interval = self.profile_sampling_interval
-        self.deltaBTsamples = max(1,int(round(self.deltaBTspan / interval)))
-        self.deltaETsamples = max(1,int(round(self.deltaETspan / interval)))
+        self.deltaBTsamples = max(1,round(self.deltaBTspan / interval))
+        self.deltaETsamples = max(1,round(self.deltaETspan / interval))
 
     @pyqtSlot()
     @gui_perf_tracked('canvas.updateBackground')
@@ -3153,7 +2929,7 @@ class tgraphcanvas(QObject):
             if self.ax is not None:
                 axfig = self.ax.get_figure()
                 if axfig is not None and hasattr(self.fig.canvas,'copy_from_bbox'):
-                    self.ax_background = self.fig.canvas.copy_from_bbox(axfig.bbox) # ty:ignore[call-non-callable] # pyright: ignore[reportAttributeAccessIssue]
+                    self.ax_background = self.fig.canvas.copy_from_bbox(axfig.bbox) # ty:ignore[not-callable] # pyright: ignore[reportAttributeAccessIssue]
                     # we redraw the additional artists like the projection lines, the timeline and the AUC guide line
 
                     for fill in self.extrafill1lines + self.extrafill2lines:
@@ -3255,7 +3031,7 @@ class tgraphcanvas(QObject):
             elif self.ambientTemp == 0.0 and self.device in {34, 58}: # Phidget 1048 or TMP1101 channel 4 (use internal temp)
                 try:
                     if self.aw.ser.PhidgetTemperatureSensor is not None and self.aw.ser.PhidgetTemperatureSensor[0].getAttached():
-                        from Phidget22.Devices.TemperatureSensor import TemperatureSensor as PhidgetTemperatureSensor # type: ignore[import-untyped]
+                        from Phidget22.Devices.TemperatureSensor import TemperatureSensor as PhidgetTemperatureSensor
                         ambient = PhidgetTemperatureSensor()
                         ambient.setDeviceSerialNumber(self.aw.ser.PhidgetTemperatureSensor[0].getDeviceSerialNumber())
                         if self.device == 58:
@@ -3349,7 +3125,7 @@ class tgraphcanvas(QObject):
             return '0'
         if value < 0:
             return ''
-        return str(int(round(value)))
+        return str(round(value))
 
     # the inverse to eventsvalues above (string -> value)
     def str2eventsvalue(self, s:str) -> float:
@@ -3371,11 +3147,15 @@ class tgraphcanvas(QObject):
                     ax_width = self.ax.get_window_extent().width
                 else:
                     ax_width = self.ax.get_window_extent(renderer=r).width # pyright:ignore[reportUnknownArgumentType]
-                ax_width_for_title = ax_width - self.background_title_width
+                screen = self.aw.app.primaryScreen()
+                screen_dpi = (screen.devicePixelRatio() if screen is not None else 2)
+                dpi_factor = (screen_dpi * self.aw.dpi) / self.fig.get_dpi() # if dpi is set different to its default in fig_save (as in save PNG/JPG) this factor is different from 1
+                ax_width_for_title = (ax_width - self.background_title_width) * dpi_factor
                 redraw = False
                 if self.title_text is not None and self.title_artist is not None and self.title_width is not None:
                     try:
                         prev_title_text = self.title_artist.get_text()
+                        # we need a fresh renderer here!
                         render = None
                         try:
                             render = self.fig.canvas.get_renderer() # type: ignore[attr-defined]
@@ -3383,10 +3163,11 @@ class tgraphcanvas(QObject):
                             # FigureCanvasPdf does not feature a renderer and thus the abbreviation mechanism does not work for PDF export
                             pass
                         if render is not None and ax_width_for_title <= self.title_width:
-                            chars = max(3,int(ax_width_for_title / (self.title_width / len(self.title_text))) - 2)
-                            self.title_artist.set_text(f'{self.title_text[:chars].strip()}...')
+                            chars = max(3,int(ax_width_for_title / (self.title_width / len(self.title_text))) - 3)
+                            self.last_fit_title_max_chars = chars # remembers the title max chars as computed in fit_titles for on-screen rendering for pdf creation
+                            self.title_artist.set_text(abbrevString(self.title_text, chars))
                         else:
-                            self.title_artist.set_text(self.title_text)
+                            self.title_artist.set_text(abbrevString(self.title_text, (70 if self.last_fit_title_max_chars is None else self.last_fit_title_max_chars)))
                         if prev_title_text != self.title_artist.get_text():
                             redraw = True
                     except Exception as e: # pylint: disable=broad-except
@@ -3580,9 +3361,9 @@ class tgraphcanvas(QObject):
                                                 event_pos_offset = self.eventpositionbars[0]
                                                 event_pos_factor = self.eventpositionbars[1] - self.eventpositionbars[0]
                                                 if self.clampEvents:
-                                                    evalue = max(0,int(round(event_ydata)))
+                                                    evalue = max(0,round(event_ydata))
                                                 else:
-                                                    evalue = max(0,int(round((event_ydata - event_pos_offset) / event_pos_factor)))
+                                                    evalue = max(0,round((event_ydata - event_pos_offset) / event_pos_factor))
                                                 evalue_internal = self.eventsExternal2InternalValue(evalue)
                                                 for i, bge in enumerate(self.backgroundEvents):
                                                     if (event_type == self.backgroundEtypes[i] and
@@ -3632,9 +3413,9 @@ class tgraphcanvas(QObject):
                                             event_pos_offset = self.eventpositionbars[0]
                                             event_pos_factor = self.eventpositionbars[1] - self.eventpositionbars[0]
                                             if self.clampEvents:
-                                                evalue = max(0,int(round(event_ydata)))
+                                                evalue = max(0,round(event_ydata))
                                             else:
-                                                evalue = max(0,int(round((event_ydata - event_pos_offset) / event_pos_factor)))
+                                                evalue = max(0,round((event_ydata - event_pos_offset) / event_pos_factor))
                                             evalue_internal = self.eventsExternal2InternalValue(evalue)
                                             for i, spe in enumerate(self.specialevents):
                                                 # search for the corresponding custom event
@@ -3756,7 +3537,7 @@ class tgraphcanvas(QObject):
                     else:
                         event_pos_offset = self.eventpositionbars[0]
                         event_pos_factor = self.eventpositionbars[1] - self.eventpositionbars[0]
-                        event_ydata = int(round(new_value * event_pos_factor + event_pos_offset))
+                        event_ydata = round(new_value * event_pos_factor + event_pos_offset)
                     ydata[pos] = event_ydata # pyrefly:ignore[unsupported-operation]
                     if (not self.flagon and len(cast(list[float], ydata)) == pos + 2 and (
                         self.timeindex[6]!=0 and self.timex[self.timeindex[6]] >= cast(float, xdata[-1]) if foreground
@@ -3883,9 +3664,9 @@ class tgraphcanvas(QObject):
                             event_pos_offset = self.eventpositionbars[0]
                             event_pos_factor = self.eventpositionbars[1] - self.eventpositionbars[0]
                             if self.clampEvents:
-                                evalue = max(0,int(round(event_ydata)))
+                                evalue = max(0,round(event_ydata))
                             else:
-                                evalue = max(0,int(round((event_ydata - event_pos_offset) / event_pos_factor)))
+                                evalue = max(0,round((event_ydata - event_pos_offset) / event_pos_factor))
                             evalue_internal = self.eventsExternal2InternalValue(evalue)
                             self.specialeventsvalue[self.foreground_event_ind] = evalue_internal
                             # put back after rounding and converting back to position
@@ -3978,9 +3759,9 @@ class tgraphcanvas(QObject):
                             event_pos_offset = self.eventpositionbars[0]
                             event_pos_factor = self.eventpositionbars[1] - self.eventpositionbars[0]
                             if self.clampEvents:
-                                evalue = max(0,int(round(event_ydata)))
+                                evalue = max(0,round(event_ydata))
                             else:
-                                evalue = max(0,int(round((event_ydata - event_pos_offset) / event_pos_factor)))
+                                evalue = max(0,round((event_ydata - event_pos_offset) / event_pos_factor))
                             evalue_internal = self.eventsExternal2InternalValue(evalue)
                             self.backgroundEvalues[self.background_event_ind] = evalue_internal
                             # put back after rounding and converting back to position
@@ -4141,9 +3922,9 @@ class tgraphcanvas(QObject):
         event_pos_offset = self.eventpositionbars[0]
         event_pos_factor = self.eventpositionbars[1] - self.eventpositionbars[0]
         if self.clampEvents:
-            evalue = max(0,int(round(y)))
+            evalue = max(0,round(y))
         else:
-            evalue = max(0,int(round((y - event_pos_offset) / event_pos_factor)))
+            evalue = max(0,round((y - event_pos_offset) / event_pos_factor))
         evalue_internal = self.eventsExternal2InternalValue(evalue)
         # set anno text
         if background:
@@ -4183,9 +3964,9 @@ class tgraphcanvas(QObject):
         event_pos_offset = self.eventpositionbars[0]
         event_pos_factor = self.eventpositionbars[1] - self.eventpositionbars[0]
         if self.clampEvents:
-            evalue = max(0,int(round(y)))
+            evalue = max(0,round(y))
         else:
-            evalue = max(0,int(round((y - event_pos_offset) / event_pos_factor)))
+            evalue = max(0,round((y - event_pos_offset) / event_pos_factor))
         evalue_internal = self.eventsExternal2InternalValue(evalue)
         # set anno text
         etype = self.etypesf(event_type)
@@ -4250,7 +4031,7 @@ class tgraphcanvas(QObject):
                     ydata = ldots.get_ydata()
                     if isinstance(xdata, (numpy.ndarray, list)) and isinstance(ydata, (numpy.ndarray, list)):
                         if set_x:
-                            xdata[self.foreground_event_pos] = int(round(event_xdata)) # pyrefly:ignore[unsupported-operation]
+                            xdata[self.foreground_event_pos] = round(event_xdata) # pyrefly:ignore[unsupported-operation]
                             ldots.set_xdata(cast(list[float], xdata))
                         if set_y and isinstance(ydata, (numpy.ndarray, list)):
                             ydata[self.foreground_event_pos] = max(0,event_ydata) # pyrefly:ignore[unsupported-operation]
@@ -4336,7 +4117,7 @@ class tgraphcanvas(QObject):
                             if self.background_event_pos != len(cast(list[float], xdata))-1:
                                 # there is a point right to ours
                                 new_x = min(cast(float, xdata[self.background_event_pos+1])-1,new_x)
-                            xdata[self.background_event_pos] = int(round(new_x))  # pyrefly:ignore[unsupported-operation]
+                            xdata[self.background_event_pos] = round(new_x)  # pyrefly:ignore[unsupported-operation]
                             ldots.set_xdata(cast(list[float], xdata))
                         if set_y:
                             ydata[self.background_event_pos] = max(0,event_ydata)  # pyrefly:ignore[unsupported-operation]
@@ -4428,8 +4209,9 @@ class tgraphcanvas(QObject):
                         self.single_click_mpl_upperleft_corner_timer.stop()
                         QDesktopServices.openUrl(QUrl(roastLink(self.roastUUID), QUrl.ParsingMode.TolerantMode))
                         return
-                    # title not set => open Roast Properties dialog
-                    self.single_click_mpl_upperleft_corner_timer.start(self.single_click_mpl_upperleft_corner_TIMEOUT)
+# deactivated as now there is the dashboard
+#                    # title not set => open Roast Properties dialog
+#                    self.single_click_mpl_upperleft_corner_timer.start(self.single_click_mpl_upperleft_corner_TIMEOUT)
                     return
 
                 if event.dblclick and event.button == 1 and not self.designerflag and not self.wheelflag and event.inaxes:
@@ -4447,24 +4229,20 @@ class tgraphcanvas(QObject):
                         return
                     if isinstance(fig, Figure):
                         s = fig.get_size_inches()*fig.dpi
-                        if event.x > s[0]*2/3 and event.y > s[1]*2/3:
-                            if not self.flagstart and not self.flagon and self.backgroundprofile is None and __release_sponsor_domain__ and __release_sponsor_url__:
-                                QDesktopServices.openUrl(QUrl(__release_sponsor_url__, QUrl.ParsingMode.TolerantMode))
+                        if event.x > s[0]*2/3 and event.y > s[1]*2/3 and self.backgroundprofile is not None:
+                            modifiers = QApplication.keyboardModifiers()
+                            if self.background and modifiers == Qt.KeyboardModifier.AltModifier:
+                                self.aw.togglePlaybackEvents()
                                 return
-                            if self.backgroundprofile is not None:
-                                modifiers = QApplication.keyboardModifiers()
-                                if self.background and modifiers == Qt.KeyboardModifier.AltModifier:
-                                    self.aw.togglePlaybackEvents()
-                                    return
-                                if event.dblclick:
-                                    # toggle background if right top corner above canvas where the subtitle is clicked
-                                    self.background = not self.background
-                                    self.aw.autoAdjustAxis(background=self.background and (not len(self.timex) > 3))
-                                    if self.statssummary and self.autotimex:
-                                        self.redraw(recomputeAllDeltas=True)
-                                    else:
-                                        self.redraw_keep_view(recomputeAllDeltas=True)
-                                    return
+                            if event.dblclick:
+                                # toggle background if right top corner above canvas where the subtitle is clicked
+                                self.background = not self.background
+                                self.aw.autoAdjustAxis(background=self.background and (not len(self.timex) > 3))
+                                if self.statssummary and self.autotimex:
+                                    self.redraw(recomputeAllDeltas=True)
+                                else:
+                                    self.redraw_keep_view(recomputeAllDeltas=True)
+                                return
 
 
                 event_xdata = event.xdata
@@ -4477,7 +4255,7 @@ class tgraphcanvas(QObject):
                             # Mark starting point of click-and-drag with a marker
                             self.base_horizontalcrossline, = self.ax.plot(numpy.array(self.baseX), numpy.array(self.baseY), 'r+', markersize=20)
                             self.base_verticalcrossline, = self.ax.plot(numpy.array(self.baseX), numpy.array(self.baseY), 'wo', markersize = 2)
-                    elif not bool(self.aw.comparator) and event.button == 3 and event.inaxes and not self.designerflag and not self.wheelflag and self.aw.ntb.mode not in ['pan/zoom', 'zoom rect']:# and not self.flagon:
+                    elif not bool(self.aw.comparator) and event.button == 3 and event.inaxes and not self.designerflag and not self.wheelflag:# and self.aw.ntb.mode not in ['pan/zoom', 'zoom rect']:
                         # popup not available if pan/zoom or zoom rect is active as it interacts
                         timex = self.time2index(event_xdata)
                         if timex > 0:
@@ -4496,7 +4274,6 @@ class tgraphcanvas(QObject):
         if timex <= 0:
             return
         menu = QMenu(self.aw) # if we bind this to self, we inherit the background-color: transparent from self.fig
-#                menu.setStyleSheet("QMenu::item {background-color: palette(window); selection-color: palette(window); selection-background-color: darkBlue;}")
         # populate menu
         ac = QAction(menu)
         bt = self.temp2[timex]
@@ -4540,9 +4317,9 @@ class tgraphcanvas(QObject):
                 event_pos_offset = self.eventpositionbars[0]
                 event_pos_factor = self.eventpositionbars[1] - self.eventpositionbars[0]
                 if self.clampEvents:
-                    evalue = int(round(event_ydata))
+                    evalue = round(event_ydata)
                 else:
-                    evalue = int(round((event_ydata - event_pos_offset) / event_pos_factor))
+                    evalue = round((event_ydata - event_pos_offset) / event_pos_factor)
                 ac.key = (-1,timex,self.eventsExternal2InternalValue(evalue))  # type: ignore[attr-defined] # key a custom attribute of QAction which should be defined in a custom subclass
                 menu.addAction(ac)
             except Exception: # pylint: disable=broad-except
@@ -4652,14 +4429,14 @@ class tgraphcanvas(QObject):
             timeindex_before = self.timeindex[action.key[0]]  # type: ignore[attr-defined] # "QAction" has no attribute "key"
             self.timeindex[action.key[0]] = action.key[1]  # type: ignore[attr-defined] # "QAction" has no attribute "key"
             # clear custom label positions cache entry
-            if action.key[0] in self.l_annotations_dict:  # type: ignore[attr-defined] # "QAction" has no attribute "key"
-                del self.l_annotations_dict[action.key[0]]  # type: ignore[attr-defined]# "QAction" has no attribute "key"
+            if action.key[0] in self.l_annotations_dict: # type: ignore[attr-defined]
+                del self.l_annotations_dict[action.key[0]] # type: ignore[attr-defined]
             try:
                 # clear the event mark position cache
-                self.l_annotations_dict.pop(action.key[0])  # type: ignore[attr-defined] # "QAction" has no attribute "key"
+                self.l_annotations_dict.pop(action.key[0]) # type: ignore[attr-defined]
             except Exception: # pylint: disable=broad-except
                 pass
-            if action.key[0] == 0: # type: ignore[attr-defined] # "QAction" has no attribute "key" # CHARGE
+            if action.key[0] == 0: # type: ignore[attr-defined] # CHARGE
                 try:
                     # clear the TP mark position cache (TP depends on CHARGE!)
                     self.l_annotations_dict.pop(-1)
@@ -4689,7 +4466,7 @@ class tgraphcanvas(QObject):
                         self.startofx += self.timex[self.timeindex[0]]
                     self.aw.autoAdjustAxis(deltas=False)
                 self.timealign(redraw=True,recompute=False,force=True) # redraws at least the canvas if redraw=True, so no need here for doing another canvas.draw()
-            elif action.key[0] == 6: # type: ignore[attr-defined] # "QAction" has no attribute "key" # DROP
+            elif action.key[0] == 6: # type: ignore[attr-defined] # DROP
                 try:
                     # clear the TP mark position cache (TP depends on DROP!)
                     self.l_annotations_dict.pop(-1)
@@ -4715,26 +4492,26 @@ class tgraphcanvas(QObject):
 
 
             # update phases
-            elif action.key[0] == 1 and self.phasesbuttonflag:  # type: ignore[attr-defined] # "QAction" has no attribute "key" # DRY
-                self.phases[1] = int(round(self.temp2[self.timeindex[1]]))
-            elif action.key[0] == 2 and self.phasesbuttonflag:  # type: ignore[attr-defined] # "QAction" has no attribute "key" # FCs
-                self.phases[2] = int(round(self.temp2[self.timeindex[2]]))
+            elif action.key[0] == 1 and self.phasesbuttonflag: # type: ignore[attr-defined] # DRY
+                self.phases[1] = round(self.temp2[self.timeindex[1]])
+            elif action.key[0] == 2 and self.phasesbuttonflag: # type: ignore[attr-defined] # FCs
+                self.phases[2] = round(self.temp2[self.timeindex[2]])
 
             self.fileDirtySignal.emit()
-            self.redraw_keep_view(recomputeAllDeltas=(action.key[0] in {0, 6}))  # type: ignore[attr-defined] # "QAction" has no attribute "key" # on moving CHARGE or DROP, we have to recompute the Deltas
+            self.redraw_keep_view(recomputeAllDeltas=(action.key[0] in {0, 6})) # type: ignore[attr-defined] # on moving CHARGE or DROP, we have to recompute the Deltas
         else:
             # add a special event at the current timepoint
             from artisanlib.events import customEventDlg
-            dlg = customEventDlg(self.aw, self.aw, action.key[1], value=action.key[2], event_type=self.custom_event_dlg_default_type) # type: ignore[attr-defined] # "QAction" has no attribute "key"
+            dlg = customEventDlg(self.aw, self.aw, action.key[1], value=action.key[2], event_type=self.custom_event_dlg_default_type) # type: ignore[attr-defined]
             if dlg.exec():
-                self.addEvent(action.key[1], # type: ignore[attr-defined] # "QAction" has no attribute "key" # absolute time index
+                self.addEvent(action.key[1], # type: ignore[attr-defined] # absolute time index
                     dlg.type, # default: "--"
                     dlg.description, # pyright:ignore[reportUnknownArgumentType]
                     dlg.value)
                 self.custom_event_dlg_default_type = dlg.type
                 self.aw.orderEvents()
                 self.fileDirtySignal.emit()
-                self.redraw_keep_view(recomputeAllDeltas=(action.key[0] in {0, 6}))  # type: ignore[attr-defined] # "QAction" has no attribute "key" # on moving CHARGE or DROP, we have to recompute the Deltas
+                self.redraw_keep_view(recomputeAllDeltas=(action.key[0] in {0, 6})) # type: ignore[attr-defined] # on moving CHARGE or DROP, we have to recompute the Deltas
                 # redraw minieditor event selection line
                 currentevent = self.aw.eNumberSpinBox.value()
                 if currentevent:
@@ -4801,7 +4578,7 @@ class tgraphcanvas(QObject):
     @pyqtSlot(str,int)
     def showAlarmPopup(self, message:str, timeout:int) -> None: # pylint: disable=no-self-use # used as slot
         # alarm popup message with <self.alarm_popup_timout>sec timeout
-        amb = ArtisanMessageBox(self.aw, QApplication.translate('Message', 'Alarm notice'),message,timeout=timeout,modal=True) # modal=False prevent rendering as native message box on macOS
+        amb = ArtisanMessageBox(self.aw, self.aw, QApplication.translate('Message', 'Alarm notice'),message,timeout=timeout,modal=True) # modal=False prevent rendering as native message box on macOS
         amb.show()
         #send alarm also to connected WebLCDs clients
         if self.aw.WebLCDs and self.aw.WebLCDsAlerts:
@@ -4839,7 +4616,7 @@ class tgraphcanvas(QObject):
         except Exception as e: # pylint: disable=broad-except
             _log.exception(e)
 
-    # note that partial values might be given here
+    # note that partial values might be given here, represented by None
     def updateLargeScaleLCDs(self, weight1:str|None = None, weight2:str|None = None) -> None:
         try:
             if self.aw.largeScaleLCDs_dialog is not None:
@@ -4859,20 +4636,19 @@ class tgraphcanvas(QObject):
             _log.exception(e)
 
 
-    # ADD DEVICE:
-
     # returns True if the extra device n, channel c, is of type MODBUS or S7, has no factor defined, nor any math formula, and is of type int
     # channel c is either 0 or 1
+    # ADD DEVICE:
     @functools.cache # noqa: B019 # pylint: disable=W1518 # Not relevant here, as qmc is only created once: [B019] Use of `functools.lru_cache` or `functools.cache` on methods can lead to memory leaks
     def intChannel(self, n:int, c:int) -> bool:
         if len(self.extradevices) > n:
             no_math_formula_defined:bool = False
             if c == 0:
-                no_math_formula_defined = bool(self.extramathexpression1[n] == '')
+                no_math_formula_defined = self.extramathexpression1[n] == ''
             if c == 1:
-                no_math_formula_defined = bool(self.extramathexpression2[n] == '')
+                no_math_formula_defined = self.extramathexpression2[n] == ''
             # MODBUS channels
-            for idx, dev_type in enumerate([29,33,55,109,150]): # MODBUS, MODBUS_34, MODBUS_56, MODBUS_78, MODBUS_910
+            for idx, dev_type in enumerate([29,33,55,109,150,207]): # MODBUS, MODBUS_34, MODBUS_56, MODBUS_78, MODBUS_910, MODBUS_1112
                 if self.extradevices[n] == dev_type:
                     return ((self.aw.modbus.inputFloatsAsInt[idx*2 + c] or self.aw.modbus.inputBCDsAsInt[idx*2 + c] or not self.aw.modbus.inputFloats[idx*2 + c]) and
                         self.aw.modbus.inputDivs[idx*2 + c] == 0 and
@@ -4921,7 +4697,7 @@ class tgraphcanvas(QObject):
                     self.ax.draw_artist(self.l_BTprojection)
                 if self.projectDeltaFlag and self.l_DeltaBTprojection is not None and self.DeltaBTflag:
                     self.ax.draw_artist(self.l_DeltaBTprojection)
-            if self.l_AUCguide is not None and self.AUCguideFlag and self.AUCguideTime > 0 and self.AUCguideTime < self.endofx:
+            if self.l_AUCguide is not None and self.AUCguideFlag and 0 < self.AUCguideTime < self.endofx:
                 self.ax.draw_artist(self.l_AUCguide)
 
     # input filter
@@ -4969,7 +4745,7 @@ class tgraphcanvas(QObject):
         #   we are 20sec after CHARGE
         #   len(BT) > 4
         # BT[-5] <= BT[-4] and BT[-5] <= BT[-3] and BT[-5] <= BT[-2] and BT[-5] <= BT[-1] and BT[-5] < BT[-1]
-        if seconds_since_CHARGE > 20 and not self.afterTP and len(self.temp2) > 3 and (self.temp2[-5] <= self.temp2[-4]) and (self.temp2[-5] <= self.temp2[-3]) and (self.temp2[-5] <= self.temp2[-2]) and (self.temp2[-5] <= self.temp2[-1]) and (self.temp2[-5] < self.temp2[-1]):
+        if seconds_since_CHARGE > 20 and not self.afterTP and len(self.temp2) > 3 and (self.temp2[-5] <= self.temp2[-4]) and (self.temp2[-5] <= self.temp2[-3]) and (self.temp2[-5] <= self.temp2[-2]) and (self.temp2[-5] <= self.temp2[-1]) and (self.temp2[-5] < self.temp2[-1]): # pylint:disable=chained-comparison # pylint 4.1.1 bug
             self.afterTP = True
         return self.afterTP
 
@@ -5443,6 +5219,10 @@ class tgraphcanvas(QObject):
 
         process_value = result.pid_process_value
         if continuation.pid_update_enabled:
+            if self.pid is None:
+                # the PID is constructed lazily on the first sample that needs it
+                from artisanlib import pid # pylint: disable=reimported
+                self.pid = pid.PID()
             self.pid.update(process_value)
 
         if continuation.local_flagstart:
@@ -6475,7 +6255,7 @@ class tgraphcanvas(QObject):
                 if i < self.aw.nLCDS:
                     try:
                         extra1_value = resLCD
-                        if idx is not None and XTs1[i] and idx < len(XTs1[i]):
+                        if idx is not None and i < len(XTs1) and idx < len(XTs1[i]):
                             fmt = lcdformat
                             v = float(XTs1[i][idx])
                             if v != -1:
@@ -6497,7 +6277,7 @@ class tgraphcanvas(QObject):
                         self.aw.extraLCD1[i].display(extra1_value)
                     try:
                         extra2_value = resLCD
-                        if idx is not None and XTs2[i] and idx < len(XTs2[i]):
+                        if idx is not None and i < len(XTs2) and idx < len(XTs2[i]):
                             fmt = lcdformat
                             v = float(XTs2[i][idx])
                             if v != -1:
@@ -7012,10 +6792,16 @@ class tgraphcanvas(QObject):
                                     # get current limits
                                     xlim = self.ax.get_xlim()
                                     xlim_offset = (xlim[1] - xlim[0]) / 2.
-                                    xlim_new = (tx - xlim_offset, tx + xlim_offset)
+                                    xlim_shift = (xlim[1] - xlim[0])*self.zoom_follow_pan_x
+                                    xlim_new = (tx - xlim_offset + xlim_shift, tx + xlim_offset + xlim_shift)
                                     ylim = self.ax.get_ylim()
-                                    ylim_offset = (ylim[1] - ylim[0]) / 2.
-                                    ylim_new = (temp - ylim_offset, temp + ylim_offset)
+                                    if self.fmt_data_curve == 0:
+                                        ylim_offset = (ylim[1] - ylim[0]) / 2.
+                                        ylim_shift = (ylim[1] - ylim[0])*self.zoom_follow_pan_y
+                                        ylim_new = (temp - ylim_offset + ylim_shift, temp + ylim_offset + ylim_shift)
+                                    else:
+                                        # in clamp mode (any) we don't follow the y-axis, but only the x-axis
+                                        ylim_new = ylim
                                     if ylim != ylim_new or xlim != xlim_new:
                                         # set new limits to center current temp on canvas
                                         self.ax.set_xlim(xlim_new)
@@ -7024,8 +6810,9 @@ class tgraphcanvas(QObject):
                                             # keep the RoR axis constant
                                             zlim = self.delta_ax.get_ylim()
                                             zlim_offset = (zlim[1] - zlim[0]) / 2.
+                                            zlim_shift = (zlim[1] - zlim[0])*self.zoom_follow_pan_y
                                             tempd = float(self.delta_ax.transData.inverted().transform((0,self.ax.transData.transform((0,temp))[1]))[1])
-                                            zlim_new = (tempd - zlim_offset, tempd + zlim_offset)
+                                            zlim_new = (tempd - zlim_offset + zlim_shift, tempd + zlim_offset + zlim_shift)
                                             self.delta_ax.set_ylim(zlim_new)
                                         self.ax_background = None
                             else:
@@ -7042,11 +6829,17 @@ class tgraphcanvas(QObject):
                                         # get current limits
                                         xlim = self.ax.get_xlim()
                                         xlim_offset = (xlim[1] - xlim[0]) / 2.
-                                        xlim_new = (tx - xlim_offset, tx + xlim_offset)
+                                        xlim_shift = (xlim[1] - xlim[0])*self.zoom_follow_pan_x
+                                        xlim_new = (tx - xlim_offset + xlim_shift, tx + xlim_offset + xlim_shift)
                                         ylim = self.ax.get_ylim()
-                                        ylim_offset = (ylim[1] - ylim[0]) / 2.
-                                        rord = float(self.ax.transData.inverted().transform((0,self.delta_ax.transData.transform((0,ror))[1]))[1])
-                                        ylim_new = (rord - ylim_offset, rord + ylim_offset)
+                                        if self.fmt_data_curve == 0:
+                                            ylim_offset = (ylim[1] - ylim[0]) / 2.
+                                            ylim_shift = (ylim[1] - ylim[0])*self.zoom_follow_pan_y
+                                            rord = float(self.ax.transData.inverted().transform((0,self.delta_ax.transData.transform((0,ror))[1]))[1])
+                                            ylim_new = (rord - ylim_offset + ylim_shift, rord + ylim_offset + ylim_shift)
+                                        else:
+                                            # in clamp mode (any) we don't follow the y-axis, but only the x-axis
+                                            ylim_new = ylim
                                         if ylim != ylim_new or xlim != xlim_new:
                                             # set new limits to center current temp on canvas
                                             self.ax.set_xlim(xlim_new)
@@ -7280,7 +7073,7 @@ class tgraphcanvas(QObject):
             except Exception as e: # pylint: disable=broad-except
                 _log.exception(e)
             finally:
-                QTimer.singleShot(int(round(nextreading)),self.updateLCDtime)
+                QTimer.singleShot(round(nextreading),self.updateLCDtime)
 
 
     # return current preheating/roasting/cooling time in seconds; reset to 00:00 @ CHARGE and DROP
@@ -7298,7 +7091,7 @@ class tgraphcanvas(QObject):
                         ts = tx - self.timex[self.timeindex[6]]
                     elif self.timeindex[7]:
                         ts = 0
-                    return max(0,int(round(ts)))
+                    return max(0,round(ts))
             except Exception as e: # pylint: disable=broad-except
                 _log.exception(e)
         return 0
@@ -7341,11 +7134,11 @@ class tgraphcanvas(QObject):
             if ptime is not None and btime is not None:
                 difference = ptime - btime
                 if difference > 0:
-                    self.movebackground('right',int(round(abs(difference))))
+                    self.movebackground('right',round(abs(difference)))
                     if redraw:
                         self.redraw_keep_view(recomputeAllDeltas=recompute)
                 elif difference < 0:
-                    self.movebackground('left',int(round(abs(difference))))
+                    self.movebackground('left',round(abs(difference)))
                     if redraw:
                         self.redraw_keep_view(recomputeAllDeltas=recompute)
                 elif redraw and force: # ensure that we at least redraw the canvas
@@ -7620,10 +7413,10 @@ class tgraphcanvas(QObject):
                         elif action == 6:
                             slidernr = 3
                         if slidernr is not None:
-                            slidervalue = max(self.aw.eventslidermin[slidernr],min(self.aw.eventslidermax[slidernr],toInt(str(text))))
+                            slidervalue = max(self.aw.eventslidermin[slidernr],min(self.aw.eventslidermax[slidernr],toInt(text)))
                             self.aw.moveslider(slidernr,slidervalue)
                             # we set the last value to be used for relative +- button action as base
-                            self.aw.extraeventsactionslastvalue[slidernr] = int(round(slidervalue))
+                            self.aw.extraeventsactionslastvalue[slidernr] = round(slidervalue)
                             if self.flagstart:
                                 value = float2float((slidervalue + 10.0) / 10.0)
                                 self.EventRecordAction(extraevent = 1,eventtype=slidernr,eventvalue=value,eventdescription=f'A{number:d} (S{slidernr:d})')
@@ -7635,7 +7428,7 @@ class tgraphcanvas(QObject):
 
                 elif action == 7:
                     # START
-                    if self.aw.buttonSTARTSTOP.isEnabled():
+                    if self.aw.buttonSTARTSTOP.isEnabled() and not self.flagstart:
                         self.ToggleRecorder()
                 elif action == 8 and self.timeindex[1] == 0:
                     # DRY
@@ -7700,7 +7493,7 @@ class tgraphcanvas(QObject):
                     # SV slider alarm
                     try:
                         text = alarm_description[0]
-                        sv = float(str(text))
+                        sv = float(text)
                         if self.device == 0:
                             if sv != self.aw.fujipid.sv:
                                 sv = max(0.0, sv) # we don't send SV < 0
@@ -7815,7 +7608,8 @@ class tgraphcanvas(QObject):
                 # if all event types reached their end, we can stop checking further events (optimization)
 
                 # register per event type that we do not have to check further events of that type, if all are checked we can stop the processing
-                end_reached:list[bool] = [not flag for flag in self.specialeventplayback] # those event types not activated for event replay are considered done already
+                end_reached:list[bool] = [not ((flag and self.backgroundPlaybackEvents) or (flag_aid and self.backgroundReproduce))
+                    for flag, flag_aid in zip(self.specialeventplayback,self.specialeventplaybackaid, strict=True)] # those event types not activated for event replay are considered done already
 
                 # the next variables is used to realize ramping event replay
                 ramps:list[int|None] = [None,None,None,None]  # holds the time or temp ramp value to be applied per event type, calculated from last replayed event and the succeeding event
@@ -7878,10 +7672,10 @@ class tgraphcanvas(QObject):
                                 #write text message
                                 message = f'> [{self.Betypesf(event_type)}] [{self.eventsvalues(self.backgroundEvalues[i])}] : <b>{stringfromseconds(timed)}</b> : {self.backgroundEStrings[i]}'
                                 #rotate colors to get attention
-                                if int(round(timed))%2:
-                                    style = "background-color:'transparent';"
+                                if round(timed)%2:
+                                    style = 'background-color: transparent;'
                                 else:
-                                    style = "background-color:'yellow';"
+                                    style = 'background-color:yellow; color: black;'
 
                                 self.aw.sendmessage(message,style=style)
                                 reproducing = i
@@ -7925,7 +7719,7 @@ class tgraphcanvas(QObject):
                                 # (NOTE: the event slider does not need to be visible any longer)
                                 if (self.backgroundPlaybackEvents and event_type < 4 and
                                         self.specialeventplayback[event_type] and # only replay event types activated for replay
-                                        (str(self.etypesf(event_type) == str(self.Betypesf(event_type)))) and
+                                        (str(self.etypesf(event_type) == self.Betypesf(event_type))) and
                                         len(self.backgroundEvalues)>i):
                                     slider_events[event_type] = self.eventsInternal2ExternalValue(self.backgroundEvalues[i]) # add to dict (later overwrite earlier slider moves!)
 
@@ -7941,7 +7735,7 @@ class tgraphcanvas(QObject):
                                 if (#event_type not in slider_events and  # only if there is no slider event of the corresponding type
                                         # UPDATE: we also ramp if we are @ the event to avoid SV discontinuities if lookahead is active, otherwise non-linearities could occur
                                         self.specialeventplayback[event_type] and     # only replay event types activated for replay
-                                        (str(self.etypesf(event_type) == str(self.Betypesf(event_type)))) and
+                                        (str(self.etypesf(event_type) == self.Betypesf(event_type))) and
                                         self.specialeventplaybackramp[event_type]):   # only calculate ramp for ramping events
 
                                     ## calculate ramping
@@ -8405,6 +8199,9 @@ class tgraphcanvas(QObject):
                     return (-1 if r is None else r), evalsign
         return -1, evalsign
 
+    def eval_math_expression_RT(self, mathexpression:str, t:float, RTsname:str, RTsval:float) -> float:
+        return self.eval_math_expression(mathexpression, t, RTsname=RTsname, RTsval=RTsval)
+
     # mathexpression = formula; t = a number to evaluate(usually time);
     # equeditnumber option = plotter edit window number; RTsname = option RealTime var name; RTsval = RealTime var val
     # The given mathexpression has to be a non-empty string!
@@ -8486,7 +8283,7 @@ class tgraphcanvas(QObject):
             delta_main_events = ['dCHARGE','dDRY','dFCs','dFCe','dSCs','dSCe','dDROP', 'dCOOL']
             try:
                 for i,v in enumerate(delta_main_events):
-                    if len(sample_timex)>0 and (i == 0 and self.timeindex[i] > -1) or (self.timeindex[i] > 0) and len(sample_timex)>self.timeindex[i]:
+                    if len(sample_timex)>0 and ((i == 0 and self.timeindex[i] > -1) or (0 < self.timeindex[i] < len(sample_timex))):
                         # we return the time after the event in seconds
                         mathdictionary[v] = sample_timex[-1] - sample_timex[self.timeindex[i]]
                     else:
@@ -8559,7 +8356,7 @@ class tgraphcanvas(QObject):
             # add Roast Properties
             try:
                 # weight-in in g
-                mathdictionary['WEIGHTin'] = int(round(convertWeight(self.weight[0], weight_units.index(self.weight[2]),0)))
+                mathdictionary['WEIGHTin'] = round(convertWeight(self.weight[0], weight_units.index(self.weight[2]),0))
                 mathdictionary['MOISTUREin'] = self.moisture_greens
                 mathdictionary['TEMPunit'] = (0 if self.mode == 'C' else 1) # 0:C and 1:F
             except Exception as e: # pylint: disable=broad-except
@@ -8612,13 +8409,13 @@ class tgraphcanvas(QObject):
                                     readings = sample_extratemp1[edindex]
                                 else:
                                     readings = sample_extratemp2[edindex]
-                            val:float
-                            val, evalsign = self.shiftValueEvalsign(readings,index,sign,Yshiftval)
+                            shiftval:float
+                            shiftval, evalsign = self.shiftValueEvalsign(readings,index,sign,Yshiftval)
 
                             #add expression and values found
                             evaltimeexpression = f'Y{mathexpression[i+1:i+2+offset]}{evalsign*2}{mathexpression[i+offset+4]}{seconddigitstr}{evalsign}'
                             timeshiftexpressions.append(evaltimeexpression)
-                            timeshiftexpressionsvalues.append(val)
+                            timeshiftexpressionsvalues.append(shiftval)
                             #convert "Y2[+9]" to Ynumber compatible for python eval() to add to dictionary
                             #METHOD USED: replace all non digits chars with sign value.
                             #Example1 "Y2[-7]" = "Y20070"   Example2 "Y2[+9]" = "Y21191"
@@ -8718,20 +8515,21 @@ class tgraphcanvas(QObject):
                                             delta_readings = sample_delta2
                                         else:
                                             delta_readings = self.delta2B
+                                        fval:float = -1.0
                                         if k == 0:
-                                            val, evalsign = self.shiftValueEvalsign(delta_readings,index,sign,Yshiftval) # pyright:ignore[reportUnknownArgumentType]
+                                            fval, evalsign = self.shiftValueEvalsign(delta_readings,index,sign,Yshiftval) # pyright:ignore[reportUnknownArgumentType]
                                         else:
                                             #if sampling
                                             if RTsname is not None and RTsname != '':
                                                 idx = index + 1
                                             else:
                                                 idx = index
-                                            val, evalsign = self.shiftValueEvalsignBackground(sample_timex, self.timeB,delta_readings,idx,sign,Yshiftval)  # pyright:ignore[reportUnknownArgumentType]
+                                            fval, evalsign = self.shiftValueEvalsignBackground(sample_timex, self.timeB,delta_readings,idx,sign,Yshiftval)  # pyright:ignore[reportUnknownArgumentType]
 
                                         #add expression and values found
                                         evaltimeexpression = ''.join((c,mathexpression[i+k+1],evalsign*2,mathexpression[i+k+4],seconddigitstr,evalsign))
                                         timeshiftexpressions.append(evaltimeexpression)
-                                        timeshiftexpressionsvalues.append(val)
+                                        timeshiftexpressionsvalues.append(fval)
                                         #convert "R2[+9]" to Rnumber compatible for python eval() to add to dictionary
                                         #METHOD USED: replace all non digits chars with numbers value.
                                         #Example1 "R2[-7]" = "R20070"   Example2 "R2[+9]" = "R21191" Example3 "RB2[-1]" = "RB23313
@@ -8741,7 +8539,7 @@ class tgraphcanvas(QObject):
                                     elif i+k+5 < mlen and mathexpression[i+k+2] == '{' and mathexpression.find('}',i+k+3) > -1:
                                         end_idx = mathexpression.index('}',i+k+3)
                                         body = mathexpression[i+k+3:end_idx]
-                                        val = -1
+                                        fval = -1
                                         try:
                                             absolute_index = eval(body[:eval_limit],{'__builtins__':None},mathdictionary)  # pylint: disable=eval-used
                                             if absolute_index > -1:
@@ -8757,7 +8555,7 @@ class tgraphcanvas(QObject):
                                                 else:
                                                     valn = self.delta2B[absolute_index]
                                                 if valn is not None:
-                                                    val = valn
+                                                    fval = valn
                                         except Exception: # pylint: disable=broad-except
                                             pass
                                         #add expression and values found
@@ -8766,7 +8564,7 @@ class tgraphcanvas(QObject):
                                             literal_body = literal_body.replace(j,v)
                                         evaltimeexpression = ''.join((c,mathexpression[i+1],'z',literal_body,'z')) # curle brackets replaced by "z"
                                         timeshiftexpressions.append(evaltimeexpression)
-                                        timeshiftexpressionsvalues.append(val)
+                                        timeshiftexpressionsvalues.append(fval)
                                         mathexpression = evaltimeexpression.join((mathexpression[:i],mathexpression[end_idx+1:]))
 
                                     #no shift
@@ -8866,12 +8664,12 @@ class tgraphcanvas(QObject):
                                 mathexpression = f'{mathexpression[:i+4]}{mathexpression[i+5:]}'
                                 Yshiftval = 10*Yshiftval + seconddigit
 
-                            val, evalsign = self.shiftValueEvalsign(timex,index,sign,Yshiftval)
+                            fval, evalsign = self.shiftValueEvalsign(timex,index,sign,Yshiftval)
 
-                            val = val - t_offset
+                            fval = fval - t_offset
                             evaltimeexpression = ''.join((mathexpression[i],evalsign*2,mathexpression[i+3],seconddigitstr,evalsign))
                             timeshiftexpressions.append(evaltimeexpression)
-                            timeshiftexpressionsvalues.append(val)
+                            timeshiftexpressionsvalues.append(fval)
                             mathexpression = evaltimeexpression.join((mathexpression[:i],mathexpression[i+5:]))
                         #direct index access: e.g. "t{CHARGE}" or "t{12}"
                         elif i+3 < mlen and mathexpression[i+1] == '{' and mathexpression.find('}',i+2) > -1:
@@ -8912,12 +8710,12 @@ class tgraphcanvas(QObject):
                         #no shift
                         else:
                             if index < len(self.plotterequationresults[nint-1]):
-                                val = self.plotterequationresults[nint-1][index]
+                                fval = self.plotterequationresults[nint-1][index]
                             else:
-                                val = -1000
+                                fval = -1000
                             p_string = f'P{mathexpression[i+1]}'
                             if p_string not in mathdictionary:
-                                mathdictionary[p_string] = val
+                                mathdictionary[p_string] = fval
 
                     #Background B1 = ETbackground; B2 = BTbackground
                     elif mathexpression[i] == 'B':
@@ -8939,7 +8737,7 @@ class tgraphcanvas(QObject):
 
                                     if not self.timeB:
                                         # no background, set to 0
-                                        val = 0
+                                        fval = 0
                                         evalsign = '0'
                                     else:
                                         readings = None
@@ -8960,33 +8758,33 @@ class tgraphcanvas(QObject):
                                                 readings = list(self.temp2BX[n3])
                                             readings_time = self.extratimexB[n3]
 #                                        # variant operating directly on the background curve via the given index
-#                                        val, evalsign = self.shiftValueEvalsign(readings,index,sign,Yshiftval)
+#                                        fval, evalsign = self.shiftValueEvalsign(readings,index,sign,Yshiftval)
                                         # variant operating on the background curve with the given index interpreted as time relative to the foreground curve:
                                         if RTsname is not None and RTsname != '':
                                             idx = index + 1
                                         else:
                                             idx = index
                                         if readings is None or readings_time is None:
-                                            val = 0
+                                            fval = 0
                                             evalsign = '0'
                                         else:
-                                            val, evalsign = self.shiftValueEvalsignBackground(sample_timex, readings_time, readings, idx, sign, Yshiftval)
+                                            fval, evalsign = self.shiftValueEvalsignBackground(sample_timex, readings_time, readings, idx, sign, Yshiftval)
                                     evaltimeexpression = ''.join(('B',mathexpression[i+1],evalsign*2,mathexpression[i+4],seconddigitstr,evalsign))
                                     timeshiftexpressions.append(evaltimeexpression)
-                                    timeshiftexpressionsvalues.append(val)
+                                    timeshiftexpressionsvalues.append(fval)
                                     mathexpression = evaltimeexpression.join((mathexpression[:i],mathexpression[i+6:]))
                                 #direct index access: e.g. "B2{CHARGE}" or "B2{12}"
                                 elif i+5 < mlen and mathexpression[i+2] == '{' and mathexpression.find('}',i+3) > -1:
                                     end_idx = mathexpression.index('}',i+3)
                                     body = mathexpression[i+3:end_idx]
-                                    val = -1
+                                    fval = -1
                                     try:
                                         absolute_index = eval(body[:eval_limit],{'__builtins__':None},mathdictionary)  # pylint: disable=eval-used
                                         if absolute_index > -1:
                                             if nint == 1: #ET
-                                                val = self.temp1B[absolute_index]
+                                                fval = self.temp1B[absolute_index]
                                             elif nint == 2: #BT
-                                                val = self.temp2B[absolute_index]
+                                                fval = self.temp2B[absolute_index]
                                             else:
                                                 idx3 = self.xtcurveidx - 1
                                                 n3 = idx3//2
@@ -8994,9 +8792,9 @@ class tgraphcanvas(QObject):
                                                 b = [0,0,1,1,2,2,3]
                                                 edindex = b[nint-3]
                                                 if self.xtcurveidx%2:
-                                                    val = float(self.temp1BX[n3][absolute_index])
+                                                    fval = float(self.temp1BX[n3][absolute_index])
                                                 else:
-                                                    val = float(self.temp2BX[n3][absolute_index])
+                                                    fval = float(self.temp2BX[n3][absolute_index])
                                     except Exception: # pylint: disable=broad-except
                                         pass
                                     #add expression and values found
@@ -9005,7 +8803,7 @@ class tgraphcanvas(QObject):
                                         literal_body = literal_body.replace(vk,v)
                                     evaltimeexpression = ''.join(('B',mathexpression[i+1],'z',literal_body,'z')) # curle brackets replaced by "z"
                                     timeshiftexpressions.append(evaltimeexpression)
-                                    timeshiftexpressionsvalues.append(val)
+                                    timeshiftexpressionsvalues.append(fval)
                                     mathexpression = evaltimeexpression.join((mathexpression[:i],mathexpression[end_idx+1:]))
                                 #no shift
                                 elif not self.timeB:
@@ -9035,25 +8833,25 @@ class tgraphcanvas(QObject):
                                         # the index is resolved relative to the time of the foreground profile if available
                                         idx = timearray2index(self.timeB, tx)
                                         if -1 < idx < len(readings):
-                                            val = readings[idx]
+                                            fval = readings[idx]
                                         else:
-                                            val = -1
+                                            fval = -1
                                     elif bindex is not None:
-                                        val = readings[bindex]
+                                        fval = readings[bindex]
                                     else:
-                                        val = -1
+                                        fval = -1
 
-                                    mathdictionary[f'B{mathexpression[i+1]}'] = val
+                                    mathdictionary[f'B{mathexpression[i+1]}'] = fval
 
                     # Feedback from previous result. Stack = [10,9,8,7,6,5,4,3,2,1]
                     # holds the ten previous formula results (same window) in order.
                     # F1 is the last result. F5 is the past 5th result
                     elif mathexpression[i] == 'F' and i+1 < mlen and mathexpression[i+1].isdigit():
                         nint = int(mathexpression[i+1])
-                        val = self.plotterstack[-1*nint]
+                        fval = self.plotterstack[-1*nint]
                         f_string = f'F{mathexpression[i+1]}'
                         if f_string not in mathdictionary:
-                            mathdictionary[f_string] = val
+                            mathdictionary[f_string] = fval
 
                     # add channel tare values (T1 => ET, T2 => BT, T3 => E1c1, T4 => E1c2, T5 => E2c1,
                     # set by clicking on the corresponding LCD
@@ -9203,9 +9001,9 @@ class tgraphcanvas(QObject):
                         first_reading_time = min(first_reading_time, self.timeB[0]-starttime)
                         last_reading_time = max(last_reading_time, self.timeB[-1]-starttime)
                 # mfactor1: number of ticks before CHARGE
-                mfactor1 =  round(float(2. + abs( int(round(first_reading_time)) / int(round(self.xgrid)) )))
+                mfactor1 =  round(float(2. + abs( round(first_reading_time) / round(self.xgrid) )))
                 # mfactor2: number of ticks after CHARGE
-                mfactor2 =  round(float(2. + abs( int(round(last_reading_time)) / int(round(self.xgrid)) )))
+                mfactor2 =  round(float(2. + abs( round(last_reading_time) / round(self.xgrid) )))
                 majorloc = numpy.arange(starttime-(self.xgrid*mfactor1), starttime+(self.xgrid*mfactor2), self.xgrid)
                 if len(majorloc) > 50:
                     # we reduce the number of major ticks by a factor of 4
@@ -9286,7 +9084,7 @@ class tgraphcanvas(QObject):
                 pass
         if self.LCDdecimalplaces:
             return str(float2float(res))
-        return str(int(round(res)))
+        return str(round(res))
 
 
     #used by xaxistosm(). Provides also negative time
@@ -9309,7 +9107,7 @@ class tgraphcanvas(QObject):
             displaytime = displaytime / 60
         sign = ('-' if x <= starttime else '')
         m,s = divmod(abs(displaytime), 60.)
-        s = int(round(s))
+        s = round(s)
         m = int(m)
         if s >= 59:
             return f'{sign}{m+1:.0f}'
@@ -9323,24 +9121,28 @@ class tgraphcanvas(QObject):
 
 
     # returns True if nothing to save, discard or save was selected and False if canceled by the user
-    def checkSaved(self,allow_discard:bool = True) -> bool:
+    def checkSaved(self, allow_discard:bool = True) -> bool:
         #prevents deleting accidentally a finished roast
         flag = self.safesaveflag
         self.safesaveflag = False
         if flag and len(self.timex) > 3:
             string = QApplication.translate('Message','Save profile?')
-            if allow_discard:
-                buttons = QMessageBox.StandardButton.Discard|QMessageBox.StandardButton.Save|QMessageBox.StandardButton.Cancel
-            else:
-                buttons = QMessageBox.StandardButton.Save|QMessageBox.StandardButton.Cancel
-#On macOS, if the modality is set to Qt::WindowModal and the message box has a parent, then the message box will be a Qt::Sheet,
-#otherwise the message box will be a standard dialog.
-# setWindowModality(Qt.WindowModality.WindowModal)
-            reply = QMessageBox.warning(None, #self.aw,  # only without super this one shows the native dialog on macOS under Qt 6.6.2 and later
-                QApplication.translate('Message','Profile unsaved'), string, buttons)
+
+#            if allow_discard:
+#                buttons = QMessageBox.StandardButton.Discard|QMessageBox.StandardButton.Save|QMessageBox.StandardButton.Cancel
+#            else:
+#                buttons = QMessageBox.StandardButton.Save|QMessageBox.StandardButton.Cancel
+##On macOS, if the modality is set to Qt::WindowModal and the message box has a parent, then the message box will be a Qt::Sheet,
+##otherwise the message box will be a standard dialog.
+## setWindowModality(Qt.WindowModality.WindowModal)
+#            reply = QMessageBox.warning(None, #self.aw,  # only without super this one shows the native dialog on macOS under Qt 6.6.2 and later
+#                QApplication.translate('Message','Profile unsaved'), string, buttons)
+
+            reply = artisan_confirm_save_dialog(self.aw, self.aw,
+                QApplication.translate('Message','Profile unsaved'), string, allow_discard)
             self.safesaveflag = flag
             if reply == QMessageBox.StandardButton.Save:
-                return bool(self.aw.fileSave(self.aw.curFile))  #if accepted, calls fileClean() and thus turns safesaveflag = False
+                return self.aw.fileSave(self.aw.curFile)  #if accepted, calls fileClean() and thus turns safesaveflag = False
             if reply == QMessageBox.StandardButton.Discard:
                 self.fileCleanSignal.emit()
                 return True
@@ -9434,13 +9236,15 @@ class tgraphcanvas(QObject):
                 self.closePhidgetAMBIENTs()
             except Exception as e:  # pylint: disable=broad-except
                 _log.exception(e)
-        self.reset()
+        self.reset(showDashboard=True)
 
     #Resets graph. Called from reset button. Deletes all data. Calls redraw() at the end
     # returns False if action was canceled, True otherwise
     # if keepProperties=True (a call from OnMonitor()), we keep all the pre-set roast properties
+    # if showDashboard=True the (default) the dashboard is displayed after reset
     # onMonitor is set if called from onMonitor
-    def reset(self,redraw:bool = True, soundOn:bool = True, keepProperties:bool = False, fireResetAction:bool = True, onMonitor:bool = False) -> bool:
+    def reset(self,redraw:bool = True, soundOn:bool = True, keepProperties:bool = False, fireResetAction:bool = True,
+        onMonitor:bool = False, showDashboard:bool = False) -> bool:
 #        _log.debug('PRINT reset(keepProperties=%s,onMonitor=%s)',keepProperties,onMonitor)
         try:
             focused_widget = QApplication.focusWidget()
@@ -9521,15 +9325,17 @@ class tgraphcanvas(QObject):
             self.aw.buttonDRY.setFlat(False)
             self.aw.buttonCOOL.setFlat(False)
             self.aw.buttonONOFF.setText(QApplication.translate('Button', 'ON'))
-            if self.aw.simulator:
-                self.aw.buttonONOFF.setStyleSheet(self.aw.pushbuttonstyles_simulator['OFF'])
-            else:
-                self.aw.buttonONOFF.setStyleSheet(self.aw.pushbuttonstyles['OFF'])
+            self.aw.buttonONOFF.setStyleSheet(push_button_style(bool(self.aw.simulator), 'OFF',
+                min_height=self.aw.main_button_min_height,
+                min_width=self.aw.main_button_min_width,
+                font_size=self.aw.button_font_size,
+                border_radius=self.aw.button_border_radius))
             self.aw.buttonSTARTSTOP.setText(QApplication.translate('Button', 'START'))
-            if self.aw.simulator:
-                self.aw.buttonSTARTSTOP.setStyleSheet(self.aw.pushbuttonstyles_simulator['STOP'])
-            else:
-                self.aw.buttonSTARTSTOP.setStyleSheet(self.aw.pushbuttonstyles['STOP'])
+            self.aw.buttonSTARTSTOP.setStyleSheet(push_button_style(bool(self.aw.simulator), 'STOP',
+                min_height=self.aw.main_button_min_height,
+                min_width=self.aw.main_button_min_width,
+                font_size=self.aw.button_font_size,
+                border_radius=self.aw.button_border_radius))
 
             # quantification is blocked if lock_quantification_sampling_ticks is not 0
             # (eg. after a change of the event value by button or slider actions)
@@ -9543,9 +9349,9 @@ class tgraphcanvas(QObject):
             clearSyncRecordHash()
 
             # initialize recording version to be stored to new profiles recorded
-            self.aw.recording_version = str(__version__)
-            self.aw.recording_revision = str(__revision__)
-            self.aw.recording_build = str(__build__)
+            self.aw.recording_version = __version__
+            self.aw.recording_revision = __revision__
+            self.aw.recording_build = __build__
 
             self.end_weight_est = 0
 
@@ -9683,13 +9489,6 @@ class tgraphcanvas(QObject):
             self.currenty = 0               #used to add point when right click
             self.designertemp1init = []
             self.designertemp2init = []
-#            if self.mode == 'C':
-#                #CH, DE, FCs,FCe,SSs,SCe,DROP, COOL
-#                self.designertemp1init = [290.,290.,290.,290.,280.,270.,260.,250]
-#                self.designertemp2init = [230.,150.,190.,212.,218.,225.,230.,230.]
-#            elif self.mode == 'F':
-#                self.designertemp1init = [500,500,500,500,500,500,500]
-#                self.designertemp2init = [380,300,390,395,410,412,420]
             self.disconnect_designer()  #sets designer flag false
             self.canvas.setCursor(Qt.CursorShape.ArrowCursor)
 
@@ -9805,6 +9604,9 @@ class tgraphcanvas(QObject):
 
         self.aw.updatePlusStatus()
 
+        if showDashboard: # False on restart with lastLoadedProfile
+            self.aw.dashboard.show_dashboard()
+
         self.aw.announce_current_ui_mode()
 
         ### REDRAW  ##
@@ -9817,12 +9619,15 @@ class tgraphcanvas(QObject):
 #            _log.debug('gc_stats: %s', gc.get_stats())
 #        except Exception: # pylint: disable=broad-except
 #            pass
-        # write memory stats to the log
-        try:
-            vm = psutil.virtual_memory()
-            _log.info('memory used %s, %s (%s%%) available', bytes2human(psutil.Process().memory_full_info().uss),bytes2human(vm[1]),int(round(100-vm[2]))) # pyright:ignore[reportUnknownArgumentType]
-        except Exception: # pylint: disable=broad-except
-            pass
+        # write memory stats to the debug log
+        if debugLogLevelActive():
+            try:
+                import psutil
+                from psutil._common import bytes2human # pyright:ignore[reportPrivateImportUsage]
+                vm = psutil.virtual_memory()
+                _log.debug('memory used %s, %s (%s%%) available', bytes2human(psutil.Process().memory_full_info().uss),bytes2human(vm[1]),round(100-vm[2])) # pyright:ignore[reportUnknownArgumentType]
+            except Exception: # pylint: disable=broad-except
+                pass
 
 
         self.aw.sendmessage(QApplication.translate('Message','Scope has been reset'))
@@ -9830,185 +9635,6 @@ class tgraphcanvas(QObject):
         #QApplication.processEvents() # this one seems to be needed for a proper redraw in fullscreen mode on OS X if a profile was loaded and NEW is pressed
         #   this processEvents() seems not to be needed any longer!?
         return True
-
-    # https://gist.github.com/bhawkins/3535131
-    @staticmethod
-    def medfilt(x:'npt.NDArray[numpy.double]', k:int) -> 'npt.NDArray[numpy.double]':
-        """Apply a length-k median filter to a 1D array x.
-        Boundaries are extended by repeating endpoints.
-        """
-        assert k % 2 == 1, 'Median filter length must be odd.'
-        assert x.ndim == 1, 'Input must be one-dimensional.'
-        if len(x) == 0:
-            return x
-        k2 = (k - 1) // 2
-        y = numpy.zeros ((len (x), k), dtype=x.dtype)
-        y[:,k2] = x
-        for i in range (k2):
-            j = k2 - i
-            y[j:,i] = x[:-j]
-            y[:j,i] = x[0]
-            y[:-j,-(i+1)] = x[j:]
-            y[-j:,-(i+1)] = x[-1]
-        return numpy.median(y, axis=1)
-#        return numpy.nanmedian(y, axis=1) # produces artefacts
-
-    # smoothes a list (or numpy.array) of values 'y' at taken at times indicated by the numbers in list 'x'
-    # 'flat', 'hanning', 'hamming', 'bartlett', 'blackman'
-    # 'flat' results in moving average
-    # window_len should be odd
-    # based on http://wiki.scipy.org/Cookbook/SignalSmooth
-    # returns a smoothed numpy array or the original y argument
-    def smooth(self, x:'npt.NDArray[numpy.floating]', y:'npt.NDArray[numpy.float64]', window_len:int = 15, window:str = 'hanning') -> 'npt.NDArray[numpy.floating]':
-        try:
-            if len(x) == len(y) and len(x) > 1:
-                if window_len > 2:
-                    # smooth curves
-                    #s = numpy.r_[2*x[0]-y[window_len:1:-1],y,2*y[-1]-y[-1:-window_len:-1]]
-                    #s=numpy.r_[y[window_len-1:0:-1],y,y[-2:-window_len-1:-1]]
-                    #s = y
-                    s = numpy.r_[y[window_len-1:0:-1],y,y[-1:-window_len:-1]]
-                    if window == 'flat': #moving average
-                        w = numpy.ones(window_len,'d')
-                    else:
-                        w = eval('numpy.'+window+'(window_len)') # pylint: disable=eval-used
-                    try:
-                        ys = numpy.convolve(w/w.sum(), s, mode='valid')
-                    except Exception: # pylint: disable=broad-except
-                        return y
-                    hwl = int(window_len/2)
-                    res = ys[hwl:-hwl]
-                    if len(res)+1 == len(y) and len(res) > 0:
-                        try:
-                            return ys[hwl-1:-hwl] # zuban:ignore[return-value,no-any-return,unused-ignore]
-                        except Exception: # pylint: disable=broad-except
-                            return y
-                    elif len(res) != len(y):
-                        return y
-                    return res # zuban:ignore[return-value,no-any-return,unused-ignore]
-                return y
-            return y
-        except Exception as ex: # pylint: disable=broad-except
-            _log.exception(ex)
-            _, _, exc_tb = sys.exc_info()
-            self.adderror((QApplication.translate('Error Message','Exception:') + ' smooth() {0}').format(str(ex)),getattr(exc_tb, 'tb_lineno', '?'))
-            return x
-
-    # re-sample, filter and smooth slice
-    # takes numpy arrays a (time) and b (temp) of the same length and returns a numpy array representing the processed b values
-    # delta: True if b is a RoR signal
-    # precondition: (self.filterDropOuts or window_len>2)
-    def smooth_slice(self, a:'npt.NDArray[numpy.double]', b:'npt.NDArray[numpy.float64]',
-        window_len:int = 7, window:str = 'hanning', decay_weights:list[int]|None = None, decay_smoothing:bool = False,
-        re_sample:bool = True, back_sample:bool = True, a_lin:'npt.NDArray[numpy.double]|None' = None,
-        delta:bool=False) -> 'npt.NDArray[numpy.double]':
-        a_mod:npt.NDArray[numpy.floating]
-        # 1. re-sample
-        if re_sample:
-            if a_lin is None or len(a_lin) != len(a):
-                a_mod = cast(numpy.ndarray[tuple[Literal[1]]], numpy.linspace(a[0],a[-1],len(a)))
-            else:
-                a_mod = a_lin
-            b = cast(numpy.ndarray[Any], numpy.interp(a_mod, a, b)) # resample data to linear spaced time
-        else:
-            a_mod = a
-        res:npt.NDArray[numpy.floating] = b # just in case the precondition (self.filterDropOuts or window_len>2) does not hold
-
-        # 2. filter spikes (only applied offline)
-        if self.filterDropOuts and not self.flagon:
-            try:
-#                if self.flagon:
-#                    online_medfilt = LiveMedian(median_filter_factor)
-#                    b = numpy.array(list(map(online_medfilt, b)))
-                bb = self.medfilt(b, (self.median_filter_factor_RoR if delta else self.median_filter_factor))
-# scipyernative which performs equal, but produces larger artefacts at the borders and for intermediate NaN values for k>3
-#                from scipy.signal import medfilt as scipy_medfilt
-#                b = scipy_medfilt(b,3)
-                res = bb
-            except Exception as e: # pylint: disable=broad-except
-                _log.exception(e)
-                res = b
-        # 3. smooth data
-        if window_len>2:
-            if decay_smoothing:
-                # decay smoothing
-                decay_weights_internal:npt.NDArray[numpy.int_]
-                if decay_weights is None:
-                    decay_weights_internal = numpy.arange(1,window_len+1)
-                else:
-                    window_len = len(decay_weights)
-                    decay_weights_internal = numpy.array(decay_weights)
-                # invariant: window_len = len(decay_weights_internal)
-                if decay_weights_internal.sum() == 0:
-                    res = b
-                else:
-                    result:list[float] = []
-                    # ignore -1 readings in averaging and ensure a good ramp
-                    for i, v in enumerate(b):
-                        seq = b[max(0,i-window_len + 1):i+1]
-                        w = decay_weights_internal[max(0,window_len-len(seq)):]  # preCond: len(decay_weights_internal)=window_len and len(seq) <= window_len; postCond: len(w)=len(seq)
-                        if len(w) == 0:
-                            # we don't average if there is are no weights (e.g. if the original seq did only contain -1 values and got empty)
-                            result.append(v)
-                        else:
-                            result.append(float(numpy.average(seq,axis=0,weights=w))) # works only if len(seq) = len(w)
-                    res = numpy.array(result)
-                    # postCond: len(res) = len(b)
-            else:
-                # optimal smoothing (the default)
-                win_len = max(0,window_len)
-                if win_len != 1: # at the lowest level we turn smoothing completely off
-                    res = self.smooth(a_mod, b, win_len, window) # pyright:ignore[reportUnknownArgumentType]
-                else:
-                    res = b
-        # 4. sample back
-        if re_sample and back_sample:
-            res = cast(numpy.ndarray[Any], numpy.interp(a, a_mod, res)) # pyright:ignore[reportUnknownArgumentType] # re-sampled back to original timestamps
-        return numpy.array(res).astype(numpy.double)
-
-    # takes lists a (time array) and b (temperature array) containing invalid segments of -1/None values and returns a list with all segments of valid values smoothed
-    # a: list of timestamps
-    # b: list of readings
-    # re_sample: if true re-sample readings to a linear spaced time before smoothing
-    # back_sample: if true results are back-sampled to original timestamps given in "a" after smoothing
-    # a_lin: pre-computed linear spaced timestamps of equal length than a
-    # delta: True if b is a RoR signal
-    # NOTE: result can contain NaN items on places where the input array contains the error element -1
-    # result is a numpy array or the b as numpy array with drop out readings -1 replaced by NaN
-    def smooth_list(self, aa:'npt.NDArray[numpy.double]|npt.NDArray[numpy.floating]|Sequence[float]', b:'npt.NDArray[numpy.double]|npt.NDArray[numpy.floating]|Sequence[float]', window_len:int = 7, window:str = 'hanning',
-            decay_weights:list[int]|None = None, decay_smoothing:bool = False, fromIndex:int = -1, toIndex:int = 0,
-            re_sample:bool = True, back_sample:bool = True, a_lin:'npt.NDArray[numpy.double]|None' = None, delta:bool=False) -> 'npt.NDArray[numpy.double]':
-        if len(aa) > 1 and len(aa) == len(b) and (self.filterDropOuts or window_len>2):
-            #pylint: disable=E1103
-            # 1. truncate
-            if fromIndex > -1: # if fromIndex is set, replace prefix up to fromIndex by None
-                if toIndex==0: # no limit
-                    toIndex=len(aa)
-            else: # smooth list on full length
-                fromIndex = 0
-                toIndex = len(aa)
-            a = numpy.array(aa[fromIndex:toIndex], dtype=numpy.double)
-            # we mask the error value -1 and Numpy  in the temperature array
-            mb:numpy.ndarray[tuple[Literal[1]],numpy.dtype[numpy.float64]] = cast(numpy.ndarray[tuple[Literal[1]],numpy.dtype[numpy.float64]], numpy.ma.masked_equal(b[fromIndex:toIndex], -1))
-            # split in masked and
-            unmasked_slices = [(x,False) for x in numpy.ma.clump_unmasked(mb)] # type:ignore[no-untyped-call,attr-defined,unused-ignore] # the valid readings
-            masked_slices = [(x,True) for x in numpy.ma.clump_masked(mb)]  # type:ignore[no-untyped-call,attr-defined,unused-ignore] # the dropped values
-            sorted_slices = sorted(unmasked_slices + masked_slices, key=lambda tup: tup[0].start) # pyright:ignore[reportUnknownArgumentType] # pyright: ignore[reportGeneralTypeIssues]
-            b_smoothed:list[npt.NDArray[numpy.double]] = [] # pyright:ignore[reportUnknownArgumentType] # b_smoothed collects the smoothed segments in order
-            b_smoothed.append(numpy.full(fromIndex, numpy.nan, dtype=numpy.double)) # pyright:ignore[reportUnknownArgumentType] # append initial segment to the list of resulting segments
-            # we just smooth the unmsked slices and add the unmasked slices with NaN values
-            for (s, m) in sorted_slices:
-                if m:
-                    # a slice with all masked (invalid) readings
-                    b_smoothed.append(numpy.full(s.stop - s.start, numpy.nan, dtype=numpy.double)) # pyright:ignore[reportUnknownArgumentType]
-                else:
-                    # a slice with proper data
-                    b_smoothed.append(self.smooth_slice(a[s], mb[s], window_len, window, decay_weights, decay_smoothing, re_sample, back_sample, a_lin, delta)) # pyright:ignore[reportUnknownArgumentType]
-            b_smoothed.append(numpy.full(len(a)-toIndex, numpy.nan, dtype=numpy.double)) # append the final segment to the list of resulting segments
-            return numpy.concatenate(b_smoothed)
-        bb = numpy.array(b, dtype=numpy.double)
-        bb[bb == -1] = numpy.nan
-        return bb
 
     # deletes saved annotation positions from l_annotations_dict
     # foreground annotations have position keys <=6, background annotation positions have keys > 6,
@@ -10362,124 +9988,6 @@ class tgraphcanvas(QObject):
             self.adderror((QApplication.translate('Error Message','Exception:') + ' place_annotations() {0}').format(str(e)),getattr(exc_tb, 'tb_lineno', '?'))
         return anno_artists
 
-    def apply_symbolic_delta_formula(self, fct:str, deltas:list[float], timex:'npt.NDArray[numpy.double]', RTsname:str|None) -> list[float]:
-        try:
-            if len(deltas) == len(timex):
-                return [self.eval_math_expression(fct, timex[i], RTsname=RTsname, RTsval=d) for i,d in enumerate(deltas)]
-            return deltas
-        except Exception: # pylint: disable=broad-except
-            return deltas
-
-    # computes the RoR over the time and temperature arrays tx and temp via polynoms of degree 1 at index i using a window of wsize
-    # the window size wsize needs to be at least 1 (two succeeding readings)
-    @staticmethod
-    def polyRoR(tx:'npt.NDArray[numpy.double]', temp:'npt.NDArray[numpy.double]', wsize:int, i:int) -> float:
-        if i == 0: # we duplicate the first possible RoR value instead of returning a 0
-            i = 1
-        if 0 < i < min(len(tx), len(temp)):
-            with warnings.catch_warnings():
-                warnings.simplefilter('ignore')
-                left_index = max(0,i-wsize)
-                LS_fit = numpy.polynomial.polynomial.polyfit(tx[left_index:i+1],temp[left_index:i+1], 1)
-                return float(LS_fit[1]*60.)
-        else:
-            return 0
-
-    @staticmethod
-    # with window size wsize=1 the RoR is computed over succeeding readings; tx and temp assumed to be of type numpy.array
-    def arrayRoR(tx:'npt.NDArray[numpy.double]', temp:'npt.NDArray[numpy.double]', wsize:int) -> 'npt.NDArray[numpy.floating]': # with wsize >=1
-        # length compensation done downstream, not necessary here!
-        with warnings.catch_warnings():
-            # suppress warning if time difference is 0 which leads to a div by zero resulting in a warning and an inf value
-            warnings.simplefilter('ignore')
-            return (temp[wsize:] - temp[:-wsize]) / ((tx[wsize:] - tx[:-wsize])/60.)
-
-
-    # returns deltas and linearized timex;  both results can be None
-    # timex: the time array
-    # temp: the temperature array
-    # ds: the number of delta samples
-    # timex_lin: the linearized time array or None
-    # delta_symbolic_function: the symbolic function to be applied to the delta or None
-    # RTsname: the symbolic variable name of the delta
-    # deltaFilter: the deltaFilter setting
-    # roast_start_idx: the index of CHARGE
-    # roast_end_idx: the index of DROP
-    def computeDeltas(self, timex:'npt.NDArray[numpy.double]', temp:'list[float]|npt.NDArray[numpy.double]|None',
-            ds:int, optimalSmoothing:bool,
-            timex_lin:'npt.NDArray[numpy.double]|None', delta_symbolic_function:str,
-            RTsname:str, deltaFilter:int,
-            roast_start_idx:int, roast_end_idx:int) -> tuple[list[float|None]|None, 'npt.NDArray[numpy.double]|None']:
-        if temp is not None:
-            z1:npt.NDArray[numpy.floating]
-            with numpy.errstate(divide='ignore'):
-                lt = len(timex)
-                ntemp = numpy.array([0 if x is None else x for x in temp]) # pyright: ignore[reportGeneralTypeIssues]
-                if optimalSmoothing and self.polyfitRoRcalc:
-                    # optimal RoR computation using polynoms with out timeshift
-                    dss = ds + 1 if ds % 2 == 0 else ds
-                    if len(ntemp) > dss:
-                        try:
-                            # ntemp is not linearized yet:
-                            lin: npt.NDArray[numpy.double]
-                            if timex_lin is None or len(timex_lin) != len(ntemp):
-                                lin = numpy.linspace(timex[0],timex[-1],lt)
-                            else:
-                                lin = timex_lin
-                            ntemp_lin = cast(numpy.ndarray[Any], numpy.interp(lin, timex, ntemp)) # pyright:ignore[reportUnknownArgumentType] # resample data in ntemp to linear spaced time
-                            dist:float = (lin[-1] - lin[0]) / (len(lin) - 1) # pyright:ignore[reportUnknownArgumentType]
-                            from scipy.signal import savgol_filter # type # ignore # @Reimport
-                            z1 = savgol_filter(ntemp_lin, dss, 1, deriv=1, delta=dss)
-                            z1 = z1 * (60./dist) * dss
-                        except Exception: # pylint: disable=broad-except
-                            # a numpy/OpenBLAS polyfit bug can cause polyfit to throw an exception "SVD did not converge in Linear Least Squares" on Windows Windows 10 update 2004
-                            # https://github.com/numpy/numpy/issues/16744
-                            # original version just picking the corner values:
-                            z1 = self.arrayRoR(timex,ntemp,ds)
-                    else:
-                        # in this case we use the standard algo
-                        try:
-                            # variant using incremental polyfit RoR computation
-                            z1 = numpy.array([self.polyRoR(timex,ntemp,ds,i) for i in range(len(ntemp))])
-                        except Exception: # pylint: disable=broad-except
-                            # a numpy/OpenBLAS polyfit bug can cause polyfit to throw an exception "SVD did not converge in Linear Least Squares" on Windows Windows 10 update 2004
-                            # https://github.com/numpy/numpy/issues/16744
-                            # original version just picking the corner values:
-                            z1 = self.arrayRoR(timex,ntemp,ds)
-                elif self.polyfitRoRcalc:
-                    try:
-                        # variant using incremental polyfit RoR computation
-                        z1 = numpy.array([self.polyRoR(timex,ntemp,ds,i) for i in range(len(ntemp))]) # windows size ds needs to be at least 2
-                    except Exception: # pylint: disable=broad-except
-                        # a numpy/OpenBLAS polyfit bug can cause polyfit to throw an exception "SVD did not converge in Linear Least Squares" on Windows Windows 10 update 2004
-                        # https://github.com/numpy/numpy/issues/16744
-                        # original version just picking the corner values:
-                        z1 = self.arrayRoR(timex,ntemp,ds)
-                else:
-                    z1 = self.arrayRoR(timex,ntemp,ds)
-
-            ld1 = len(z1) # pyright:ignore[reportUnknownArgumentType]
-            # make lists equal in length
-            if lt > ld1:
-                z1 = numpy.append([z1[0] if ld1 else 0.]*(lt - ld1),z1) # pyright:ignore[reportUnknownArgumentType]
-            # apply smybolic formula
-            if delta_symbolic_function:
-                z1 = numpy.array(self.apply_symbolic_delta_formula(delta_symbolic_function, z1.tolist(), timex, RTsname=RTsname)) # pyright:ignore[reportUnknownArgumentType]
-            # apply smoothing
-            if optimalSmoothing:
-                user_filter = deltaFilter
-            else:
-                user_filter = int(round(deltaFilter/2.))
-            delta1 = self.smooth_list(timex,z1,window_len=user_filter,decay_smoothing=(not optimalSmoothing),a_lin=timex_lin,delta=True) # pyright:ignore[reportUnknownArgumentType]
-
-            # cut out the part after DROP and before CHARGE and remove values beyond the RoRlimit
-            return [
-                d if ((roast_start_idx <= i <= roast_end_idx) and (d is not None and (not self.RoRlimitFlag or
-                    max(-self.maxRoRlimit,self.RoRlimitm) < d < min(self.maxRoRlimit,self.RoRlimit))))
-                else None
-                for i,d in enumerate(delta1)
-            ], timex_lin
-        return None, timex_lin
 
     # computes the RoR deltas and returns the smoothed versions for both temperature channels
     # if t1 or t2 is not given (None), its RoR signal is not computed and None is returned instead
@@ -10507,28 +10015,44 @@ class tgraphcanvas(QObject):
                     timex_lin = numpy.array(timex_lin)
                 else:
                     timex_lin = None
-            delta1, timex_lin = self.computeDeltas(
+            delta1, timex_lin = computeDeltas(
                     tx_roast,
                     t1,
                     dsET,
                     optimalSmoothing,
                     timex_lin,
-                    self.DeltaETfunction,
-                    'R1',
                     self.deltaETfilter,
                     roast_start_idx,
-                    roast_end_idx)
-            delta2, _ = self.computeDeltas(
+                    roast_end_idx,
+                    self.polyfitRoRcalc,
+                    self.median_filter_factor_RoR,
+                    self.filterDropOuts and not self.flagon,
+                    self.RoRlimitFlag,
+                    max(-self.maxRoRlimit,self.RoRlimitm),
+                    min(self.maxRoRlimit,self.RoRlimit),
+                    True, # replace error values -1 by NaN
+                    'R1',
+                    self.DeltaETfunction,
+                    self.eval_math_expression_RT)
+            delta2, _ = computeDeltas(
                     tx_roast,
                     t2,
                     dsBT,
                     optimalSmoothing,
                     timex_lin,
-                    self.DeltaBTfunction,
-                    'R2',
                     self.deltaBTfilter,
                     roast_start_idx,
-                    roast_end_idx)
+                    roast_end_idx,
+                    self.polyfitRoRcalc,
+                    self.median_filter_factor_RoR,
+                    self.filterDropOuts and not self.flagon,
+                    self.RoRlimitFlag,
+                    max(-self.maxRoRlimit,self.RoRlimitm),
+                    min(self.maxRoRlimit,self.RoRlimit),
+                    True, # replace error values -1 by NaN
+                    'R2',
+                    self.DeltaBTfunction,
+                    self.eval_math_expression_RT)
 
             return delta1, delta2
         except Exception as e: # pylint: disable=broad-except
@@ -10596,7 +10120,7 @@ class tgraphcanvas(QObject):
     def set_xlabel(self, xlabel:str) -> None:
         fontprop_medium = self.aw.mpl_fontproperties.copy()
         fontprop_medium.set_size('medium')
-        self.xlabel_text = xlabel
+        self.xlabel_text = self.__dijkstra_to_ascii(xlabel)
         if self.ax is not None:
             self.xlabel_artist = self.ax.set_xlabel(xlabel,color = self.palette['xlabel'],
                 fontsize='medium',
@@ -10623,8 +10147,8 @@ class tgraphcanvas(QObject):
         self.background_title_width = 0
         backgroundtitle = backgroundtitle.strip()
         if backgroundtitle != '':
-            backgroundtitle = self.__dijkstra_to_ascii(backgroundtitle)
-            backgroundtitle = f'\n{abbrevString(backgroundtitle, 32)}'
+#            backgroundtitle = self.__dijkstra_to_ascii(backgroundtitle)
+            backgroundtitle = f'\n{self.__dijkstra_to_ascii(abbrevString(backgroundtitle, 32))}'
 
         self.l_subtitle = self.fig.suptitle(backgroundtitle,
                 horizontalalignment='right',verticalalignment='top',
@@ -10665,7 +10189,9 @@ class tgraphcanvas(QObject):
             # this one seems not to work for titles, subtitles and axis!?
             self.title_artist.set_in_layout(False) # remove title from tight_layout calculation
             try:
-                self.title_width = self.title_artist.get_window_extent(renderer=self.fig.canvas.get_renderer()).width # type: ignore[attr-defined]
+                with warnings.catch_warnings():
+                    warnings.simplefilter('ignore') # ignore missing Glyph warnings
+                    self.title_width = self.title_artist.get_window_extent(renderer=self.fig.canvas.get_renderer()).width # type: ignore[attr-defined]
             except Exception: # pylint: disable=broad-except
                 pass
 
@@ -10853,7 +10379,8 @@ class tgraphcanvas(QObject):
                 else:
                     if len(self.timex)>1:
                         timex_lin = numpy.linspace(self.timex[0],self.timex[-1],len(self.timex))
-                    self.stemp1 = list(self.smooth_list(self.timex,temp1_nogaps,window_len=self.curvefilter,decay_smoothing=decay_smoothing_p,a_lin=timex_lin,delta=False))
+                    self.stemp1 = list(smooth_list(self.timex,temp1_nogaps,window_len=self.curvefilter,decay_smoothing=decay_smoothing_p,a_lin=timex_lin,
+                                        medfilt_factor=self.median_filter_factor, filter_dropouts=self.filterDropOuts and not self.flagon))
             if smooth or len(self.stemp2) != len(self.timex):
                 temp2_nogaps = self.resizeListStrict(self.temp2,len(self.timex))
                 if self.interpolateDropsflag:
@@ -10863,7 +10390,8 @@ class tgraphcanvas(QObject):
                 else:
                     if timex_lin is None and self.timex and len(self.timex)>1:
                         timex_lin = numpy.linspace(self.timex[0],self.timex[-1],len(self.timex))
-                    self.stemp2 = list(self.smooth_list(self.timex,temp2_nogaps,window_len=self.curvefilter,decay_smoothing=decay_smoothing_p,a_lin=timex_lin,delta=False))
+                    self.stemp2 = list(smooth_list(self.timex,temp2_nogaps,window_len=self.curvefilter,decay_smoothing=decay_smoothing_p,a_lin=timex_lin,
+                                        medfilt_factor=self.median_filter_factor, filter_dropouts=self.filterDropOuts and not self.flagon))
 
             #populate delta ET (self.delta1) and delta BT (self.delta2)
             # calculated here to be available for parsepecialeventannotations(). the curve are plotted later.
@@ -10894,23 +10422,25 @@ class tgraphcanvas(QObject):
                 if self.flagon or len(self.stemp1B) != len(self.timex):
                     if self.timeB:
                         timeB_lin = numpy.linspace(self.timeB[0],self.timeB[-1],len(self.timeB))
-                    st1 = self.smooth_list(self.timeB,
+                    st1 = smooth_list(self.timeB,
                         (fill_gaps(self.temp1B) if self.interpolateDropsflag else self.temp1B),
                         window_len=self.curvefilter,
                         decay_smoothing=decay_smoothing_p,
                         a_lin=timeB_lin,
-                        delta=False)
+                        medfilt_factor=self.median_filter_factor,
+                        filter_dropouts=self.filterDropOuts and not self.flagon)
                 else:
                     st1 = self.stemp1B
                 if self.flagon or len(self.stemp2B) != len(self.timex):
                     if timeB_lin is None and self.timeB:
                         timeB_lin = numpy.linspace(self.timeB[0],self.timeB[-1],len(self.timeB))
-                    st2 = self.smooth_list(self.timeB,
+                    st2 = smooth_list(self.timeB,
                         (fill_gaps(self.temp2B) if self.interpolateDropsflag else self.temp2B),
                         window_len=self.curvefilter,
                         decay_smoothing=decay_smoothing_p,
                         a_lin=timeB_lin,
-                        delta=False)
+                        medfilt_factor=self.median_filter_factor,
+                        filter_dropouts=self.filterDropOuts and not self.flagon)
                 else:
                     st2 = self.stemp2B
 
@@ -10922,11 +10452,11 @@ class tgraphcanvas(QObject):
                 if self.background_profile_sampling_interval is None:
                     dsET = None
                 else:
-                    dsET = max(1,int(round(self.deltaETspan / self.background_profile_sampling_interval)))
+                    dsET = max(1,round(self.deltaETspan / self.background_profile_sampling_interval))
                 if self.background_profile_sampling_interval is None:
                     dsBT = None
                 else:
-                    dsBT = max(1,int(round(self.deltaBTspan / self.background_profile_sampling_interval)))
+                    dsBT = max(1,round(self.deltaBTspan / self.background_profile_sampling_interval))
                 d1B, d2B = self.recomputeDeltas(self.timeB,RoRstart,self.timeindexB[6],st1,st2,optimalSmoothing=not decay_smoothing_p,timex_lin=timeB_lin,deltaETsamples=dsET,deltaBTsamples=dsBT)
                 if d1B is not None and d2B is not None:
                     self.delta1B = d1B
@@ -10973,22 +10503,29 @@ class tgraphcanvas(QObject):
             return ''
         if self.roastersize_setup == 0 and self.roastertype_setup == '':
             if self.aw.qmc.time_axis_label_mode == 'seconds':
+                from babel.units import get_unit_name
                 try:
                     return get_unit_name('duration-second', length='short', locale=self.aw.locale_str) or 's'
                 except Exception as e:  # pylint: disable=broad-except # UnknownLocaleError
                     _log.exception(e)
                     return get_unit_name('duration-second', length='short', locale='en') or 's'
             if self.aw.qmc.xgrid < 3600:
+                res = 'mins'
+                if self.aw.locale_str != 'en':
+                    try:
+                        from babel.units import get_unit_name
+                        res = get_unit_name('duration-minute', length='short', locale=self.aw.locale_str) or 'mins'
+                    except Exception as e:  # pylint: disable=broad-except # UnknownLocaleError
+                        _log.exception(e)
+                return res
+            res = 'h'
+            if self.aw.locale_str != 'en':
                 try:
-                    return get_unit_name('duration-minute', length='short', locale=self.aw.locale_str) or 'min'
+                    from babel.units import get_unit_name
+                    return get_unit_name('duration-hour', length='short', locale=self.aw.locale_str) or 'h'
                 except Exception as e:  # pylint: disable=broad-except # UnknownLocaleError
                     _log.exception(e)
-                    return get_unit_name('duration-minute', length='short', locale='en') or 'min'
-            try:
-                return get_unit_name('duration-hour', length='short', locale=self.aw.locale_str) or 'h'
-            except Exception as e:  # pylint: disable=broad-except # UnknownLocaleError
-                _log.exception(e)
-                return get_unit_name('duration-hour', length='short', locale='en') or 'h'
+            return res
         if right_to_left(self.locale_str):
             return f"{(render_weight(self.roastersize_setup, 1, weight_units.index(self.weight[2]), right_to_left_lang=True) if self.roastersize_setup>=0 else '')}  {self.__dijkstra_to_ascii(self.roastertype_setup)}"
         return f"{self.__dijkstra_to_ascii(self.roastertype_setup)} {(render_weight(self.roastersize_setup, 1, weight_units.index(self.weight[2])) if self.roastersize_setup>0 else '')}"
@@ -11027,9 +10564,9 @@ class tgraphcanvas(QObject):
 
                     decay_smoothing_p = (not self.optimalSmoothing) or self.flagon
 
-                    scale = 1 if self.graphstyle == 1 else 0
-                    length = 700 # 100 (128 the default)
-                    randomness = 12 # 2 (16 default)
+                    scale = 1.5 if self.graphstyle == 1 else 0
+                    length = 800 # 100 (128 the default)
+                    randomness = 16 # 2 (16 default)
                     rcParams['path.sketch'] = (scale, length, randomness)
 
                     # if no axis are set, we need to forceRenewAxis in any case
@@ -11097,15 +10634,11 @@ class tgraphcanvas(QObject):
                     else:
                         self.setProfileTitle(self.title)
 
-                    if not ((self.flagstart and not self.title_show_always) or self.title.strip() == ''):
-                        if self.backgroundprofile is not None:
-                            if self.roastbatchnrB == 0:
-                                titleB = self.titleB
-                            else:
-                                titleB = f'{self.roastbatchprefixB}{self.roastbatchnrB} {self.titleB}'
-                        elif __release_sponsor_domain__ != '':
-                            sponsor = QApplication.translate('About','sponsored by {}').format(__release_sponsor_domain__)
-                            titleB = f'\n{sponsor}'
+                    if not ((self.flagstart and not self.title_show_always) or self.title.strip() == '') and self.backgroundprofile is not None:
+                        if self.roastbatchnrB == 0:
+                            titleB = self.titleB
+                        else:
+                            titleB = f'{self.roastbatchprefixB}{self.roastbatchnrB} {self.titleB}'
 
                     # extra event names with substitution of event names applied
                     extraname1_subst = self.extraname1[:]
@@ -11206,7 +10739,11 @@ class tgraphcanvas(QObject):
                         self.ax.spines['top'].set_sketch_params(scale, length, randomness)
                     # hide all spines from the delta_ax
                     if self.delta_ax is not None:
-                        self.delta_ax.set_frame_on(False) # hide all splines (as the four lines above)
+                        self.delta_ax.spines.top.set_visible(False)
+                        self.delta_ax.spines.bottom.set_visible(False)
+                        self.delta_ax.spines.left.set_visible(False)
+                        self.delta_ax.spines.right.set_visible(False)
+#                        self.delta_ax.set_frame_on(False) # hide all splines (as the four lines above) # this removes canvas background color on MPL 3.11.x, lines above don't have this issue
 
                     if self.ygrid > 0:
                         major_locator = ticker.MultipleLocator(self.ygrid)
@@ -11299,6 +10836,9 @@ class tgraphcanvas(QObject):
 
                     #if self.eventsGraphflag == 0 then that means don't plot event bars
 
+
+                    bar_anker_point = self.phases[0] - (self.phases[0] - self.ylimit_min)/3 # was self.phases[0]
+
                     step:float = 10.0
                     start:float = 60.0
                     if self.eventsGraphflag == 1: #plot event bars by type
@@ -11313,7 +10853,7 @@ class tgraphcanvas(QObject):
                         for i in range(4):
                             if self.showEtypes[3-i]:
                                 rectEvent = patches.Rectangle(
-                                    (0,self.phases[0]-start-jump),
+                                    (0,bar_anker_point - start-jump),
                                     width=1,
                                     height = step,
                                     transform=trans,
@@ -11381,8 +10921,10 @@ class tgraphcanvas(QObject):
                                 tb_lin = numpy.linspace(tb[0],tb[-1],len(tb))
                             else:
                                 tb_lin = None
-                            self.stemp1B = self.smooth_list(tb,t1,window_len=self.curvefilter,decay_smoothing=decay_smoothing_p,a_lin=tb_lin,delta=False)
-                            self.stemp2B = self.smooth_list(tb,t2,window_len=self.curvefilter,decay_smoothing=decay_smoothing_p,a_lin=tb_lin,delta=False)
+                            self.stemp1B = smooth_list(tb,t1,window_len=self.curvefilter,decay_smoothing=decay_smoothing_p,a_lin=tb_lin,
+                                    medfilt_factor=self.median_filter_factor, filter_dropouts=self.filterDropOuts and not self.flagon)
+                            self.stemp2B = smooth_list(tb,t2,window_len=self.curvefilter,decay_smoothing=decay_smoothing_p,a_lin=tb_lin,
+                                    medfilt_factor=self.median_filter_factor, filter_dropouts=self.filterDropOuts and not self.flagon)
 
                         self.l_background_annotations = []
 
@@ -11409,7 +10951,9 @@ class tgraphcanvas(QObject):
                                     else:
                                         trans = self.ax.transData
                                     if re_smooth_background:
-                                        self.stemp1BX[n3] = self.smooth_list(tx,self.temp1BX[n3],window_len=self.curvefilter,decay_smoothing=decay_smoothing_p,a_lin=tx_lin,delta=False)
+#                                        self.stemp1BX[n3] = self.smooth_list(tx,self.temp1BX[n3],window_len=self.curvefilter,decay_smoothing=decay_smoothing_p,a_lin=tx_lin,delta=False)
+                                        self.stemp1BX[n3] = smooth_list(tx,self.temp1BX[n3],window_len=self.curvefilter,decay_smoothing=decay_smoothing_p,a_lin=tx_lin,
+                                            medfilt_factor=self.median_filter_factor, filter_dropouts=self.filterDropOuts and not self.flagon)
                                     if self.flagon:
                                         # during recording we draw the unsmoothed background curves, with drops interpolated
                                         stemp3B = self.temp1BX[n3]
@@ -11421,7 +10965,8 @@ class tgraphcanvas(QObject):
                                     else:
                                         trans = self.ax.transData
                                     if re_smooth_background:
-                                        self.stemp2BX[n3] = self.smooth_list(tx,self.temp2BX[n3],window_len=self.curvefilter,decay_smoothing=decay_smoothing_p,a_lin=tx_lin,delta=False)
+                                        self.stemp2BX[n3] = smooth_list(tx,self.temp2BX[n3],window_len=self.curvefilter,decay_smoothing=decay_smoothing_p,a_lin=tx_lin,
+                                            medfilt_factor=self.median_filter_factor, filter_dropouts=self.filterDropOuts and not self.flagon)
                                     if self.flagon:
                                         # during recording we draw the unsmoothed background curves, with drops interpolated
                                         stemp3B = self.temp2BX[n3]
@@ -11466,7 +11011,8 @@ class tgraphcanvas(QObject):
                                     else:
                                         trans = self.ax.transData
                                     if re_smooth_background:
-                                        self.stemp1BX[n4] = self.smooth_list(tx,self.temp1BX[n4],window_len=self.curvefilter,decay_smoothing=decay_smoothing_p,a_lin=tx_lin,delta=False)
+                                        self.stemp1BX[n4] = smooth_list(tx,self.temp1BX[n4],window_len=self.curvefilter,decay_smoothing=decay_smoothing_p,a_lin=tx_lin,
+                                                medfilt_factor=self.median_filter_factor, filter_dropouts=self.filterDropOuts and not self.flagon)
                                     if self.flagon:
                                         # during recording we draw the unsmoothed background curves, with drops interpolated
                                         stemp4B = self.temp1BX[n4]
@@ -11478,7 +11024,8 @@ class tgraphcanvas(QObject):
                                     else:
                                         trans = self.ax.transData
                                     if re_smooth_background:
-                                        self.stemp2BX[n4] = self.smooth_list(tx,self.temp2BX[n4],window_len=self.curvefilter,decay_smoothing=decay_smoothing_p,a_lin=tx_lin,delta=False)
+                                        self.stemp2BX[n4] = smooth_list(tx,self.temp2BX[n4],window_len=self.curvefilter,decay_smoothing=decay_smoothing_p,a_lin=tx_lin,
+                                                medfilt_factor=self.median_filter_factor, filter_dropouts=self.filterDropOuts and not self.flagon)
                                     if self.flagon:
                                         # during recording we draw the unsmoothed background curves, with drops interpolated
                                         stemp4B = self.temp2BX[n4]
@@ -11616,38 +11163,38 @@ class tgraphcanvas(QObject):
                                     alpha=self.backgroundalpha,
                                     label=self.aw.arabicReshape(QApplication.translate('Label', 'BackgroundDeltaBT')))
                         #check backgroundevents flag
-                        if self.backgroundeventsflag and (self.backgroundETcurve or self.backgroundBTcurve):
+                        if self.backgroundeventsflag:
                             height = 50 if self.mode == 'F' else 20
-
-                            for p, bge in enumerate(self.backgroundEvents):
-                                if self.eventsGraphflag not in [2,4] or self.backgroundEtypes[p] > 3:
-                                    event_idx = bge
-                                    if (not self.showEtypes[self.backgroundEtypes[p]] or
-                                        (not self.backgroundShowFullflag and (((not self.autotimex or self.autotimexMode == 0) and event_idx < bcharge_idx) or event_idx > bdrop_idx))):
-                                        continue
-                                    if self.backgroundEtypes[p] < 4:
-                                        st1 = f'{self.Betypesf(self.backgroundEtypes[p])[0]}{self.eventsvaluesShort(self.backgroundEvalues[p])}'
-                                    else:
-                                        st1 = self.backgroundEStrings[p].strip()[:self.eventslabelschars]
-                                        if len(st1) == 0:
-                                            st1 = 'E'
-                                    # plot events on BT when showeventsonbt is true
-                                    if self.backgroundETcurve and not (self.backgroundBTcurve and self.showeventsonbt) and self.temp1B[event_idx] > self.temp2B[event_idx]:
-                                        temp = self.temp1B[event_idx]
-                                    else:
-                                        temp = self.temp2B[event_idx]
-                                    anno = self.ax.annotate(st1, xy=(self.timeB[event_idx], temp),path_effects=[],
-                                                        xytext=(self.timeB[event_idx], temp+height),
-                                                        va='center', ha='center',
-                                                        fontsize='x-small',
-                                                        color=self.palette['bgeventtext'],
-                                                        arrowprops={'arrowstyle':'wedge',
-                                                                        'color':self.palette['bgeventmarker'],
-                                                                        'alpha':self.backgroundalpha},#relpos=(0,0)),
-                                                        alpha=min(self.backgroundalpha + 0.1, 1.0))
-                                    anno.set_in_layout(False)  # remove text annotations from tight_layout calculation
-                                    self.l_background_annotations.append(anno)
-                                    self.l_eventflagbackannos.append(anno)
+                            if self.backgroundETcurve or self.backgroundBTcurve:
+                                for p, bge in enumerate(self.backgroundEvents):
+                                    if self.eventsGraphflag not in [2,4] or self.backgroundEtypes[p] > 3:
+                                        event_idx = bge
+                                        if (not self.showEtypes[self.backgroundEtypes[p]] or
+                                            (not self.backgroundShowFullflag and (((not self.autotimex or self.autotimexMode == 0) and event_idx < bcharge_idx) or event_idx > bdrop_idx))):
+                                            continue
+                                        if self.backgroundEtypes[p] < 4:
+                                            st1 = f'{self.Betypesf(self.backgroundEtypes[p])[0]}{self.eventsvaluesShort(self.backgroundEvalues[p])}'
+                                        else:
+                                            st1 = self.backgroundEStrings[p].strip()[:self.eventslabelschars]
+                                            if len(st1) == 0:
+                                                st1 = 'E'
+                                        # plot events on BT when showeventsonbt is true
+                                        if self.backgroundETcurve and not (self.backgroundBTcurve and self.showeventsonbt) and self.temp1B[event_idx] > self.temp2B[event_idx]:
+                                            temp = self.temp1B[event_idx]
+                                        else:
+                                            temp = self.temp2B[event_idx]
+                                        anno = self.ax.annotate(st1, xy=(self.timeB[event_idx], temp),path_effects=[],
+                                                            xytext=(self.timeB[event_idx], temp+height),
+                                                            va='center', ha='center',
+                                                            fontsize='x-small',
+                                                            color=self.palette['bgeventtext'],
+                                                            arrowprops={'arrowstyle':'wedge',
+                                                                            'color':self.palette['bgeventmarker'],
+                                                                            'alpha':self.backgroundalpha},#relpos=(0,0)),
+                                                            alpha=min(self.backgroundalpha + 0.1, 1.0))
+                                        anno.set_in_layout(False)  # remove text annotations from tight_layout calculation
+                                        self.l_background_annotations.append(anno)
+                                        self.l_eventflagbackannos.append(anno)
                             #background events by value
                             if self.eventsGraphflag in {2, 3, 4}: # 2: step, 3: step+, 4: combo
                                 self.E1backgroundtimex,self.E2backgroundtimex,self.E3backgroundtimex,self.E4backgroundtimex = [],[],[],[]
@@ -11688,7 +11235,7 @@ class tgraphcanvas(QObject):
                                             if (len(self.timex)==0 or self.flagon) and self.eventsGraphflag!=4 and self.backgroundDetails and self.specialeventannovisibilities[0] != 0:
                                                 E1b_annotation = self.parseSpecialeventannotation(self.specialeventannotations[0], i, applyto='background')
                                                 temp = self.E1backgroundvalues[-1]
-                                                anno = self.ax.annotate(E1b_annotation, xy=(hoffset + self.timeB[int(event_idx)], voffset + temp),
+                                                anno = self.ax.annotate(E1b_annotation, xy=(hoffset + self.timeB[event_idx], voffset + temp),
                                                             alpha=min(self.backgroundalpha + 0.1, 1.0),
                                                             color=self.palette['text'],
                                                             va='bottom', ha='left',
@@ -11724,7 +11271,7 @@ class tgraphcanvas(QObject):
                                             if (len(self.timex)==0 or self.flagon) and self.eventsGraphflag!=4 and self.backgroundDetails and self.specialeventannovisibilities[1] != 0:
                                                 E2b_annotation = self.parseSpecialeventannotation(self.specialeventannotations[1], i, applyto='background')
                                                 temp = self.E2backgroundvalues[-1]
-                                                anno = self.ax.annotate(E2b_annotation, xy=(hoffset + self.timeB[int(event_idx)], voffset + temp),
+                                                anno = self.ax.annotate(E2b_annotation, xy=(hoffset + self.timeB[event_idx], voffset + temp),
                                                             alpha=min(self.backgroundalpha + 0.1, 1.0),
                                                             color=self.palette['text'],
                                                             va='bottom', ha='left',
@@ -11760,7 +11307,7 @@ class tgraphcanvas(QObject):
                                             if (len(self.timex)==0 or self.flagon) and self.eventsGraphflag!=4 and self.backgroundDetails and self.specialeventannovisibilities[2] != 0:
                                                 E3b_annotation = self.parseSpecialeventannotation(self.specialeventannotations[2], i, applyto='background')
                                                 temp = self.E3backgroundvalues[-1]
-                                                anno = self.ax.annotate(E3b_annotation, xy=(hoffset + self.timeB[int(event_idx)], voffset + temp),
+                                                anno = self.ax.annotate(E3b_annotation, xy=(hoffset + self.timeB[event_idx], voffset + temp),
                                                             alpha=min(self.backgroundalpha + 0.1, 1.0),
                                                             color=self.palette['text'],
                                                             va='bottom', ha='left',
@@ -11796,7 +11343,7 @@ class tgraphcanvas(QObject):
                                             if (len(self.timex)==0 or self.flagon) and self.eventsGraphflag!=4 and self.backgroundDetails and self.specialeventannovisibilities[3] != 0:
                                                 E4b_annotation = self.parseSpecialeventannotation(self.specialeventannotations[3], i, applyto='background')
                                                 temp = self.E4backgroundvalues[-1]
-                                                anno = self.ax.annotate(E4b_annotation, xy=(hoffset + self.timeB[int(event_idx)], voffset + temp),
+                                                anno = self.ax.annotate(E4b_annotation, xy=(hoffset + self.timeB[event_idx], voffset + temp),
                                                             alpha=min(self.backgroundalpha + 0.1, 1.0),
                                                             color=self.palette['text'],
                                                             va='bottom', ha='left',
@@ -11820,7 +11367,7 @@ class tgraphcanvas(QObject):
                                     if (self.timeindexB[6] > 0 and self.extendevents and self.timeB[self.timeindexB[6]] > self.timeB[self.backgroundEvents[E1b_last]]):   #if drop exists and last event was earlier
                                         # repeat last value at time of DROP
                                         self.E1backgroundtimex.append(self.timeB[self.timeindexB[6]]) #time of drop
-                                        pos = max(0,int(round((self.backgroundEvalues[E1b_last]-1)*10)))
+                                        pos = max(0,round((self.backgroundEvalues[E1b_last]-1)*10))
                                         if self.clampEvents:
                                             self.E1backgroundvalues.append(pos)
                                         else:
@@ -11844,7 +11391,7 @@ class tgraphcanvas(QObject):
                                     if (self.timeindexB[6] > 0 and self.extendevents and self.timeB[self.timeindexB[6]] > self.timeB[self.backgroundEvents[E2b_last]]):   #if drop exists and last event was earlier
                                         # repeat last value at time of DROP
                                         self.E2backgroundtimex.append(self.timeB[self.timeindexB[6]]) #time of drop
-                                        pos = max(0,int(round((self.backgroundEvalues[E2b_last]-1)*10)))
+                                        pos = max(0,round((self.backgroundEvalues[E2b_last]-1)*10))
                                         if self.clampEvents:
                                             self.E2backgroundvalues.append(pos)
                                         else:
@@ -11868,7 +11415,7 @@ class tgraphcanvas(QObject):
                                     if (self.timeindexB[6] > 0 and self.extendevents and self.timeB[self.timeindexB[6]] > self.timeB[self.backgroundEvents[E3b_last]]):   #if drop exists and last event was earlier
                                         # repeat last value at time of DROP
                                         self.E3backgroundtimex.append(self.timeB[self.timeindexB[6]]) #time of drop
-                                        pos = max(0,int(round((self.backgroundEvalues[E3b_last]-1)*10)))
+                                        pos = max(0,round((self.backgroundEvalues[E3b_last]-1)*10))
                                         if self.clampEvents:
                                             self.E3backgroundvalues.append(pos)
                                         else:
@@ -11892,7 +11439,7 @@ class tgraphcanvas(QObject):
                                     if (self.timeindexB[6] > 0 and self.extendevents and self.timeB[self.timeindexB[6]] > self.timeB[self.backgroundEvents[E4b_last]]):   #if drop exists and last event was earlier
                                         # repeat last value at time of DROP
                                         self.E4backgroundtimex.append(self.timeB[self.timeindexB[6]]) #time of drop
-                                        pos = max(0,int(round((self.backgroundEvalues[E4b_last]-1)*10)))
+                                        pos = max(0,round((self.backgroundEvalues[E4b_last]-1)*10))
                                         if self.clampEvents:
                                             self.E4backgroundvalues.append(pos)
                                         else:
@@ -11968,8 +11515,8 @@ class tgraphcanvas(QObject):
                                                 boxcolor = self.palette['specialeventbox']
                                                 textcolor = self.palette['specialeventtext']
                                             if self.eventsGraphflag in {0, 3} or self.backgroundEtypes[i] > 3:
-                                                anno = self.ax.annotate('f{firstletter}{secondletter}', xy=(self.timeB[int(event_idx)], Btemp),
-                                                             xytext=(self.timeB[int(event_idx)],Btemp+height),
+                                                anno = self.ax.annotate('f{firstletter}{secondletter}', xy=(self.timeB[event_idx], Btemp),
+                                                             xytext=(self.timeB[event_idx],Btemp+height),
                                                              alpha=min(self.backgroundalpha + 0.1, 1.0),
                                                              color=self.palette['bgeventtext'],
                                                              va='center', ha='center',
@@ -11982,8 +11529,8 @@ class tgraphcanvas(QObject):
                                             elif self.eventsGraphflag == 4:
                                                 if thirdletter != '':
                                                     firstletter = ''
-                                                anno = self.ax.annotate(f'{firstletter}{secondletter}{thirdletter}', xy=(self.timeB[int(event_idx)], Btemp),
-                                                             xytext=(self.timeB[int(event_idx)],Btemp),
+                                                anno = self.ax.annotate(f'{firstletter}{secondletter}{thirdletter}', xy=(self.timeB[event_idx], Btemp),
+                                                             xytext=(self.timeB[event_idx],Btemp),
                                                              alpha=min(self.backgroundalpha + 0.3, 1.0),
                                                              color=self.palette['bgeventtext'],
                                                              va='center', ha='center',
@@ -12090,12 +11637,15 @@ class tgraphcanvas(QObject):
                     E3_nonempty:bool = False
                     E4_nonempty:bool = False
 
+
                     Nevents = len(self.specialevents)
                     if self.eventsshowflag != 0:
                         #three modes of drawing events.
                         # the first mode just places annotations. They are text annotations.
                         # the second mode aligns the events types to a bar height so that they can be visually identified by type. They are text annotations
                         # the third mode plots the events by value. They are not annotations but actual lines.
+
+
 
                         if self.eventsGraphflag == 1 and Nevents:
 
@@ -12104,10 +11654,11 @@ class tgraphcanvas(QObject):
                             char3 = self.etypeAbbrev(self.etypes[2])
                             char4 = self.etypeAbbrev(self.etypes[3])
 
+
                             if self.mode == 'F':
-                                row = {char1:self.phases[0]-20,char2:self.phases[0]-40,char3:self.phases[0]-60,char4:self.phases[0]-80}
+                                row = {char1:bar_anker_point - 20,char2:bar_anker_point - 40,char3:bar_anker_point - 60,char4:bar_anker_point - 80}
                             else:
-                                row = {char1:self.phases[0]-10,char2:self.phases[0]-20,char3:self.phases[0]-30,char4:self.phases[0]-40}
+                                row = {char1:bar_anker_point - 10,char2:bar_anker_point - 20,char3:bar_anker_point - 30,char4:bar_anker_point - 40}
 
                             #draw lines of color between events of the same type to help identify areas of events.
                             #count (as length of the list) and collect their times for each different type. Each type will have a different plot height
@@ -12115,7 +11666,7 @@ class tgraphcanvas(QObject):
                             for i in range(Nevents):
                                 try:
                                     txx = self.timex[self.specialevents[i]]
-                                    event_idx = int(self.specialevents[i])
+                                    event_idx = self.specialevents[i]
 
                                     if self.flagstart or self.foregroundShowFullflag or (charge_idx <= event_idx <= drop_idx) or (self.autotimex and self.autotimexMode != 0 and event_idx < charge_idx):
                                         if self.specialeventstype[i] == 0 and self.showEtypes[0]:
@@ -12150,7 +11701,7 @@ class tgraphcanvas(QObject):
                                     # a special event of type "--"
                                     pass
                                 elif self.showEtypes[self.specialeventstype[i]]:
-                                    event_idx = int(self.specialevents[i])
+                                    event_idx = self.specialevents[i]
                                     try:
                                         if not(self.flagstart or self.foregroundShowFullflag or
                                                 (charge_idx <= event_idx <= drop_idx) or (self.autotimex and self.autotimexMode != 0 and event_idx < charge_idx)):
@@ -12217,7 +11768,7 @@ class tgraphcanvas(QObject):
                             eventannotationprop.set_size('x-small')
                             for i in range(Nevents):
                                 if len(self.specialevents) > i and len(self.specialeventstype) > i and len(self.specialeventsvalue) > i and len(self.specialeventsStrings) > i:
-                                    pos = max(0,int(round((self.specialeventsvalue[i]-1)*10)))
+                                    pos = max(0,round((self.specialeventsvalue[i]-1)*10))
                                     if len(self.timex) > self.specialevents[i]:
                                         txx = self.timex[self.specialevents[i]]
                                         skip_event = not self.flagstart and ((not self.foregroundShowFullflag and (not self.autotimex or self.autotimexMode == 0) and self.timeindex[0] > -1 and txx < self.timex[self.timeindex[0]]) or
@@ -12242,7 +11793,7 @@ class tgraphcanvas(QObject):
                                                     if not self.flagon and self.eventsGraphflag!=4 and self.specialeventannovisibilities[0] != 0:
                                                         E1_annotation = self.parseSpecialeventannotation(self.specialeventannotations[0], i)
                                                         temp = self.E1values[-1]
-                                                        anno = self.ax.annotate(E1_annotation, xy=(hoffset + self.timex[int(self.specialevents[i])], voffset + temp),
+                                                        anno = self.ax.annotate(E1_annotation, xy=(hoffset + self.timex[self.specialevents[i]], voffset + temp),
                                                                     alpha=.9,
                                                                     color=self.palette['text'],
                                                                     va='bottom', ha='left',
@@ -12282,7 +11833,7 @@ class tgraphcanvas(QObject):
                                                     if not self.flagon and self.eventsGraphflag!=4 and self.specialeventannovisibilities[1] != 0:
                                                         E2_annotation = self.parseSpecialeventannotation(self.specialeventannotations[1], i)
                                                         temp = self.E2values[-1]
-                                                        anno = self.ax.annotate(E2_annotation, xy=(hoffset + self.timex[int(self.specialevents[i])], voffset + temp),
+                                                        anno = self.ax.annotate(E2_annotation, xy=(hoffset + self.timex[self.specialevents[i]], voffset + temp),
                                                                     alpha=.9,
                                                                     color=self.palette['text'],
                                                                     va='bottom', ha='left',
@@ -12323,7 +11874,7 @@ class tgraphcanvas(QObject):
                                                     if not self.flagon and self.eventsGraphflag!=4 and self.specialeventannovisibilities[2] != 0:
                                                         E3_annotation = self.parseSpecialeventannotation(self.specialeventannotations[2], i)
                                                         temp = self.E3values[-1]
-                                                        anno = self.ax.annotate(E3_annotation, xy=(hoffset + self.timex[int(self.specialevents[i])], voffset + temp),
+                                                        anno = self.ax.annotate(E3_annotation, xy=(hoffset + self.timex[self.specialevents[i]], voffset + temp),
                                                                     alpha=.9,
                                                                     color=self.palette['text'],
                                                                     va='bottom', ha='left',
@@ -12363,7 +11914,7 @@ class tgraphcanvas(QObject):
                                                     if not self.flagon and self.eventsGraphflag!=4 and self.specialeventannovisibilities[3] != 0:
                                                         E4_annotation = self.parseSpecialeventannotation(self.specialeventannotations[3], i)
                                                         temp = self.E4values[-1]
-                                                        anno = self.ax.annotate(E4_annotation, xy=(hoffset + self.timex[int(self.specialevents[i])], voffset + temp),
+                                                        anno = self.ax.annotate(E4_annotation, xy=(hoffset + self.timex[self.specialevents[i]], voffset + temp),
                                                                     alpha=.9,
                                                                     color=self.palette['text'],
                                                                     va='bottom', ha='left',
@@ -12395,7 +11946,7 @@ class tgraphcanvas(QObject):
                             E4x:Sequence[float|None]
                             E4y:Sequence[float|None]
                             if len(self.E1timex) > 0 and len(self.E1values) == len(self.E1timex):
-                                pos = max(0,int(round((self.specialeventsvalue[E1_last]-1)*10)))
+                                pos = max(0,round((self.specialeventsvalue[E1_last]-1)*10))
                                 if not self.clampEvents: # in clamp mode we render also event values higher than 100:
                                     pos = (pos*event_pos_factor)+event_pos_offset
                                 if self.foregroundShowFullflag and self.autotimex and self.autotimexMode != 0 and (self.timeindex[7] > 0 and
@@ -12423,7 +11974,7 @@ class tgraphcanvas(QObject):
                                                                 pickradius=4,#markevery=every,
                                                                 linestyle='-',drawstyle=ds,linewidth = self.Evaluelinethickness[0],alpha = self.Evaluealpha[0],label=self.etypesf(0))
                             if len(self.E2timex) > 0 and len(self.E2values) == len(self.E2timex):
-                                pos = max(0,int(round((self.specialeventsvalue[E2_last]-1)*10)))
+                                pos = max(0,round((self.specialeventsvalue[E2_last]-1)*10))
                                 if not self.clampEvents: # in clamp mode we render also event values higher than 100:
                                     pos = (pos*event_pos_factor)+event_pos_offset
                                 if self.foregroundShowFullflag and self.autotimex and self.autotimexMode != 0 and (self.timeindex[7] > 0 and
@@ -12450,7 +12001,7 @@ class tgraphcanvas(QObject):
                                                                 pickradius=4,#markevery=every,
                                                                 linestyle='-',drawstyle=ds,linewidth = self.Evaluelinethickness[1],alpha = self.Evaluealpha[1],label=self.etypesf(1))
                             if len(self.E3timex) > 0 and len(self.E3values) == len(self.E3timex):
-                                pos = max(0,int(round((self.specialeventsvalue[E3_last]-1)*10)))
+                                pos = max(0,round((self.specialeventsvalue[E3_last]-1)*10))
                                 if not self.clampEvents: # in clamp mode we render also event values higher than 100:
                                     pos = (pos*event_pos_factor)+event_pos_offset
                                 if self.foregroundShowFullflag and self.autotimex and self.autotimexMode != 0 and (self.timeindex[7] > 0 and
@@ -12477,7 +12028,7 @@ class tgraphcanvas(QObject):
                                                                 pickradius=4,#markevery=every,
                                                                 linestyle='-',drawstyle=ds,linewidth = self.Evaluelinethickness[2],alpha = self.Evaluealpha[2],label=self.etypesf(2))
                             if len(self.E4timex) > 0 and len(self.E4values) == len(self.E4timex):
-                                pos = max(0,int(round((self.specialeventsvalue[E4_last]-1)*10)))
+                                pos = max(0,round((self.specialeventsvalue[E4_last]-1)*10))
                                 if not self.clampEvents: # in clamp mode we render also event values higher than 100:
                                     pos = (pos*event_pos_factor)+event_pos_offset
                                 if self.foregroundShowFullflag and self.autotimex and self.autotimexMode != 0 and (self.timeindex[7] > 0 and
@@ -12509,7 +12060,7 @@ class tgraphcanvas(QObject):
                                 # we prepare copies of the Evalues
                                 evalues = [self.E1values[:],self.E2values[:],self.E3values[:],self.E4values[:]]
                             for i in range(Nevents):
-                                event_idx = int(self.specialevents[i])
+                                event_idx = self.specialevents[i]
                                 try:
                                     if self.specialeventstype[i] == 4 or self.eventsGraphflag in {0, 3, 4}:
                                         if self.specialeventstype[i] < 4 and (not self.renderEventsDescr or len(self.specialeventsStrings[i].strip()) == 0):
@@ -12635,8 +12186,8 @@ class tgraphcanvas(QObject):
                                 len(self.timex) == len(self.delta1) and len(self.timex) == len(self.delta2) and len(self.timex)>charge_idx+2):
                             # to avoid drawing of RoR artifacts directly after CHARGE we skip the first few samples after CHARGE before starting to draw
                             # as well as the last two readings before DROP
-                            skip = max(2,min(20,int(round(5000/self.delay))))
-                            skip2 = max(2,int(round(skip/2)))
+                            skip = max(2,min(20,round(5000/self.delay)))
+                            skip2 = max(2,round(skip/2))
                             if self.swapdeltalcds:
                                 self.drawDeltaET(trans,charge_idx+skip,drop_idx-skip2)
                                 self.drawDeltaBT(trans,charge_idx+skip,drop_idx-skip2)
@@ -12712,12 +12263,13 @@ class tgraphcanvas(QObject):
                                 if any(x in self.extramathexpression1[i] for x in ['R1', 'RB1']):
                                     self.extrastemp1[i] = self.extratemp1[i]
                                 elif not self.flagon and (re_smooth_foreground or len(self.extrastemp1[i]) != len(self.extratimex[i])):
-                                    self.extrastemp1[i] = self.smooth_list(self.extratimex[i],
+                                    self.extrastemp1[i] = smooth_list(self.extratimex[i],
                                         (fill_gaps(self.extratemp1[i]) if self.interpolateDropsflag else self.extratemp1[i]),
                                         window_len=self.curvefilter,
                                         decay_smoothing=decay_smoothing_p,
                                         a_lin=timexi_lin,
-                                        delta=False).tolist()
+                                        medfilt_factor=self.median_filter_factor,
+                                        filter_dropouts=self.filterDropOuts and not self.flagon).tolist()
                                 elif len(self.extrastemp1[i]) != len(self.extratimex[i]):
                                     # extratemp1 does not exist and we are not re-smoothing, we take the raw data (potentially with dropouts interpolated)
                                     if self.interpolateDropsflag: # we don't smooth, but remove the dropouts
@@ -12727,7 +12279,7 @@ class tgraphcanvas(QObject):
 
                                 if self.aw.extraDelta1[i] and self.delta_ax is not None:
                                     trans = self.delta_ax.transData
-                                else:
+                                elif self.ax is not None:
                                     trans = self.ax.transData
                                 visible_extratemp1 : npt.NDArray[numpy.double]
                                 if not self.flagstart and not self.foregroundShowFullflag and (not self.autotimex or self.autotimexMode == 0) and len(self.extrastemp1[i]) > 0:
@@ -12742,22 +12294,23 @@ class tgraphcanvas(QObject):
                                 else:
                                     visible_extratemp1 = numpy.array(self.extrastemp1[i], dtype=numpy.double)
                                 # first draw the fill if any
-                                if self.aw.extraFill1[i] > 0:
+                                if self.aw.extraFill1[i] > 0 and self.ax is not None:
                                     self.extrafill1lines.append(self.ax.fill_between(
                                             self.extratimex[i], visible_extratemp1, 0, transform=trans,
                                             color=self.extradevicecolor1[i],alpha=self.aw.extraFill1[i]/100.,
                                             sketch_params=None))
                                 else:
                                     self.extrafill1lines.append(None)
-                                self.extratemp1lines.append(self.ax.plot(numpy.array(self.extratimex[i]),visible_extratemp1,transform=trans,color=self.extradevicecolor1[i],
-                                    sketch_params=None,
-                                    path_effects=self.line_path_effects(self.glow, self.patheffects, self.aw.light_background_p, self.extralinewidths1[i],self.extradevicecolor1[i]),
-                                    markersize=self.extramarkersizes1[i],
-                                    marker=self.extramarkers1[i],
-                                    linewidth=self.extralinewidths1[i],
-                                    linestyle=self.extralinestyles1[i],
-                                    drawstyle=self.extradrawstyles1[i],
-                                    label=extraname1_subst[i])[0])
+                                if self.ax is not None:
+                                    self.extratemp1lines.append(self.ax.plot(numpy.array(self.extratimex[i]),visible_extratemp1,transform=trans,color=self.extradevicecolor1[i],
+                                        sketch_params=None,
+                                        path_effects=self.line_path_effects(self.glow, self.patheffects, self.aw.light_background_p, self.extralinewidths1[i],self.extradevicecolor1[i]),
+                                        markersize=self.extramarkersizes1[i],
+                                        marker=self.extramarkers1[i],
+                                        linewidth=self.extralinewidths1[i],
+                                        linestyle=self.extralinestyles1[i],
+                                        drawstyle=self.extradrawstyles1[i],
+                                        label=extraname1_subst[i])[0])
                         except Exception as ex: # pylint: disable=broad-except
                             _log.exception(ex)
                             _, _, exc_tb = sys.exc_info()
@@ -12768,12 +12321,13 @@ class tgraphcanvas(QObject):
                                 if any(x in self.extramathexpression2[i] for x in ['R2', 'RB2']):
                                     self.extrastemp2[i] = self.extratemp2[i]
                                 elif not self.flagon and (re_smooth_foreground or len(self.extrastemp2[i]) != len(self.extratimex[i])):
-                                    self.extrastemp2[i] = self.smooth_list(self.extratimex[i],
+                                    self.extrastemp2[i] = smooth_list(self.extratimex[i],
                                         (fill_gaps(self.extratemp2[i]) if self.interpolateDropsflag else self.extratemp2[i]),
                                         window_len=self.curvefilter,
                                         decay_smoothing=decay_smoothing_p,
                                         a_lin=timexi_lin,
-                                        delta=False).tolist()
+                                        medfilt_factor=self.median_filter_factor,
+                                        filter_dropouts=self.filterDropOuts and not self.flagon).tolist()
                                 elif len(self.extrastemp2[i]) != len(self.extratimex[i]):
                                     # extratemp2 does not exist and we are not re-smoothing, we take the raw data (potentially with dropouts interpolated)
                                     if self.interpolateDropsflag:
@@ -12783,7 +12337,7 @@ class tgraphcanvas(QObject):
 
                                 if self.aw.extraDelta2[i] and self.delta_ax is not None:
                                     trans = self.delta_ax.transData
-                                else:
+                                elif self.ax is not None:
                                     trans = self.ax.transData
                                 visible_extratemp2 : npt.NDArray[numpy.double]
                                 if not self.flagstart and not self.foregroundShowFullflag and (not self.autotimex or self.autotimexMode == 0) and len(self.extrastemp2[i]) > 0:
@@ -12798,22 +12352,23 @@ class tgraphcanvas(QObject):
                                 else:
                                     visible_extratemp2 = numpy.array(self.extrastemp2[i], dtype=numpy.double)
                                 # first draw the fill if any
-                                if self.aw.extraFill2[i] > 0:
+                                if self.aw.extraFill2[i] > 0 and self.ax is not None:
                                     self.extrafill2lines.append(self.ax.fill_between(
-                                            self.extratimex[i], visible_extratemp2, 0, transform=trans,
-                                            color=self.extradevicecolor2[i],alpha=self.aw.extraFill2[i]/100.,
-                                            sketch_params=None))
+                                                self.extratimex[i], visible_extratemp2, 0, transform=trans,
+                                                color=self.extradevicecolor2[i],alpha=self.aw.extraFill2[i]/100.,
+                                                sketch_params=None))
                                 else:
                                     self.extrafill2lines.append(None)
-                                self.extratemp2lines.append(self.ax.plot(numpy.array(self.extratimex[i]),visible_extratemp2,transform=trans,color=self.extradevicecolor2[i],
-                                    sketch_params=None,
-                                    path_effects=self.line_path_effects(self.glow, self.patheffects, self.aw.light_background_p, self.extralinewidths2[i],self.extradevicecolor2[i]),
-                                    markersize=self.extramarkersizes2[i],
-                                    marker=self.extramarkers2[i],
-                                    linewidth=self.extralinewidths2[i],
-                                    linestyle=self.extralinestyles2[i],
-                                    drawstyle=self.extradrawstyles2[i],
-                                    label= extraname2_subst[i])[0])
+                                if self.ax is not None:
+                                    self.extratemp2lines.append(self.ax.plot(numpy.array(self.extratimex[i]),visible_extratemp2,transform=trans,color=self.extradevicecolor2[i],
+                                        sketch_params=None,
+                                        path_effects=self.line_path_effects(self.glow, self.patheffects, self.aw.light_background_p, self.extralinewidths2[i],self.extradevicecolor2[i]),
+                                        markersize=self.extramarkersizes2[i],
+                                        marker=self.extramarkers2[i],
+                                        linewidth=self.extralinewidths2[i],
+                                        linestyle=self.extralinestyles2[i],
+                                        drawstyle=self.extradrawstyles2[i],
+                                        label= extraname2_subst[i])[0])
                         except Exception as ex: # pylint: disable=broad-except
                             _log.exception(ex)
                             _, _, exc_tb = sys.exc_info()
@@ -12947,10 +12502,11 @@ class tgraphcanvas(QObject):
                         self.drawAUC()
 
                     #update label rotating_colors
-                    for label in self.ax.xaxis.get_ticklabels():
-                        label.set_color(self.palette['xlabel'])
-                    for label in self.ax.yaxis.get_ticklabels():
-                        label.set_color(self.palette['ylabel'])
+                    if self.ax is not None:
+                        for label in self.ax.xaxis.get_ticklabels():
+                            label.set_color(self.palette['xlabel'])
+                        for label in self.ax.yaxis.get_ticklabels():
+                            label.set_color(self.palette['ylabel'])
                     if two_ax_mode and self.delta_ax is not None:
                         for label in self.delta_ax.yaxis.get_ticklabels():
                             label.set_color(self.palette['ylabel'])
@@ -12960,11 +12516,11 @@ class tgraphcanvas(QObject):
                         prop = self.aw.mpl_fontproperties.copy()
                         prop.set_size('x-small')
                         if len(self.handles) > 7:
-                            ncol = int(math.ceil(len(self.handles)/4.))
+                            ncol = math.ceil(len(self.handles)/4.)
                         elif len(self.handles) > 3:
-                            ncol = int(math.ceil(len(self.handles)/2.))
+                            ncol = math.ceil(len(self.handles)/2.)
                         else:
-                            ncol = int(math.ceil(len(self.handles)))
+                            ncol = math.ceil(len(self.handles))
                         self.labels = [self.__dijkstra_to_ascii(l) for l in self.labels]
                         loc:int|tuple[float,float]
                         if self.legend is None:
@@ -12975,26 +12531,27 @@ class tgraphcanvas(QObject):
                         else:
                             loc = self.legend._loc # type: ignore[attr-defined] # "Legend" has no attribute "_loc" # pylint: disable=protected-access
                         try:
-                            leg = self.ax.legend(self.handles,self.labels, loc=loc,
-                                ncols=ncol,fancybox=True,prop=prop,shadow=False,frameon=True)
-                            leg.set_in_layout(False) # remove legend from tight_layout calculation
-                            self.legend = leg
-                            self.legend_lines = leg.get_lines()
-                            for h in leg.legend_handles:
-                                if h is not None:
-                                    h.set_picker(False) # we disable the click to hide on the handles feature
-                            for ll in leg.texts:
-                                #l.set_picker(5)
-                                ll.set_picker(self.aw.draggable_text_box_picker)
-                            leg.set_draggable(state=True,use_blit=True)  #,update='bbox')
-                            leg.set_picker(self.aw.draggable_text_box_picker)
-                            frame = leg.get_frame()
-                            frame.set_facecolor(self.palette['legendbg'])
-                            frame.set_alpha(self.alpha['legendbg'])
-                            frame.set_edgecolor(self.palette['legendborder'])
-                            frame.set_linewidth(0.5)
-                            for line,text in zip(leg.get_lines(), leg.get_texts(), strict=True):
-                                text.set_color(line.get_color())
+                            if self.ax is not None:
+                                leg = self.ax.legend(self.handles,self.labels, loc=loc,
+                                    ncols=ncol,fancybox=True,prop=prop,shadow=False,frameon=True)
+                                leg.set_in_layout(False) # remove legend from tight_layout calculation
+                                self.legend = leg
+                                self.legend_lines = leg.get_lines()
+                                for h in leg.legend_handles:
+                                    if h is not None:
+                                        h.set_picker(False) # we disable the click to hide on the handles feature
+                                for ll in leg.texts:
+                                    #l.set_picker(5)
+                                    ll.set_picker(self.aw.draggable_text_box_picker)
+                                leg.set_draggable(state=True,use_blit=True)  #,update='bbox')
+                                leg.set_picker(self.aw.draggable_text_box_picker)
+                                frame = leg.get_frame()
+                                frame.set_facecolor(self.palette['legendbg'])
+                                frame.set_alpha(self.alpha['legendbg'])
+                                frame.set_edgecolor(self.palette['legendborder'])
+                                frame.set_linewidth(0.5)
+                                for line,text in zip(leg.get_lines(), leg.get_texts(), strict=True):
+                                    text.set_color(line.get_color())
                         except Exception as e: # pylint: disable=broad-except
                             _log.error(e)
 
@@ -13018,37 +12575,37 @@ class tgraphcanvas(QObject):
                 # add projection and AUC guide lines last as those are removed by updategraphics for optimized redrawing and not cached
                 if self.ETprojectFlag:
                     if self.ETcurve:
-                        self.l_ETprojection, = self.ax.plot(self.ETprojection_tx, self.ETprojection_temp,color = self.palette['et'],
+                        self.l_ETprojection, = self.ax.plot(self.ETprojection_tx, self.ETprojection_temp,color = self.palette['et'], # ty:ignore[missing-union-attribute]
                                                     dashes=dashes_setup,
                                                     label=self.aw.arabicReshape(QApplication.translate('Label', 'ETprojection')),
                                                     linestyle = '-.', linewidth= 8, alpha = .3,sketch_params=None,path_effects=[])
                     if self.projectDeltaFlag and self.DeltaETflag and self.delta_ax is not None:
                         trans = self.delta_ax.transData
-                        self.l_DeltaETprojection, = self.ax.plot(self.DeltaETprojection_tx, self.DeltaETprojection_temp,color = self.palette['deltaet'],
+                        self.l_DeltaETprojection, = self.ax.plot(self.DeltaETprojection_tx, self.DeltaETprojection_temp,color = self.palette['deltaet'],  # ty:ignore[missing-union-attribute]
                                                     dashes=dashes_setup,
                                                     transform=trans,
                                                     label=self.aw.arabicReshape(QApplication.translate('Label', 'DeltaETprojection')),
                                                     linestyle = '-.', linewidth= 8, alpha = .3,sketch_params=None,path_effects=[])
                 if self.BTprojectFlag:
                     if self.BTcurve:
-                        self.l_BTprojection, = self.ax.plot(self.BTprojection_tx, self.BTprojection_temp,color = self.palette['bt'],
+                        self.l_BTprojection, = self.ax.plot(self.BTprojection_tx, self.BTprojection_temp,color = self.palette['bt'],  # ty:ignore[missing-union-attribute]
                                                     dashes=dashes_setup,
                                                     label=self.aw.arabicReshape(QApplication.translate('Label', 'BTprojection')),
                                                     linestyle = '-.', linewidth= 8, alpha = .3,sketch_params=None,path_effects=[])
                     if self.projectDeltaFlag and self.DeltaBTflag and self.delta_ax is not None:
                         trans = self.delta_ax.transData
-                        self.l_DeltaBTprojection, = self.ax.plot(self.DeltaBTprojection_tx, self.DeltaBTprojection_temp,color = self.palette['deltabt'],
+                        self.l_DeltaBTprojection, = self.ax.plot(self.DeltaBTprojection_tx, self.DeltaBTprojection_temp,color = self.palette['deltabt'],  # ty:ignore[missing-union-attribute]
                                                     dashes=dashes_setup,
                                                     transform=trans,
                                                     label=self.aw.arabicReshape(QApplication.translate('Label', 'DeltaBTprojection')),
                                                     linestyle = '-.', linewidth= 8, alpha = .3,sketch_params=None,path_effects=[])
                 if (self.device == 18 and self.aw.simulator is None) or self.showtimeguide: # not NONE device
-                    self.l_timeline = self.ax.axvline(self.timeclock.elapsedMilli(),color = self.palette['timeguide'],
+                    self.l_timeline = self.ax.axvline(self.timeclock.elapsedMilli(),color = self.palette['timeguide'],  # ty:ignore[missing-union-attribute]
                                             label=self.aw.arabicReshape(QApplication.translate('Label', 'TIMEguide')),
                                             visible=self.flagstart,
                                             linestyle = '-', linewidth= 1, alpha = .5,sketch_params=None,path_effects=[])
                 if self.AUCguideFlag:
-                    self.l_AUCguide = self.ax.axvline(self.AUCguideTime,visible=(self.AUCguideTime > 0 and self.AUCguideTime < self.endofx),color = self.palette['aucguide'],
+                    self.l_AUCguide = self.ax.axvline(self.AUCguideTime,visible=(0 < self.AUCguideTime < self.endofx),color = self.palette['aucguide'],  # ty:ignore[missing-union-attribute]
                                                 label=self.aw.arabicReshape(QApplication.translate('Label', 'AUCguide')),
                                                 linestyle = '-', linewidth= 1, alpha = .5,sketch_params=None,path_effects=[])
 
@@ -13169,9 +12726,9 @@ class tgraphcanvas(QObject):
                     delta2 = str(float2float(d2b)) if d2b is not None else '--'
                 except Exception: # pylint: disable=broad-except
                     delta2 = '\u03C5\u03c5'
-                descr = str(self.backgroundEStrings[eventnum])
-                etype = str(self.Betypes[self.backgroundEtypes[eventnum]])
-                sliderunit = str(self.aw.eventsliderunits[self.backgroundEtypes[eventnum]])
+                descr = self.backgroundEStrings[eventnum]
+                etype = self.Betypes[self.backgroundEtypes[eventnum]]
+                sliderunit = self.aw.eventsliderunits[self.backgroundEtypes[eventnum]]
 
                 if self.timeindexB[2] > 0 and self.timeB[self.backgroundEvents[eventnum]] > self.timeB[self.timeindexB[2]]:
                     postFCs = True
@@ -13223,7 +12780,7 @@ class tgraphcanvas(QObject):
                 prefcs = '50'
                 prefcs_ms = stringfromseconds(int(prefcs))
                 dtr = '12'
-                fcsWindow = not bool(postFCs)
+                fcsWindow = not postFCs
                 #postFCs supplied in the parseSpecialeventannotation() call
 
             # foreground curve values
@@ -13241,9 +12798,9 @@ class tgraphcanvas(QObject):
                     delta2 = str(float2float(d2)) if d2 is not None else '--'
                 except Exception: # pylint: disable=broad-except
                     delta2 = '\u03C5\u03c5'
-                descr = str(self.specialeventsStrings[eventnum])
-                etype = str(self.etypes[self.specialeventstype[eventnum]])
-                sliderunit = str(self.aw.eventsliderunits[self.specialeventstype[eventnum]])
+                descr = self.specialeventsStrings[eventnum]
+                etype = self.etypes[self.specialeventstype[eventnum]]
+                sliderunit = self.aw.eventsliderunits[self.specialeventstype[eventnum]]
 
                 if self.timeindex[2] > 0 and self.timex[self.specialevents[eventnum]] > self.timex[self.timeindex[2]]:
                     postFCs = True
@@ -13373,7 +12930,7 @@ class tgraphcanvas(QObject):
                 if matched is not None:
 
                     # get the value associated with the field
-                    replacestring = str(field[1])
+                    replacestring = field[1]
                     # do simple math if an operator is in the string
                     if matched.group('mathop') is not None:
                         replacestring += matched.group('mathop')
@@ -13439,7 +12996,8 @@ class tgraphcanvas(QObject):
         width = img.width()
         height = img.height()
         imgsize = img.bits()
-        imgsize.setsize(img.sizeInBytes())
+        if imgsize is not None: # pyright:ignore[reportUnnecessaryComparison]
+            imgsize.setsize(img.sizeInBytes())
         return numpy.array(imgsize).reshape((height, width, int(32/8)))
 
     #watermark image
@@ -13507,7 +13065,7 @@ class tgraphcanvas(QObject):
             return notestr
 
         def dropZeroDecimal(value:float, decimals:int) -> float:
-            if int(round(value)) == float2float(value,decimals):
+            if round(value) == float2float(value,decimals):
                 return float2float(value,0)
             return float2float(value, decimals)
 
@@ -13544,9 +13102,9 @@ class tgraphcanvas(QObject):
                 if self.ambientTemp not in [None,0] or self.ambient_humidity not in [None,0] or self.ambient_pressure not in [None,0]:
                     stattype_str = f'{newline}'
                     if self.ambientTemp not in [None,0]:
-                        stattype_str += f'{str(int(round(self.ambientTemp)))}{degree}{self.mode}  '
+                        stattype_str += f'{str(round(self.ambientTemp))}{degree}{self.mode}  '
                     if self.ambient_humidity not in [None,0]:
-                        stattype_str += f'{str(int(round(self.ambient_humidity)))}% RH '
+                        stattype_str += f'{str(round(self.ambient_humidity))}% RH '
                     if self.ambient_pressure not in [None,0]:
                         stattype_str += f'{str(float2float(self.ambient_pressure,2))}hPa'
             elif n == 5:  #Roaster, RPM
@@ -13563,11 +13121,11 @@ class tgraphcanvas(QObject):
                 if self.beansize_min or self.beansize_max:
                     stattype_str += f"{newline}{QApplication.translate('AddlInfo', 'Screen Size')}: "
                     if self.beansize_min:
-                        stattype_str += f'{int(round(self.beansize_min))}'
+                        stattype_str += f'{round(self.beansize_min)}'
                     if self.beansize_max:
                         if self.beansize_min:
                             stattype_str += '/'
-                        stattype_str += f'{int(round(self.beansize_max))}'
+                        stattype_str += f'{round(self.beansize_max)}'
             elif n == 8:  #Density Green
                 if self.density[0]!=0 and self.density[2] != 0:
                     stattype_str += (f"{newline}{QApplication.translate('Label', 'Density')} {QApplication.translate('Label', 'Green')}: "
@@ -13670,7 +13228,7 @@ class tgraphcanvas(QObject):
                     stattype_str += (f"{newline}{QApplication.translate('Button', 'Finishing Phase')}: "
                                      f"{int(cp['finish_phase_delta_temp'])}{degree}{self.mode}, "
                                      f"{stringfromseconds(cp['finishphasetime'])}, "
-                                     f"{int(round(cp['finishphasetime']*100./cp['totaltime']))}%"
+                                     f"{round(cp['finishphasetime']*100./cp['totaltime'])}%"
                                      )
 
             elif n == 29:  # Finish Phase Time and Temp
@@ -13678,14 +13236,14 @@ class tgraphcanvas(QObject):
                     stattype_str += (f"{newline}{QApplication.translate('Button', 'Maillard Phase')}: "
                                      f"{int(cp['mid_phase_delta_temp'])}{degree}{self.mode}, "
                                      f"{stringfromseconds(cp['midphasetime'])}, "
-                                     f"{int(round(cp['midphasetime']*100./cp['totaltime']))}%"
+                                     f"{round(cp['midphasetime']*100./cp['totaltime'])}%"
                                      )
             elif n == 30:  # Finish Phase Time and Temp
                 if 'dry_phase_delta_temp' in cp and 'dryphasetime' in cp and 'totaltime' in cp:  # noqa: SIM102
                     stattype_str += (f"{newline}{QApplication.translate('Button', 'Drying Phase')}: "
                                      f"{int(cp['dry_phase_delta_temp'])}{degree}{self.mode}, "
                                      f"{stringfromseconds(cp['dryphasetime'])}, "
-                                     f"{int(round(cp['dryphasetime']*100./cp['totaltime']))}%"
+                                     f"{round(cp['dryphasetime']*100./cp['totaltime'])}%"
                                      )
             elif n == 31:  #Whole Bean Color
                 if self.whole_color > 0:
@@ -14010,7 +13568,7 @@ class tgraphcanvas(QObject):
                 bbox_data = self.ax.transData.inverted().transform(bb)  # zuban:ignore[arg-type] # bounding box in data space
                 bbox = Bbox(bbox_data)
                 t.remove()
-                return bbox.bounds  # x0, y0, width, height.  Relative to the start of the curve and self.ylimit_min
+                return bbox.bounds # type:ignore[no-any-return] # x0, y0, width, height.  Relative to the start of the curve and self.ylimit_min
             return 0,0,0,0
 
     # Find the bounds for an event annotation text box
@@ -14058,11 +13616,11 @@ class tgraphcanvas(QObject):
                 if self.aw.eventslidertemp[i]:
                     # a minimum of 0 will be mapped to 0 always!
                     if self.mode == 'C':
-                        self.aw.eventslidermin[i] = (0 if self.aw.eventslidermin[i] == 0 else max(0, min(999, int(round(fromFtoCstrict(self.aw.eventslidermin[i]))))))
-                        self.aw.eventslidermax[i] = max(0, min(999, int(round(fromFtoCstrict(self.aw.eventslidermax[i])))))
+                        self.aw.eventslidermin[i] = (0 if self.aw.eventslidermin[i] == 0 else max(0, min(999, round(fromFtoCstrict(self.aw.eventslidermin[i])))))
+                        self.aw.eventslidermax[i] = max(0, min(999, round(fromFtoCstrict(self.aw.eventslidermax[i]))))
                     else:
-                        self.aw.eventslidermin[i] = (0 if self.aw.eventslidermin[i] == 0 else max(0, min(999, int(round(fromCtoFstrict(self.aw.eventslidermin[i]))))))
-                        self.aw.eventslidermax[i] = max(0, min(999, int(round(fromCtoFstrict(self.aw.eventslidermax[i])))))
+                        self.aw.eventslidermin[i] = (0 if self.aw.eventslidermin[i] == 0 else max(0, min(999, round(fromCtoFstrict(self.aw.eventslidermin[i])))))
+                        self.aw.eventslidermax[i] = max(0, min(999, round(fromCtoFstrict(self.aw.eventslidermax[i]))))
             self.aw.updateSliderMinMax()
             # adjust SV slider limits
             if self.mode == 'C':
@@ -14084,13 +13642,13 @@ class tgraphcanvas(QObject):
         if self.mode == 'C':
             #change watermarks limits. dryphase1, dryphase2, midphase, and finish phase Y limits
             for i in range(4):
-                self.phases[i] = int(round(fromCtoFstrict(self.phases[i])))
+                self.phases[i] = round(fromCtoFstrict(self.phases[i]))
             if self.step100temp is not None:
-                self.step100temp = int(round(fromCtoFstrict(self.step100temp)))
-            self.AUCbase = int(round(fromCtoFstrict(self.AUCbase)))
+                self.step100temp = round(fromCtoFstrict(self.step100temp))
+            self.AUCbase = round(fromCtoFstrict(self.AUCbase))
             self.dropDuplicatesLimit = float2float(fromCtoFstrict(100 + self.dropDuplicatesLimit) - fromCtoFstrict(100),2)
-            self.RoRlimitm = int(round(RoRfromCtoFstrict(self.RoRlimitm)))
-            self.RoRlimit = int(round(RoRfromCtoFstrict(self.RoRlimit)))
+            self.RoRlimitm = round(RoRfromCtoFstrict(self.RoRlimitm))
+            self.RoRlimit = round(RoRfromCtoFstrict(self.RoRlimit))
             self.alarmtemperature = [(fromCtoFstrict(t) if t != 500 else t) for t in self.alarmtemperature]
         if self.ax is not None:
             self.ax.set_ylabel('F',size=16,color = self.palette['ylabel']) #Write "F" on Y axis
@@ -14118,13 +13676,13 @@ class tgraphcanvas(QObject):
         if self.mode == 'F':
             #change watermarks limits. dryphase1, dryphase2, midphase, and finish phase Y limits
             for i in range(4):
-                self.phases[i] = int(round(fromFtoCstrict(self.phases[i])))
+                self.phases[i] = round(fromFtoCstrict(self.phases[i]))
             if self.step100temp is not None:
-                self.step100temp = int(round(fromFtoCstrict(self.step100temp)))
-            self.AUCbase = int(round(fromFtoCstrict(self.AUCbase)))
+                self.step100temp = round(fromFtoCstrict(self.step100temp))
+            self.AUCbase = round(fromFtoCstrict(self.AUCbase))
             self.dropDuplicatesLimit = float2float(fromFtoCstrict(212 + self.dropDuplicatesLimit) - fromFtoCstrict(212),2)
-            self.RoRlimitm = int(round(RoRfromFtoCstrict(self.RoRlimitm)))
-            self.RoRlimit = int(round(RoRfromFtoCstrict(self.RoRlimit)))
+            self.RoRlimitm = round(RoRfromFtoCstrict(self.RoRlimitm))
+            self.RoRlimit = round(RoRfromFtoCstrict(self.RoRlimit))
             self.alarmtemperature = [(fromFtoCstrict(t) if t != 500 else t) for t in self.alarmtemperature]
         if self.ax is not None:
             self.ax.set_ylabel('C',size=16,color = self.palette['ylabel']) #Write "C" on Y axis
@@ -14168,133 +13726,125 @@ class tgraphcanvas(QObject):
         profilelength = len(self.timex)
         if profilelength > 0 or self.background:
             if t == 'F':
-                if silent:
-                    reply = QMessageBox.StandardButton.Yes
-                else:
-                    string = QApplication.translate('Message', 'Convert profile data to Fahrenheit?')
-                    reply = QMessageBox.question(self.aw, QApplication.translate('Message', 'Convert Profile Temperature'),string,
-                            QMessageBox.StandardButton.Yes|QMessageBox.StandardButton.Cancel)
-                if reply == QMessageBox.StandardButton.Cancel:
+                if self.mode == 'C' and (silent or artisan_question(self.aw, self.aw,
+                        QApplication.translate('Message', 'Convert profile data to Fahrenheit?'),
+                        QApplication.translate('Message', 'Convert Profile Temperature'))):
+                    self.aw.CelsiusAction.setDisabled(True)
+                    self.aw.FahrenheitAction.setEnabled(True)
+                    self.aw.ConvertToCelsiusAction.setDisabled(True)
+                    self.aw.ConvertToFahrenheitAction.setEnabled(True)
+                    self.l_annotations_dict = {}
+                    self.l_event_flags_dict = {}
+                    for i in range(profilelength):
+                        self.temp1[i] = fromCtoFstrict(self.temp1[i])    #ET
+                        self.temp2[i] = fromCtoFstrict(self.temp2[i])    #BT
+                        if self.delta1:
+                            self.delta1[i] = RoRfromCtoF(self.delta1[i])  #Delta ET
+                        if self.delta2:
+                            self.delta2[i] = RoRfromCtoF(self.delta2[i])  #Delta BT
+                        #extra devices curves
+                        nextra = len(self.extratemp1)
+                        if nextra:
+                            for e in range(nextra):
+                                try:
+                                    if not (len(self.extraNoneTempHint1) > e and self.extraNoneTempHint1[e]):
+                                        self.extratemp1[e][i] = fromCtoFstrict(self.extratemp1[e][i])
+                                    if not (len(self.extraNoneTempHint2) > e and self.extraNoneTempHint2[e]):
+                                        self.extratemp2[e][i] = fromCtoFstrict(self.extratemp2[e][i])
+                                except Exception: # pylint: disable=broad-except
+                                    pass
+                    if self.ambientTemp != 0:
+                        self.ambientTemp = fromCtoFstrict(self.ambientTemp)  #ambient temperature
+                    if self.greens_temp != 0:
+                        self.greens_temp = fromCtoFstrict(self.greens_temp)
+
+                    #prevents accidentally deleting a modified profile.
+                    self.fileDirtySignal.emit()
+
+                    #background
+                    for i in range(len(self.timeB)):
+                        self.temp1B[i] = fromCtoFstrict(self.temp1B[i])
+                        self.temp2B[i] = fromCtoFstrict(self.temp2B[i])
+                        self.stemp1B[i] = fromCtoF(self.stemp1B[i])
+                        self.stemp2B[i] = fromCtoF(self.stemp2B[i])
+
+                    self.fahrenheitMode(setdefaultaxes=setdefaultaxes)
+                    if not silent:
+                        self.aw.sendmessage(QApplication.translate('Message','Profile changed to Fahrenheit'))
+
+                elif not silent:
+                    artisan_information(self.aw, self.aw,
+                        QApplication.translate('Message', 'Unable to comply. You already are in Fahrenheit'),
+                        QApplication.translate('Message', 'Convert Profile Temperature'))
+                    self.aw.sendmessage(QApplication.translate('Message','Profile not changed'))
                     return
-                if reply == QMessageBox.StandardButton.Yes:
-                    if self.mode == 'C':
-                        self.aw.CelsiusAction.setDisabled(True)
-                        self.aw.FahrenheitAction.setEnabled(True)
-                        self.aw.ConvertToCelsiusAction.setDisabled(True)
-                        self.aw.ConvertToFahrenheitAction.setEnabled(True)
-                        self.l_annotations_dict = {}
-                        self.l_event_flags_dict = {}
-                        for i in range(profilelength):
-                            self.temp1[i] = fromCtoFstrict(self.temp1[i])    #ET
-                            self.temp2[i] = fromCtoFstrict(self.temp2[i])    #BT
-                            if self.delta1:
-                                self.delta1[i] = RoRfromCtoF(self.delta1[i])  #Delta ET
-                            if self.delta2:
-                                self.delta2[i] = RoRfromCtoF(self.delta2[i])  #Delta BT
-                            #extra devices curves
-                            nextra = len(self.extratemp1)
-                            if nextra:
-                                for e in range(nextra):
-                                    try:
-                                        if not (len(self.extraNoneTempHint1) > e and self.extraNoneTempHint1[e]):
-                                            self.extratemp1[e][i] = fromCtoFstrict(self.extratemp1[e][i])
-                                        if not (len(self.extraNoneTempHint2) > e and self.extraNoneTempHint2[e]):
-                                            self.extratemp2[e][i] = fromCtoFstrict(self.extratemp2[e][i])
-                                    except Exception: # pylint: disable=broad-except
-                                        pass
-                        if self.ambientTemp != 0:
-                            self.ambientTemp = fromCtoFstrict(self.ambientTemp)  #ambient temperature
-                        if self.greens_temp != 0:
-                            self.greens_temp = fromCtoFstrict(self.greens_temp)
-
-                        #prevents accidentally deleting a modified profile.
-                        self.fileDirtySignal.emit()
-
-                        #background
-                        for i in range(len(self.timeB)):
-                            self.temp1B[i] = fromCtoFstrict(self.temp1B[i])
-                            self.temp2B[i] = fromCtoFstrict(self.temp2B[i])
-                            self.stemp1B[i] = fromCtoF(self.stemp1B[i])
-                            self.stemp2B[i] = fromCtoF(self.stemp2B[i])
-
-                        self.fahrenheitMode(setdefaultaxes=setdefaultaxes)
-                        if not silent:
-                            self.aw.sendmessage(QApplication.translate('Message','Profile changed to Fahrenheit'))
-
-                    elif not silent:
-                        QMessageBox.information(self.aw, QApplication.translate('Message', 'Convert Profile Temperature'),
-                                                QApplication.translate('Message', 'Unable to comply. You already are in Fahrenheit'))
-                        self.aw.sendmessage(QApplication.translate('Message','Profile not changed'))
-                        return
 
             elif t == 'C':
-                if silent:
-                    reply = QMessageBox.StandardButton.Yes
-                else:
-                    string = QApplication.translate('Message', 'Convert profile data to Celsius?')
-                    reply = QMessageBox.question(self.aw, QApplication.translate('Message', 'Convert Profile Temperature'),string,
-                            QMessageBox.StandardButton.Yes|QMessageBox.StandardButton.Cancel)
-                if reply == QMessageBox.StandardButton.Cancel:
+                if self.mode == 'F' and (silent or artisan_question(self.aw, self.aw,
+                        QApplication.translate('Message', 'Convert profile data to Celsius?'),
+                        QApplication.translate('Message', 'Convert Profile Temperature'))):
+
+                    self.aw.ConvertToFahrenheitAction.setDisabled(True)
+                    self.aw.ConvertToCelsiusAction.setEnabled(True)
+                    self.aw.FahrenheitAction.setDisabled(True)
+                    self.aw.CelsiusAction.setEnabled(True)
+                    self.l_annotations_dict = {}
+                    self.l_event_flags_dict = {}
+                    for i in range(profilelength):
+                        self.temp1[i] = fromFtoCstrict(self.temp1[i])    #ET
+                        self.temp2[i] = fromFtoCstrict(self.temp2[i])    #BT
+                        if self.device != 18 or self.aw.simulator is not None:
+                            if self.delta1:
+                                self.delta1[i] = RoRfromFtoC(self.delta1[i])  #Delta ET
+                            if self.delta2:
+                                self.delta2[i] = RoRfromFtoC(self.delta2[i])  #Delta BT
+                        #extra devices curves
+                        nextra = len(self.extratemp1)
+                        if nextra:
+                            for e in range(nextra):
+                                try:
+                                    if not (len(self.extraNoneTempHint1) > e and self.extraNoneTempHint1[e]):
+                                        self.extratemp1[e][i] = fromFtoCstrict(self.extratemp1[e][i])
+                                    if not (len(self.extraNoneTempHint2) > e and self.extraNoneTempHint2[e]):
+                                        self.extratemp2[e][i] = fromFtoCstrict(self.extratemp2[e][i])
+                                except Exception: # pylint: disable=broad-except
+                                    pass
+
+                    if self.ambientTemp != 0:
+                        self.ambientTemp = fromFtoCstrict(self.ambientTemp)  #ambient temperature
+                    if self.greens_temp != 0:
+                        self.greens_temp = fromFtoCstrict(self.greens_temp)
+
+                    #prevents accidentally deleting a modified profile.
+                    self.fileDirtySignal.emit()
+
+                    #background
+                    for i in range(len(self.timeB)):
+                        self.temp1B[i] = fromFtoCstrict(self.temp1B[i]) #ET B
+                        self.temp2B[i] = fromFtoCstrict(self.temp2B[i]) #BT B
+                        self.stemp1B[i] = fromFtoC(self.stemp1B[i])
+                        self.stemp2B[i] = fromFtoC(self.stemp2B[i])
+
+                    self.celsiusMode(setdefaultaxes=setdefaultaxes)
+                    if not silent:
+                        self.aw.sendmessage(QApplication.translate('Message','Profile changed to Celsius'))
+
+                elif not silent:
+                    artisan_information(self.aw, self.aw,
+                        QApplication.translate('Message', 'Unable to comply. You already are in Celsius'),
+                        QApplication.translate('Message', 'Convert Profile Temperature'))
+                    self.aw.sendmessage(QApplication.translate('Message','Profile not changed'))
                     return
-                if reply == QMessageBox.StandardButton.Yes:
-                    if self.mode == 'F':
-                        self.aw.ConvertToFahrenheitAction.setDisabled(True)
-                        self.aw.ConvertToCelsiusAction.setEnabled(True)
-                        self.aw.FahrenheitAction.setDisabled(True)
-                        self.aw.CelsiusAction.setEnabled(True)
-                        self.l_annotations_dict = {}
-                        self.l_event_flags_dict = {}
-                        for i in range(profilelength):
-                            self.temp1[i] = fromFtoCstrict(self.temp1[i])    #ET
-                            self.temp2[i] = fromFtoCstrict(self.temp2[i])    #BT
-                            if self.device != 18 or self.aw.simulator is not None:
-                                if self.delta1:
-                                    self.delta1[i] = RoRfromFtoC(self.delta1[i])  #Delta ET
-                                if self.delta2:
-                                    self.delta2[i] = RoRfromFtoC(self.delta2[i])  #Delta BT
-                            #extra devices curves
-                            nextra = len(self.extratemp1)
-                            if nextra:
-                                for e in range(nextra):
-                                    try:
-                                        if not (len(self.extraNoneTempHint1) > e and self.extraNoneTempHint1[e]):
-                                            self.extratemp1[e][i] = fromFtoCstrict(self.extratemp1[e][i])
-                                        if not (len(self.extraNoneTempHint2) > e and self.extraNoneTempHint2[e]):
-                                            self.extratemp2[e][i] = fromFtoCstrict(self.extratemp2[e][i])
-                                    except Exception: # pylint: disable=broad-except
-                                        pass
-
-                        if self.ambientTemp != 0:
-                            self.ambientTemp = fromFtoCstrict(self.ambientTemp)  #ambient temperature
-                        if self.greens_temp != 0:
-                            self.greens_temp = fromFtoCstrict(self.greens_temp)
-
-                        #prevents accidentally deleting a modified profile.
-                        self.fileDirtySignal.emit()
-
-                        #background
-                        for i in range(len(self.timeB)):
-                            self.temp1B[i] = fromFtoCstrict(self.temp1B[i]) #ET B
-                            self.temp2B[i] = fromFtoCstrict(self.temp2B[i]) #BT B
-                            self.stemp1B[i] = fromFtoC(self.stemp1B[i])
-                            self.stemp2B[i] = fromFtoC(self.stemp2B[i])
-
-                        self.celsiusMode(setdefaultaxes=setdefaultaxes)
-                        if not silent:
-                            self.aw.sendmessage(QApplication.translate('Message','Profile changed to Celsius'))
-
-                    elif not silent:
-                        QMessageBox.information(self.aw, QApplication.translate('Message', 'Convert Profile Temperature'),
-                                                QApplication.translate('Message', 'Unable to comply. You already are in Celsius'))
-                        self.aw.sendmessage(QApplication.translate('Message','Profile not changed'))
-                        return
 
             if not silent:
                 self.redraw(recomputeAllDeltas=True,re_smooth_foreground=True)
 
         elif not silent:
-            QMessageBox.information(self.aw, QApplication.translate('Message', 'Convert Profile Scale'),
-                                          QApplication.translate('Message', 'No profile data found'))
+#            QMessageBox.information(self.aw, QApplication.translate('Message', 'Convert Profile Scale'),
+#                                          QApplication.translate('Message', 'No profile data found'))
+            artisan_information(self.aw, self.aw,
+                QApplication.translate('Message', 'No profile data found'),
+                QApplication.translate('Message', 'Convert Profile Scale'))
 
     @pyqtSlot()
     @pyqtSlot(bool)
@@ -14322,7 +13872,6 @@ class tgraphcanvas(QObject):
                 self.EvalueColor = self.EvalueColor_default.copy()
                 self.EvalueTextColor = self.EvalueTextColor_default.copy()
                 self.aw.sendmessage(QApplication.translate('Message','Colors set to defaults'))
-#                self.aw.closeEventSettings()
 
         elif color == 2:
             self.aw.sendmessage(QApplication.translate('Message','Colors set to grey'))
@@ -14337,14 +13886,27 @@ class tgraphcanvas(QObject):
                 self.extradevicecolor2[i] = self.aw.convertToGreyscale(c)
             for i,c in enumerate(self.EvalueColor):
                 self.EvalueColor[i] = self.aw.convertToGreyscale(c)
-            self.backgroundmetcolor     = self.aw.convertToGreyscale(self.backgroundmetcolor)
-            self.backgroundbtcolor      = self.aw.convertToGreyscale(self.backgroundbtcolor)
-            self.backgrounddeltaetcolor = self.aw.convertToGreyscale(self.backgrounddeltaetcolor)
-            self.backgrounddeltabtcolor = self.aw.convertToGreyscale(self.backgrounddeltabtcolor)
-            self.backgroundxtcolor      = self.aw.convertToGreyscale(self.backgroundxtcolor)
-            self.backgroundytcolor      = self.aw.convertToGreyscale(self.backgroundytcolor)
-            self.aw.setLCDsBW()
-#            self.aw.closeEventSettings()
+            self.backgroundmetcolor     = self.palette['et']
+            self.backgroundbtcolor      = self.palette['bt']
+            self.backgrounddeltaetcolor = self.palette['deltaet'] # self.aw.convertToGreyscale(self.backgrounddeltaetcolor)
+            self.backgrounddeltabtcolor = self.palette['deltabt'] # self.aw.convertToGreyscale(self.backgrounddeltabtcolor)
+            self.backgroundxtcolor      = self.palette['xt']
+            self.backgroundytcolor      = self.palette['yt']
+            #
+            self.aw.lcdpaletteB['et'] = self.backgroundmetcolor
+            self.aw.lcdpaletteB['bt'] = self.backgroundbtcolor
+            self.aw.lcdpaletteF['deltaet'] = self.backgrounddeltaetcolor
+            self.aw.lcdpaletteF['deltabt'] = self.backgrounddeltabtcolor
+            # convert also the corresponding foreground/background colors
+            for tag in ['et', 'bt']:
+                self.aw.lcdpaletteF[tag] = self.aw.convertToGreyscale(self.aw.lcdpaletteF[tag])
+            for tag in ['deltaet', 'deltabt']:
+                self.aw.lcdpaletteB[tag] = self.aw.convertToGreyscale(self.aw.lcdpaletteB[tag])
+            #
+            for tag in ['timer', 'sv', 'rstimer', 'slowcoolingtimer', 'scale', 'phases']:
+                self.aw.lcdpaletteF[tag] = self.aw.convertToGreyscale(self.aw.lcdpaletteF[tag])
+                self.aw.lcdpaletteB[tag] = self.aw.convertToGreyscale(self.aw.lcdpaletteB[tag])
+
 
         elif color == 3:
             from artisanlib.colors import graphColorDlg
@@ -14352,59 +13914,54 @@ class tgraphcanvas(QObject):
             if dialog.exec():
                 self.aw.graphColorDlg_activeTab = dialog.TabWidget.currentIndex()
                 #
-                self.palette['background'] = str(dialog.backgroundButton.text())
-                self.palette['grid'] = str(dialog.gridButton.text())
-                self.palette['ylabel'] = str(dialog.yButton.text())
-                self.palette['xlabel'] = str(dialog.xButton.text())
-                self.palette['title'] = str(dialog.titleButton.text())
-                self.palette['rect1'] = str(dialog.rect1Button.text())
-                self.palette['rect2'] = str(dialog.rect2Button.text())
-                self.palette['rect3'] = str(dialog.rect3Button.text())
-                self.palette['rect4'] = str(dialog.rect4Button.text())
-                self.palette['rect5'] = str(dialog.rect5Button.text())
-                self.palette['et'] = str(dialog.metButton.text())
-                self.palette['bt'] = str(dialog.btButton.text())
-                self.palette['deltaet'] = str(dialog.deltametButton.text())
-                self.palette['deltabt'] = str(dialog.deltabtButton.text())
-                self.palette['markers'] = str(dialog.markersButton.text())
-                self.palette['text'] = str(dialog.textButton.text())
-                self.palette['watermarks'] = str(dialog.watermarksButton.text())
-                self.palette['timeguide'] = str(dialog.timeguideButton.text())
-                self.palette['aucguide'] = str(dialog.aucguideButton.text())
-                self.palette['aucarea'] = str(dialog.aucareaButton.text())
-                self.palette['canvas'] = str(dialog.canvasButton.text())
-                self.palette['legendbg'] = str(dialog.legendbgButton.text())
+                self.palette['background'] = dialog.backgroundButton.text()
+                self.palette['grid'] = dialog.gridButton.text()
+                self.palette['ylabel'] = dialog.yButton.text()
+                self.palette['xlabel'] = dialog.xButton.text()
+                self.palette['title'] = dialog.titleButton.text()
+                self.palette['rect1'] = dialog.rect1Button.text()
+                self.palette['rect2'] = dialog.rect2Button.text()
+                self.palette['rect3'] = dialog.rect3Button.text()
+                self.palette['rect4'] = dialog.rect4Button.text()
+                self.palette['rect5'] = dialog.rect5Button.text()
+                self.palette['et'] = dialog.metButton.text()
+                self.palette['bt'] = dialog.btButton.text()
+                self.palette['deltaet'] = dialog.deltametButton.text()
+                self.palette['deltabt'] = dialog.deltabtButton.text()
+                self.palette['markers'] = dialog.markersButton.text()
+                self.palette['text'] = dialog.textButton.text()
+                self.palette['watermarks'] = dialog.watermarksButton.text()
+                self.palette['timeguide'] = dialog.timeguideButton.text()
+                self.palette['aucguide'] = dialog.aucguideButton.text()
+                self.palette['aucarea'] = dialog.aucareaButton.text()
+                self.palette['canvas'] = dialog.canvasButton.text()
+                self.palette['legendbg'] = dialog.legendbgButton.text()
 #                self.palette["legendbgalpha"] = str(dialog.legendbgalphaButton.text())
-                self.palette['legendborder'] = str(dialog.legendborderButton.text())
-                self.palette['specialeventbox'] = str(dialog.specialeventboxButton.text())
-                self.palette['specialeventtext'] = str(dialog.specialeventtextButton.text())
-                self.palette['bgeventmarker'] = str(dialog.bgeventmarkerButton.text())
-                self.palette['bgeventtext'] = str(dialog.bgeventtextButton.text())
-                self.palette['mettext'] = str(dialog.mettextButton.text())
-                self.palette['metbox'] = str(dialog.metboxButton.text())
-                self.backgroundmetcolor = str(dialog.bgmetButton.text())
-                self.backgroundbtcolor  = str(dialog.bgbtButton.text())
-                self.backgrounddeltaetcolor = str(dialog.bgdeltametButton.text())
-                self.backgrounddeltabtcolor = str(dialog.bgdeltabtButton.text())
-                self.backgroundxtcolor = str(dialog.bgextraButton.text())
-                self.backgroundytcolor = str(dialog.bgextra2Button.text())
-#                self.aw.closeEventSettings()
-
-#            #deleteLater() will not work here as the dialog is still bound via the parent
-#            #dialog.deleteLater() # now we explicitly allow the dialog an its widgets to be GCed
-#            # the following will immediately release the memory despite this parent link
-#            QApplication.processEvents() # we ensure events concerning this dialog are processed before deletion
-#            try: # sip not supported on older PyQt versions (RPi!)
-#                sip.delete(dialog)
-#                #print(sip.isdeleted(dialog))
-#            except Exception:  # pylint: disable=broad-except
-#                pass
+                self.palette['legendborder'] = dialog.legendborderButton.text()
+                self.palette['specialeventbox'] = dialog.specialeventboxButton.text()
+                self.palette['specialeventtext'] = dialog.specialeventtextButton.text()
+                self.palette['bgeventmarker'] = dialog.bgeventmarkerButton.text()
+                self.palette['bgeventtext'] = dialog.bgeventtextButton.text()
+                self.palette['mettext'] = dialog.mettextButton.text()
+                self.palette['metbox'] = dialog.metboxButton.text()
+                self.backgroundmetcolor = dialog.bgmetButton.text()
+                self.backgroundbtcolor  = dialog.bgbtButton.text()
+                self.backgrounddeltaetcolor = dialog.bgdeltametButton.text()
+                self.backgrounddeltabtcolor = dialog.bgdeltabtButton.text()
+                self.backgroundxtcolor = dialog.bgextraButton.text()
+                self.palette['xt'] = self.backgroundxtcolor
+                self.backgroundytcolor = dialog.bgextra2Button.text()
+                self.palette['yt'] = self.backgroundytcolor
+                # release the dialog
+                dialog.destroy()
+                del dialog
 
         #update screen with new colors
         self.aw.updateCanvasColors()
+        self.aw.updateLCDcolors()
         self.aw.applyStandardButtonVisibility()
         self.aw.update_extraeventbuttons_visibility()
-        self.fig.canvas.draw_idle() #.redraw()
+        self.fig.canvas.draw_idle()
 
     def clearFlavorChart(self) -> None:
         self.flavorchart_plotf = None
@@ -14675,7 +14232,7 @@ class tgraphcanvas(QObject):
             self.aw.AsyncSamplingTimer = QTimer()
             self.aw.AsyncSamplingTimer.timeout.connect(self.AsyncSamplingActionTrigger)
             self.aw.AsyncSamplingTimer.setSingleShot(True)
-            self.aw.AsyncSamplingTimer.start(int(round(self.extra_event_sampling_delay)))
+            self.aw.AsyncSamplingTimer.start(round(self.extra_event_sampling_delay))
 
     @pyqtSlot()
     def StartAsyncSamplingAction(self) -> None:
@@ -14698,13 +14255,14 @@ class tgraphcanvas(QObject):
     # indicating which curves should not be temperature converted
     # True indicates a non-temperature device (data should not be converted)
     # False indicates a temperature device (data should be converted if temperature unit changes)
+    # ADD DEVICE:
     def generateNoneTempHints(self) -> None:
         self.extraNoneTempHint1 = []
         self.extraNoneTempHint2 = []
         for d in self.extradevices:
-            if d in self.nonTempDevices:
-                self.extraNoneTempHint1.append(True)
-                self.extraNoneTempHint2.append(True)
+            if is_non_temp_device(d):
+                self.extraNoneTempHint1.append(is_non_temp_device_chan(d,0))
+                self.extraNoneTempHint2.append(is_non_temp_device_chan(d,1))
             elif d == 29: # MODBUS
                 self.extraNoneTempHint1.append(self.aw.modbus.inputModes[0] == '')
                 self.extraNoneTempHint2.append(self.aw.modbus.inputModes[1] == '')
@@ -14717,6 +14275,12 @@ class tgraphcanvas(QObject):
             elif d == 109: # +MODBUS 78
                 self.extraNoneTempHint1.append(self.aw.modbus.inputModes[6] == '')
                 self.extraNoneTempHint2.append(self.aw.modbus.inputModes[7] == '')
+            elif d == 150: # +MODBUS 910
+                self.extraNoneTempHint1.append(self.aw.modbus.inputModes[8] == '')
+                self.extraNoneTempHint2.append(self.aw.modbus.inputModes[9] == '')
+            elif d == 207: # +MODBUS 1112
+                self.extraNoneTempHint1.append(self.aw.modbus.inputModes[10] == '')
+                self.extraNoneTempHint2.append(self.aw.modbus.inputModes[11] == '')
             elif d == 79: # S7
                 self.extraNoneTempHint1.append(not bool(self.aw.s7.mode[0]))
                 self.extraNoneTempHint2.append(not bool(self.aw.s7.mode[1]))
@@ -14747,9 +14311,6 @@ class tgraphcanvas(QObject):
             elif d == 119: # +WebSocket 910
                 self.extraNoneTempHint1.append(not bool(self.aw.ws.channel_modes[8]))
                 self.extraNoneTempHint2.append(not bool(self.aw.ws.channel_modes[9]))
-            elif d == 150: # +MODBUS 910
-                self.extraNoneTempHint1.append(self.aw.modbus.inputModes[8] == '')
-                self.extraNoneTempHint2.append(self.aw.modbus.inputModes[9] == '')
             elif d == 151: # +S7 1112
                 self.extraNoneTempHint1.append(not bool(self.aw.s7.mode[10]))
                 self.extraNoneTempHint2.append(not bool(self.aw.s7.mode[11]))
@@ -14777,11 +14338,11 @@ class tgraphcanvas(QObject):
 
     def addPhidgetServer(self) -> None:
         if not self.phidgetServerAdded:
-            from Phidget22.Net import Net as PhidgetNetwork # type: ignore[import-untyped]
+            from Phidget22.Net import Net as PhidgetNetwork
             if self.phidgetServerID == '' and not self.phidgetServiceDiscoveryStarted:
                 try:
                     # we enable the automatic service discovery if no server host is given
-                    from Phidget22.PhidgetServerType import PhidgetServerType # type: ignore[import-untyped]
+                    from Phidget22.PhidgetServerType import PhidgetServerType
                     PhidgetNetwork.enableServerDiscovery(PhidgetServerType.PHIDGETSERVER_DEVICEREMOTE)
                     self.phidgetServiceDiscoveryStarted = True
                     self.aw.sendmessage(QApplication.translate('Message','Phidget service discovery started...'))
@@ -14807,24 +14368,21 @@ class tgraphcanvas(QObject):
                 except Exception as e: # pylint: disable=broad-except
                     _log.exception(e)
 
-    @staticmethod
-    def deviceLogDEBUG() -> None:
-        from Phidget22.Devices.Log import Log as PhidgetLog # type: ignore[import-untyped]
-        from Phidget22.LogLevel import LogLevel as PhidgetLogLevel # type: ignore[import-untyped]
-        PhidgetLog.setLevel(PhidgetLogLevel.PHIDGET_LOG_VERBOSE)
+    def deviceLogDEBUG(self) -> None:
+        if self.PhidgetsConfigured():
+            from Phidget22.Devices.Log import Log as PhidgetLog
+            from Phidget22.LogLevel import LogLevel as PhidgetLogLevel
+            PhidgetLog.setLevel(PhidgetLogLevel.PHIDGET_LOG_VERBOSE)
 
-    @staticmethod
-    def deviceLLogINFO() -> None:
-        from Phidget22.Devices.Log import Log as PhidgetLog
-        from Phidget22.LogLevel import LogLevel as PhidgetLogLevel
-        PhidgetLog.setLevel(PhidgetLogLevel.PHIDGET_LOG_INFO)
+    def deviceLLogINFO(self) -> None:
+        if self.PhidgetsConfigured():
+            from Phidget22.Devices.Log import Log as PhidgetLog
+            from Phidget22.LogLevel import LogLevel as PhidgetLogLevel
+            PhidgetLog.setLevel(PhidgetLogLevel.PHIDGET_LOG_INFO)
 
     # returns True if any device (main or extra) is a Phidget, ambient sensor or button/slider actions contain Phidget commands
     # the PhidgetManager which makes Phidgets accessible is only started if PhdigetsConfigured returns True
     def PhidgetsConfigured(self) -> bool:
-
-        # searching sets is faster than lists
-        phidget_device_ids = set(self.phidgetDevices)
 
         # collecting all device ids in use (from main or extra)
         device_ids_in_use = self.extradevices[:]
@@ -14847,7 +14405,7 @@ class tgraphcanvas(QObject):
         slider_phidget_action_ids = { 9, 10, 11, 17 }
 
         return (
-            any(i in phidget_device_ids for i in device_ids_in_use) or                    # phidget main/extra device
+            any(is_phidget_device(i) for i in device_ids_in_use) or                       # phidget main/extra device
             any(i in {1, 3} for i in ambient_device_ids) or                               # phidget ambient device
             any(i in main_button_phidget_action_ids for i in self.buttonactions) or       # phidget actions in event button commands (CHARGE, .., COOL)
             any(i in main_button_phidget_action_ids for i in self.extrabuttonactions) or  # phidget actions in main event button commandss (ON, OFF, SAMPLE)
@@ -14881,7 +14439,7 @@ class tgraphcanvas(QObject):
                     _log.info('phidgetServer added')
                 except Exception as e: # pylint: disable=broad-except
                     _log.exception(e)
-                    if self.device in self.phidgetDevices:
+                    if is_phidget_device(self.device):
                         self.adderror(QApplication.translate('Error Message',"Exception: phidgetServer couldn't be added. Verify that the Phidget driver is correctly installed!"))
             if self.phidgetManager is None:
                 try:
@@ -14889,7 +14447,7 @@ class tgraphcanvas(QObject):
                     _log.info('phidgetManager started')
                 except Exception as e: # pylint: disable=broad-except
                     _log.exception(e)
-                    if self.device in self.phidgetDevices:
+                    if is_phidget_device(self.device):
                         self.adderror(QApplication.translate('Error Message',"Exception: PhidgetManager couldn't be started. Verify that the Phidget driver is correctly installed!"))
 
     def stopPhidgetManager(self) -> None:
@@ -14923,10 +14481,12 @@ class tgraphcanvas(QObject):
 
     @pyqtSlot()
     def OnMonitor(self) -> None:
+        _log.debug('PRINT OnMonitor')
         try:
             self.generateNoneTempHints()
             self.block_update = True # block the updating of the bitblit canvas (unblocked at the end of this function to avoid multiple redraws)
-            res = self.reset(redraw=False, soundOn=False, keepProperties=True, onMonitor=True)
+            # only show dashboard if flagON if no alarm is defined (which might auto START on ON and cause a "dashboard flicker"
+            res = self.reset(redraw=False, soundOn=False, keepProperties=True, onMonitor=True, showDashboard=not self.flagstart and len(self.alarmflag)== 0 and self.flagKeepON)
             if not res: # reset canceled
                 return
 
@@ -15048,6 +14608,19 @@ class tgraphcanvas(QObject):
                         _log.exception(ex)
                         _, _, exc_tb = sys.exc_info()
                         self.adderror((QApplication.translate('Error Message', 'Exception:') + ' Bluetooth BLE support not available {0}').format(str(ex)),getattr(exc_tb, 'tb_lineno', '?'))
+                elif self.device == 209:
+                    try:
+                        from artisanlib.sr900 import SR900_BLE
+                        self.aw.sr900 = SR900_BLE(
+                            connected_handler=lambda : self.aw.sendmessageSignal.emit(QApplication.translate('Message', '{} connected').format('SR900'),True,None),
+                            disconnected_handler=lambda : self.aw.sendmessageSignal.emit(QApplication.translate('Message', '{} disconnected').format('SR900'),True,None))
+                        self.aw.sr900.setLogging(self.device_logging)
+                        self.aw.sr900.start_sampling()
+                        self.aw.sendmessageSignal.emit(QApplication.translate('Message', 'scanning for device'),True,None)
+                    except Exception as ex:  # pylint: disable=broad-except
+                        _log.exception(ex)
+                        _, _, exc_tb = sys.exc_info()
+                        self.adderror((QApplication.translate('Error Message', 'Exception:') + ' Bluetooth BLE support not available {0}').format(str(ex)),getattr(exc_tb, 'tb_lineno', '?'))
                 elif self.device == 164:
                     # connect Mugma
                     from artisanlib.mugma import Mugma
@@ -15109,14 +14682,16 @@ class tgraphcanvas(QObject):
             except Exception as e: # pylint: disable=broad-except
                 _log.exception(e)
 
-            if self.aw.simulator:
-                self.aw.buttonONOFF.setStyleSheet(self.aw.pushbuttonstyles_simulator['ON'])
-            else:
-                self.aw.buttonONOFF.setStyleSheet(self.aw.pushbuttonstyles['ON'])
+            self.aw.buttonONOFF.setStyleSheet(push_button_style(bool(self.aw.simulator), 'ON',
+                min_height=self.aw.main_button_min_height,
+                min_width=self.aw.main_button_min_width,
+                font_size=self.aw.button_font_size,
+                border_radius=self.aw.button_border_radius))
 
             self.aw.buttonONOFF.setText(QApplication.translate('Button', 'OFF')) # text means click to turn OFF (it is ON)
             self.aw.buttonONOFF.setToolTip(QApplication.translate('Tooltip', 'Stop monitoring'))
-            self.aw.buttonSTARTSTOP.setEnabled(True) # ensure that the START button is enabled
+#            self.aw.buttonSTARTSTOP.setEnabled(True) # ensure that the START button is enabled
+            self.aw.buttonSTARTSTOP.setVisible(True)
             self.aw.disableEditMenus()
             self.aw.updateControlsVisibility()
             self.aw.update_extraeventbuttons_visibility()
@@ -15127,6 +14702,8 @@ class tgraphcanvas(QObject):
             self.aw.pidcontrol.activateSVSlider(self.aw.pidcontrol.svSlider and self.aw.buttonONOFF.isVisible())
             self.block_update = False # unblock the updating of the bitblit canvas
             self.aw.updateReadingsLCDsVisibility() # this one triggers the resize and the recreation of the bitblit canvas
+
+            self.aw.dashboard.update_dashboard()
 
             if self.device in {138, 196}:
                 # if Kaleido Serial or Network, or Orbiter, is selected we run the ON action before starting the sample thread
@@ -15169,7 +14746,7 @@ class tgraphcanvas(QObject):
 
 
     def OffMonitorCloseDown(self, respectAlwaysON:bool, wasRecording:bool) -> None:
-        _log.debug('MODE: OffMonitorCloseDown')
+        _log.debug('MODE: OffMonitorCloseDown(%s,%s)',respectAlwaysON,wasRecording)
         try:
 
             if wasRecording:
@@ -15181,6 +14758,10 @@ class tgraphcanvas(QObject):
                 self.threadserver.terminatingSignal.disconnect(self.OffMonitorCloseDownRespectAlwaysON)
             else:
                 self.threadserver.terminatingSignal.disconnect(self.OffMonitorCloseDownIgnoreAlwaysON)
+
+            if self.aw.plus_automatic_profile_upload and self.aw.qmc.roastUUID and len(self.timex) > 20 and self.aw.plus_subscription == 'MAX':
+                # automatic profile upload enabled, permitted and some data recorded
+                QTimer.singleShot(100, self.uploadProfile) # must happen before QTimer(300, onMonitorSignal) below is fired!
 
             # reset WebLCDs
             resLCD = '-.-' if self.LCDdecimalplaces else '--'
@@ -15214,6 +14795,7 @@ class tgraphcanvas(QObject):
                     self.aw.santokerR.stop()
                     self.aw.santokerR = None
 
+                # disconnect Lebrew RoastSeeNEXT
                 if self.aw.lebrew_roastseeNEXT is not None:
                     self.aw.lebrew_roastseeNEXT.stop()
                     self.aw.lebrew_roastseeNEXT = None
@@ -15245,9 +14827,13 @@ class tgraphcanvas(QObject):
 
                 # disconnect Orbiter
                 if not bool(self.aw.simulator) and self.device == 196 and self.aw.orbiter is not None:
-#                    self.aw.orbiter.stop()
                     self.aw.orbiter.disconnect(wasRecording, self.timeindex[6] != 0)
                     self.aw.orbiter = None
+
+                # disconnect SR900
+                if not bool(self.aw.simulator) and self.device == 209 and self.aw.sr900 is not None:
+                    self.aw.sr900.stop_sampling(wasRecording, self.timeindex[6] != 0)
+                    self.aw.sr900 = None
 
                 # disconnect MQTT
                 if not bool(self.aw.simulator) and self.device == 201:
@@ -15268,7 +14854,11 @@ class tgraphcanvas(QObject):
                 self.palette['canvas'] = self.palette['canvas_alt']
                 self.aw.updateCanvasColors(checkColors=False)
             #enable RESET button:
-            self.aw.buttonRESET.setStyleSheet(self.aw.pushbuttonstyles['RESET'])
+            self.aw.buttonRESET.setStyleSheet(push_button_style(bool(self.aw.simulator), 'RESET',
+                min_height=self.aw.main_button_min_height,
+                min_width=self.aw.main_button_min_width,
+                font_size=self.aw.button_font_size,
+                border_radius=self.aw.button_border_radius))
             self.aw.buttonRESET.setEnabled(True)
             self.aw.buttonRESET.setVisible(True)
 
@@ -15282,10 +14872,11 @@ class tgraphcanvas(QObject):
             except Exception as e: # pylint: disable=broad-except
                 _log.exception(e)
 
-            if self.aw.simulator:
-                self.aw.buttonONOFF.setStyleSheet(self.aw.pushbuttonstyles_simulator['OFF'])
-            else:
-                self.aw.buttonONOFF.setStyleSheet(self.aw.pushbuttonstyles['OFF'])
+            self.aw.buttonONOFF.setStyleSheet(push_button_style(bool(self.aw.simulator), 'OFF',
+                min_height=self.aw.main_button_min_height,
+                min_width=self.aw.main_button_min_width,
+                font_size=self.aw.button_font_size,
+                border_radius=self.aw.button_border_radius))
             self.aw.buttonONOFF.setToolTip(QApplication.translate('Tooltip', 'Start monitoring'))
             self.aw.sendmessage(QApplication.translate('Message','Scope stopped'))
             self.aw.buttonONOFF.setText(QApplication.translate('Button', 'ON')) # text means click to turn OFF (it is ON)
@@ -15340,16 +14931,20 @@ class tgraphcanvas(QObject):
 
             self.aw.buttonONOFF.setEnabled(True)
             self.aw.buttonONOFF.setGraphicsEffect(self.aw.makeShadow())
-            self.aw.buttonSTARTSTOP.setEnabled(True)
+#            self.aw.buttonSTARTSTOP.setEnabled(True)
+            self.aw.buttonSTARTSTOP.setVisible(True)
             self.aw.buttonSTARTSTOP.setGraphicsEffect(self.aw.makeShadow())
             self.aw.buttonCONTROL.setEnabled(True)
             self.aw.buttonCONTROL.setGraphicsEffect(self.aw.makeShadow())
+
+            self.aw.dashboard.update_dashboard()
 
             if respectAlwaysON and self.flagKeepON and len(self.timex) > 10:
                 QTimer.singleShot(300, self.onMonitorSignal.emit)
 
             self.aw.updatePlusStatusSignal.emit() # update plus icon (roast might not have been uploaded yet)
             self.monitorClosedDown.emit()
+
 
         except Exception as ex: # pylint: disable=broad-except
             _log.exception(ex)
@@ -15372,10 +14967,11 @@ class tgraphcanvas(QObject):
                 ge:QGraphicsEffect|None = self.aw.buttonONOFF.graphicsEffect()
                 if ge is not None:
                     ge.setEnabled(False)
-                self.aw.buttonSTARTSTOP.setEnabled(False)
-                ge = self.aw.buttonSTARTSTOP.graphicsEffect()
-                if ge is not None:
-                    ge.setEnabled(False)
+#                self.aw.buttonSTARTSTOP.setEnabled(False)
+#                ge = self.aw.buttonSTARTSTOP.graphicsEffect()
+#                if ge is not None:
+#                    ge.setEnabled(False)
+                self.aw.buttonSTARTSTOP.setVisible(False)
 
                 self.aw.buttonCONTROL.setEnabled(False)
                 ge = self.aw.buttonCONTROL.graphicsEffect()
@@ -15443,7 +15039,7 @@ class tgraphcanvas(QObject):
                 return extratemp, -1, True
 
             # Interpolate any -1 values from extratemp, set interpolate_max based on pct_invalid_samples
-            arr = numpy.array(fill_gaps(arr, int(math.ceil(len(arr)*(pct_invalid_samples)))))
+            arr = numpy.array(fill_gaps(arr, math.ceil(len(arr)*(pct_invalid_samples))))
 
             # Replace rightmost -1's, if any, with last valid value from the left
             last_valid = -1
@@ -15746,6 +15342,7 @@ class tgraphcanvas(QObject):
                         ser.YOCTOthread = None
                     ser.YOCTOvalues = [[],[]]
                     ser.YOCTOlastvalues = [-1.0]*2
+                    from yoctopuce.yocto_api import YAPI # type: ignore[import-untyped]
                     YAPI.FreeAPI() # type:ignore[reportUnboundVariable,unused-ignore]
                 except Exception as e: # pylint: disable=broad-except
                     _log.exception(e)
@@ -15924,10 +15521,11 @@ class tgraphcanvas(QObject):
             self.updateDeltaSamples()
             self.aw.disableSaveActions()
             self.aw.sendmessage(QApplication.translate('Message','Scope recording...'))
-            self.aw.buttonSTARTSTOP.setEnabled(False)
-            ge:QGraphicsEffect|None = self.aw.buttonSTARTSTOP.graphicsEffect()
-            if ge is not None:
-                ge.setEnabled(False)
+#            self.aw.buttonSTARTSTOP.setEnabled(False)
+#            ge:QGraphicsEffect|None = self.aw.buttonSTARTSTOP.graphicsEffect()
+#            if ge is not None:
+#                ge.setEnabled(False)
+            self.aw.buttonSTARTSTOP.setVisible(False)
             self.aw.buttonONOFF.setText(QApplication.translate('Button', 'OFF')) # text means click to turn OFF (it is ON)
             self.aw.buttonONOFF.setToolTip(QApplication.translate('Tooltip', 'Stop recording'))
             self.aw.buttonONOFF.setEnabled(True) # ensure that the OFF button is enabled
@@ -15959,6 +15557,7 @@ class tgraphcanvas(QObject):
 
             self.phasesLCDmode = self.phasesLCDmode_l[0]
 
+            self.aw.dashboard.hide_dashboard()
             self.aw.update_minieventline_visibility()
 
             # lock todays schedule
@@ -16006,15 +15605,20 @@ class tgraphcanvas(QObject):
             # machine). stopAnimation() is a no-op if the animation is not
             # running, so an unconditional call is safe here.
             self.aw.buttonCHARGE.stopAnimation()
-            if self.aw.simulator:
-                self.aw.buttonSTARTSTOP.setStyleSheet(self.aw.pushbuttonstyles_simulator['STOP'])
-            else:
-                self.aw.buttonSTARTSTOP.setStyleSheet(self.aw.pushbuttonstyles['STOP'])
+            self.aw.buttonSTARTSTOP.setStyleSheet(push_button_style(bool(self.aw.simulator), 'STOP',
+                min_height=self.aw.main_button_min_height,
+                min_width=self.aw.main_button_min_width,
+                font_size=self.aw.button_font_size,
+                border_radius=self.aw.button_border_radius))
             if enableButton:
                 self.aw.buttonSTARTSTOP.setEnabled(True)
                 self.aw.buttonSTARTSTOP.setGraphicsEffect(self.aw.makeShadow())
             #enable RESET button:
-            self.aw.buttonRESET.setStyleSheet(self.aw.pushbuttonstyles['RESET'])
+            self.aw.buttonRESET.setStyleSheet(push_button_style(bool(self.aw.simulator), 'RESET',
+                min_height=self.aw.main_button_min_height,
+                min_width=self.aw.main_button_min_width,
+                font_size=self.aw.button_font_size,
+                border_radius=self.aw.button_border_radius))
             self.aw.buttonRESET.setEnabled(True)
             self.updateLCDtime()
             #prevents accidentally deleting a modified profile:
@@ -16076,7 +15680,11 @@ class tgraphcanvas(QObject):
                     (self.plus_coffee is None and self.plus_blend_spec is None and self.beans == '') and # beans are not set
                     (self.aw.schedule_window is None or self.aw.schedule_window.selected_remaining_item is None) # scheduler is off or no schedule item selected
                     ):
-                self.aw.open_roast_properties_dialog(start_recording_on_exit=True)
+                self.aw.dashboard.show_dashboard()
+                self.aw.qmc.plus_beans_reminder_on_start = False # prevent this warning to be shown again for this recording
+                artisan_confirmation_dialog(self.aw, self.aw,
+                    QApplication.translate('Message', 'artisan platform needs to know the beans you are roasting'), '',
+                    True)
                 return
 
             self.aw.soundpopSignal.emit()
@@ -16358,7 +15966,7 @@ class tgraphcanvas(QObject):
                             else:
                                 return
                         if self.phasesbuttonflag and is_proper_temp(self.temp2[self.timeindex[1]]):
-                            self.phases[1] = int(round(self.temp2[self.timeindex[1]]))
+                            self.phases[1] = round(self.temp2[self.timeindex[1]])
                         if self.BTcurve or self.ETcurve:
                             temp_CHARGE = ((self.temp2[self.timeindex[0]] if self.BTcurve else self.temp1[self.timeindex[0]]) if self.timeindex[0] != -1 else -1)
                             temp = (self.temp2[self.timeindex[1]] if self.BTcurve else self.temp1[self.timeindex[1]])
@@ -16476,7 +16084,7 @@ class tgraphcanvas(QObject):
                             else:
                                 return
                         if self.phasesbuttonflag and is_proper_temp(self.temp2[self.timeindex[2]]):
-                            self.phases[2] = int(round(self.temp2[self.timeindex[2]]))
+                            self.phases[2] = round(self.temp2[self.timeindex[2]])
                         if self.BTcurve or self.ETcurve:
                             temp_DRY = ((self.temp2[self.timeindex[1]] if self.BTcurve else self.temp1[self.timeindex[1]]) if self.timeindex[1] else -1)
                             temp = (self.temp2[self.timeindex[2]] if self.BTcurve else self.temp1[self.timeindex[2]])
@@ -16886,6 +16494,48 @@ class tgraphcanvas(QObject):
                     self.aw.sendmessage(message)
                 self.aw.onMarkMoveToNext(self.aw.buttonSCe)
 
+
+    # to run within the main UI thread (best called via a QTimer or from a signal)
+    @pyqtSlot()
+    def uploadProfile(self) -> None:
+        def on_upload_succeeded() -> None:
+            self.aw.sendmessageSignal.emit(QApplication.translate('Message','Uploaded to {} platform').format('artisan'), True, None)
+        def on_upload_failure() -> None:
+            self.aw.sendmessageSignal.emit(QApplication.translate('Message','Upload to {} platform failed').format('artisan'), True, None)
+
+        if (self.aw.plus_subscription == 'MAX' and
+                self.aw.qmc.roastUUID and
+                (libtime.time() - self.last_profile_upload_times) > self.profile_upload_limit and
+                len(self.timex) > 20):
+
+            self.last_profile_upload_times = libtime.time()
+            profile:ProfileData = self.aw.getProfile()
+
+            # we (manually) turn syncing for the current roast on if not yet under sync and user agrees
+            if is_connected() and not is_synced() and not self.flagon and self.checkSaved(allow_discard=False):
+                addRoast(unsynced=True)
+
+            from plus.uploader import send_profile
+            send_profile(
+                profile,
+                # filter conf
+                interpolate_drops = self.interpolateDropsflag,
+                curvefilter = self.curvefilter,
+                medfilt_factor = self.median_filter_factor,
+                limit_ror = self.RoRlimitFlag,
+                ror_limit_min = self.RoRlimitm,
+                ror_limit_max = self.RoRlimit,
+                delta_span_ET = self.deltaETspan,
+                delta_span_BT = self.deltaBTspan,
+                medfilt_factor_RoR = self.median_filter_factor_RoR,
+                delta_ET_filter = self.deltaETfilter,
+                delta_BT_filter = self.deltaBTfilter,
+                # handlers
+                on_success=on_upload_succeeded,
+                on_failure=on_upload_failure)
+
+
+
     #record end of roast (drop of beans). Called from push button 'Drop'
     # if noaction is True, the button event action is not triggered
     @pyqtSlot(bool)
@@ -17224,9 +16874,11 @@ class tgraphcanvas(QObject):
                         if bc > -1 and bc == self.batchcounter+1 and self.batchprefix == bprefix:
                             settings.setValue('batchcounter',bc - 1)
                             settings.setValue('batchsequence',self.batchsequence)
+                            settings.sync()
                     settings.endGroup()
                 except Exception: # pylint: disable=broad-except
-                    self.aw.settingspath = ''
+                    pass
+                    #self.aw.settingspath = ''
 
     def incBatchCounter(self) -> None:
         if not bool(self.aw.simulator):
@@ -17269,9 +16921,11 @@ class tgraphcanvas(QObject):
                             settings.setValue('batchcounter',self.batchcounter)
                             settings.setValue('batchsequence',self.batchsequence)
                             settings.setValue('lastroastepoch',self.lastroastepoch)
+                            settings.sync()
                     settings.endGroup()
                 except Exception: # pylint: disable=broad-except
-                    self.aw.settingspath = ''
+                    pass
+                    #self.aw.settingspath = ''
         else: # batch counter system inactive
             # set the batchcounter of the current profiles
             self.roastbatchnr = 0
@@ -17377,11 +17031,11 @@ class tgraphcanvas(QObject):
                         tx = self.timex[self.specialevents[-1]]
                         sevalue = self.specialeventsvalue[-1]
                         if self.clampEvents: # in clamp mode we render also event values higher than 100:
-                            val = int(round((sevalue-1)*10))
+                            val = round((sevalue-1)*10)
                         else:
                             event_pos_offset = self.eventpositionbars[0]
                             event_pos_factor = self.eventpositionbars[1] - self.eventpositionbars[0]
-                            pos = max(0,int(round((sevalue-1)*10)))
+                            pos = max(0,round((sevalue-1)*10))
                             val = int((pos*event_pos_factor)+event_pos_offset)
                         if etype == 0:
                             self.E1timex.append(tx)
@@ -17414,10 +17068,11 @@ class tgraphcanvas(QObject):
                                 thirdletter = ''
                             #if Event Type-Bars flag
                             if self.eventsGraphflag == 1 and etype < 4:
+                                bar_anker_point = self.phases[0] - (self.phases[0] - self.ylimit_min)/3 # was self.phases[0]
                                 if self.mode == 'F':
-                                    row = {0:self.phases[0]-20,1:self.phases[0]-40,2:self.phases[0]-60,3:self.phases[0]-80}
+                                    row = {0:bar_anker_point - 20,1:bar_anker_point - 40,2:bar_anker_point - 60,3:bar_anker_point - 80}
                                 else:
-                                    row = {0:self.phases[0]-10,1:self.phases[0]-20,2:self.phases[0]-30,3:self.phases[0]-40}
+                                    row = {0:bar_anker_point - 10,1:bar_anker_point - 20,2:bar_anker_point - 30,3:bar_anker_point - 40}
                                 #some times ET is not drawn (ET = 0) when using device NONE
                                 # plot events on BT when showeventsonbt is true
                                 anno = None
@@ -17615,10 +17270,11 @@ class tgraphcanvas(QObject):
                         #if Event Type-Bars flag
                         if self.eventsGraphflag == 1:
                             anno = None
+                            bar_anker_point = self.phases[0] - (self.phases[0] - self.ylimit_min)/3 # was self.phases[0]
                             if self.mode == 'F':
-                                row = {0:self.phases[0]-20,1:self.phases[0]-40,2:self.phases[0]-60,3:self.phases[0]-80}
+                                row = {0:bar_anker_point - 20,1:bar_anker_point - 40,2:bar_anker_point - 60,3:bar_anker_point - 80}
                             else:
-                                row = {0:self.phases[0]-10,1:self.phases[0]-20,2:self.phases[0]-30,3:self.phases[0]-40}
+                                row = {0:bar_anker_point - 10,1:bar_anker_point - 20,2:bar_anker_point - 30,3:bar_anker_point - 40}
                             #some times ET is not drawn (ET = 0) when using device NONE
                             # plot events on BT when showeventsonbt is true
                             if self.ETcurve and not (self.BTcurve and self.showeventsonbt) and self.temp1[index] >= self.temp2[index]:
@@ -17740,7 +17396,7 @@ class tgraphcanvas(QObject):
                         dbt_txt = f'{dbt:.1f}'
                     if right_to_left(self.locale_str):
                         strline = (
-                                    f"C*min{int(tsb)}={self.aw.arabicReshape(QApplication.translate('Label', 'AUC'))}   "
+                                    f"C*min{tsb}={self.aw.arabicReshape(QApplication.translate('Label', 'AUC'))}   "
                                     f"{self.aw.arabicReshape(self.mode + '/min')}"
                                     f"{ror}={self.aw.arabicReshape(QApplication.translate('Label', 'RoR'))}   "
                                     f"{ETmax}={self.aw.arabicReshape(QApplication.translate('Label', 'MET'))}"
@@ -17753,7 +17409,7 @@ class tgraphcanvas(QObject):
                         strline = ''
                         if temp1_values_max and temp1_values_max > 0:
                             strline = f"{QApplication.translate('Label', 'MET')}={ETmax}   "
-                        strline += f"{QApplication.translate('Label', 'RoR')}={ror}{self.mode}/min   {QApplication.translate('Label', 'AUC')}={int(tsb)}C*min"
+                        strline += f"{QApplication.translate('Label', 'RoR')}={ror}{self.mode}/min   {QApplication.translate('Label', 'AUC')}={tsb}C*min"
                         if (det is not None) or (dbt is not None):
                             strline = f"{strline}   {QApplication.translate('Label', 'CM')}={det_txt}/{dbt_txt}{self.mode}"
                         if FCperiod is not None:
@@ -17763,7 +17419,7 @@ class tgraphcanvas(QObject):
                     sep = '   '
                     tm = self.roastdate.time().toString()[:-3]
                     starttime = (self.timex[self.timeindex[0]] if self.timeindex[0] != -1 and self.timeindex[0] < len(self.timex) else 0)
-                    endtime = (self.timex[self.timeindex[6]] if self.timeindex[6] > 0  and self.timeindex[6] < len(self.timex) else self.timex[-1])
+                    endtime = (self.timex[self.timeindex[6]] if 0 < self.timeindex[6] < len(self.timex) else self.timex[-1])
                     totaltime = endtime - starttime
                     if right_to_left(self.locale_str):
                         msg = ''
@@ -18306,7 +17962,7 @@ class tgraphcanvas(QObject):
                 emax = toInt(self.loadevent_hundpcts[i])
                 scaled = (val - emin) / (emax - emin)  #emax > emin enforced by energy.py
                 load_pct = min(1.0, max(0.0, scaled)) * 100
-                if self.presssure_percents[i] and self.sourcetypes[i] in {0, 1}:   # gas loads only
+                if self.pressure_percents[i] and self.sourcetypes[i] in {0, 1}:   # gas loads only
                     # convert pressure to heat
                     factor = math.sqrt(load_pct / 100)
                 else:
@@ -18330,7 +17986,7 @@ class tgraphcanvas(QObject):
             # Local function to record energies of continuous loads
             def record_continuous_energies(_i: int, _kind: int, _duration: float) -> None:
                 load_pct = self.loadevent_hundpcts[_i]  #needed only for the btu_list and outmsg
-                if self.presssure_percents[_i] and self.sourcetypes[_i] in {0, 1}:   # gas loads only
+                if self.pressure_percents[_i] and self.sourcetypes[_i] in {0, 1}:   # gas loads only
                     # convert pressure to heat
                     factor = math.sqrt(load_pct / 100)
                 else:
@@ -18358,27 +18014,30 @@ class tgraphcanvas(QObject):
             def accumulate_DUTY(_i:int, extra_timex_idx_start: int, extra_timex_idx_end: int, _pid_duty_extradevice_index: int) -> tuple[float, float]:
                 accumulated_btus: float = 0
                 accumulated_factors: float = 0
-                # loop over the values from CHARGE to DROP and accumulate energy
-                for j in range(extra_timex_idx_start, extra_timex_idx_end):
-                    duration = self.extratimex[_pid_duty_extradevice_index][j+1] - self.extratimex[_pid_duty_extradevice_index][j]
+                try:
+                    # loop over the values from CHARGE to DROP and accumulate energy
+                    for j in range(extra_timex_idx_start, extra_timex_idx_end):
+                        duration = self.extratimex[_pid_duty_extradevice_index][j+1] - self.extratimex[_pid_duty_extradevice_index][j]
 
-                    # get the PID DUTY % value
-                    load_pct = self.extratemp2[_pid_duty_extradevice_index][j]
+                        # get the PID DUTY % value
+                        load_pct = self.extratemp2[_pid_duty_extradevice_index][j]
 
-                    # scale when Pressure % is ticked
-                    if self.presssure_percents[_i] and self.sourcetypes[_i] in {0, 1}:   # gas loads only
-                        # convert pressure to heat
-                        factor = math.sqrt(load_pct / 100)
-                    else:
-                        factor = load_pct / 100
+                        # scale when Pressure % is ticked
+                        if self.pressure_percents[_i] and self.sourcetypes[_i] in {0, 1}:   # gas loads only
+                            # convert pressure to heat
+                            factor = math.sqrt(load_pct / 100)
+                        else:
+                            factor = load_pct / 100
 
-                    # don't accumulate the value when the PID is OFF, i.e. when extratemp2 == -1 and reject values not in 0-100
-                    if not 0 <= self.extratemp2[_pid_duty_extradevice_index][j] <= 100:
-                        factor = 0
+                        # don't accumulate the value when the PID is OFF, i.e. when extratemp2 == -1 and reject values not in 0-100
+                        if not 0 <= self.extratemp2[_pid_duty_extradevice_index][j] <= 100:
+                            factor = 0
 
-                    # accumulate
-                    accumulated_btus += self.loadratings[_i] * factor * (duration / 3600) * self.convertHeat(1,self.powerunits[self.ratingunits[_i]],'BTU')
-                    accumulated_factors += factor
+                        # accumulate
+                        accumulated_btus += self.loadratings[_i] * factor * (duration / 3600) * self.convertHeat(1,self.powerunits[self.ratingunits[_i]],'BTU')
+                        accumulated_factors += factor
+                except Exception as e: # pylint: disable=broad-except
+                    _log.exception(e)
 
                 return accumulated_btus, accumulated_factors
 
@@ -18433,7 +18092,7 @@ class tgraphcanvas(QObject):
                             continue  #j loop
 
                         # Event begins before DROP, terminates after DROP
-                        if loadtime <= self.timex[self.timeindex[6]] and prev_loadtime[i] > self.timex[self.timeindex[6]]:
+                        if loadtime <= self.timex[self.timeindex[6]] < prev_loadtime[i]:
                             # Event begins after CHARGE
                             if loadtime >= self.timex[self.timeindex[0]]:
                                 # Two portions to register
@@ -18475,8 +18134,7 @@ class tgraphcanvas(QObject):
                             continue  #j loop
 
                         # Event begins before CHARGE and terminates after CHARGE and before DROP
-                        if (loadtime < self.timex[self.timeindex[0]] and
-                            self.timex[self.timeindex[0]] <= prev_loadtime[i] < self.timex[self.timeindex[6]]):
+                        if loadtime < self.timex[self.timeindex[0]] <= prev_loadtime[i] < self.timex[self.timeindex[6]]:
                             # Two portions to register
                             # Before CHARGE
                             kind = 18  #Event BBP
@@ -18612,7 +18270,7 @@ class tgraphcanvas(QObject):
                     if self.preheatenergies[i] < 0 < self.preheatDuration:
                         # percent load multiplied by duration
                         load_pct = abs(self.preheatenergies[i] * 1000./10)
-                        if self.presssure_percents[i] and self.sourcetypes[i] in {0, 1}:   # gas loads only
+                        if self.pressure_percents[i] and self.sourcetypes[i] in {0, 1}:   # gas loads only
                             # convert pressure to heat
                             factor = math.sqrt(load_pct / 100)
                         else:
@@ -18649,7 +18307,7 @@ class tgraphcanvas(QObject):
                     if self.betweenbatchenergies[i] < 0 < self.betweenbatchDuration:
                         # percent load multiplied by duration
                         load_pct = abs(self.betweenbatchenergies[i] * 1000./10)
-                        if self.presssure_percents[i] and self.sourcetypes[i] in {0, 1}:   # gas loads only
+                        if self.pressure_percents[i] and self.sourcetypes[i] in {0, 1}:   # gas loads only
                             # convert pressure to heat
                             factor = math.sqrt(load_pct / 100)
                         else:
@@ -18685,7 +18343,7 @@ class tgraphcanvas(QObject):
                     if self.coolingenergies[i] < 0 < self.coolingDuration:
                         # percent load multiplied by duration
                         load_pct = abs(self.coolingenergies[i] * 1000./10)
-                        if self.presssure_percents[i] and self.sourcetypes[i] in {0, 1}:   # gas loads only
+                        if self.pressure_percents[i] and self.sourcetypes[i] in {0, 1}:   # gas loads only
                             # convert pressure to heat
                             factor = math.sqrt(load_pct / 100)
                         else:
@@ -18895,7 +18553,7 @@ class tgraphcanvas(QObject):
                     emax = toInt(self.loadevent_hundpcts[i])
                     scaled = (val - emin) / (emax - emin)  #emax > emin enforced by energy.py
                     load_pct = min(1.0, max(0.0, scaled)) * 100
-                    if self.presssure_percents[i] and self.sourcetypes[i] in {0, 1}:   # gas loads only
+                    if self.pressure_percents[i] and self.sourcetypes[i] in {0, 1}:   # gas loads only
                         # convert pressure to heat
                         factor = math.sqrt(load_pct / 100)
                     else:
@@ -19103,16 +18761,17 @@ class tgraphcanvas(QObject):
 
             #interpretation of coefficients: http://www.sagenb.org/home/pub/1708/
 
-            string = f"<b>{QApplication.translate('Message','Polynomial coefficients (Horner form):')}</b><br>"
-            string += f'{coeffs}<br><br>'
-            string += f"<b>{QApplication.translate('Message','Knots:')}</b><br>"
-            string += f'{knots}<br><br>'
-            string += f"<b>{QApplication.translate('Message','Residual:')}</b><br>"
-            string += f'{resid}<br><br>'
-            string += f"<b>{QApplication.translate('Message','Roots:')}</b><br>"
+            string = f"{QApplication.translate('Message','Polynomial coefficients (Horner form):')}\n"
+            string += f'{coeffs}\n\n'
+            string += f"{QApplication.translate('Message','Knots:')}\n"
+            string += f'{knots}\n\n'
+            string += f"{QApplication.translate('Message','Residual:')}\n"
+            string += f'{resid}\n\n'
+            string += f"{QApplication.translate('Message','Roots:')}\n"
             string += str(roots)
 
-            QMessageBox.information(self.aw, QApplication.translate('Message','Profile information'),string)
+#            QMessageBox.information(self.aw, QApplication.translate('Message','Profile information'),string)
+            artisan_information(self.aw, self.aw, string, QApplication.translate('Message','Profile information'))
 
         except ValueError as e:
             _log.exception(e)
@@ -19357,7 +19016,7 @@ class tgraphcanvas(QObject):
                 if tempj is None or numpy.isnan(tempj):
                     return -1
                 s = (tempi - tempj) / (ti - tj)
-                return tempj + s*(seconds - tj)
+                return float(tempj + s*(seconds - tj))
             # should not be reached (guarded by the outer if)
             return tempi
         return -1
@@ -19468,7 +19127,7 @@ class tgraphcanvas(QObject):
             #### lock shared resources #####
             self.errorsemaphore.acquire(1)
             _log.error(error)
-            timez = str(QDateTime.currentDateTime().toString('hh:mm:ss.zzz'))    #zzz = milliseconds
+            timez = QDateTime.currentDateTime().toString('hh:mm:ss.zzz')    #zzz = milliseconds
             #keep a max of 500 errors
             if len(self.errorlog) > 499:
                 self.errorlog = self.errorlog[1:]
@@ -19494,11 +19153,12 @@ class tgraphcanvas(QObject):
     ####################  PROFILE DESIGNER   ###################################################################################
 
     # Fit a spline with N nodes to existing profile data
-    def fit_spline_to_profile(self, num_nodes: int) -> tuple[list[float], list[float], list[float]]:
+    def fit_spline_to_profile(self, num_nodes: int, background_mode:bool) -> tuple[list[float], list[float], list[float]]:
         """Fit a spline with the specified number of nodes to the current profile data.
 
         Args:
             num_nodes: Number of control points/nodes for the fitted spline
+            background_mode: if set we assume working on the background profile
 
         Returns:
             Tuple of (times, temps1, temps2) lists containing the fitted control points
@@ -19509,8 +19169,8 @@ class tgraphcanvas(QObject):
             return [], [], []
 
         # Get the time range from CHARGE to DROP
-        start_idx = self.timeindex[0]  # CHARGE
-        end_idx = self.timeindex[6]    # DROP
+        start_idx = (self.timeindexB[0] if background_mode else self.timeindex[0])  # CHARGE
+        end_idx = (self.timeindexB[6] if background_mode else self.timeindex[6])    # DROP
 
         if start_idx == -1 or end_idx == 0:
             # Fall back to full range if no CHARGE/DROP
@@ -19518,9 +19178,9 @@ class tgraphcanvas(QObject):
             end_idx = len(self.timex) - 1
 
         # Extract the data segment
-        time_data = numpy.array(self.timex[start_idx:end_idx+1])
-        temp1_data = numpy.array(self.temp1[start_idx:end_idx+1])
-        temp2_data = numpy.array(self.temp2[start_idx:end_idx+1])
+        time_data = numpy.array(self.timeB[start_idx:end_idx+1] if background_mode else self.timex[start_idx:end_idx+1])
+        temp1_data = numpy.array(self.temp1B[start_idx:end_idx+1] if background_mode else self.temp1[start_idx:end_idx+1])
+        temp2_data = numpy.array(self.temp2B[start_idx:end_idx+1] if background_mode else self.temp2[start_idx:end_idx+1])
 
         # Fit smoothing splines to the data
         # Use s parameter for smoothing (0 = interpolation, higher = more smoothing)
@@ -19551,7 +19211,7 @@ class tgraphcanvas(QObject):
                     [float(temp2_data[i]) for i in indices])
 
     #launches designer
-    def designer(self) -> None:
+    def designer(self, background_mode:bool = False) -> None:
         #disconnect mouse cross if ON
         if self.crossmarker:
             self.togglecrosslines()
@@ -19559,14 +19219,15 @@ class tgraphcanvas(QObject):
         if len(self.analysisresultsstr) > 0:
             self.aw.deleteBackground()
 
-        if self.timex:
+        if (not background_mode and self.timex) or (background_mode and self.timeB):
             # Show dialog to select number of spline nodes
-            from artisanlib.dialogs import DesignerSplineNodesDlg
             dialog = DesignerSplineNodesDlg(self.aw, self.aw, default_nodes=10)
             if dialog.exec():
+                self.designer_loaded_foreground_profile_file = self.aw.curFile
                 num_nodes = dialog.get_num_nodes()
-                res = self.initfromprofile(num_nodes=num_nodes)
+                res = self.initfromprofile(num_nodes=num_nodes, background_mode=background_mode)
                 if res:
+                    self.designer_background_mode = background_mode
                     self.ax_lines_clear()
                     self.ax_annotations_clear() # remove background profiles annotations (has to be done before reset!)
                     # we also have to remove those extra event annotations if in combo mode
@@ -19582,6 +19243,7 @@ class tgraphcanvas(QObject):
         else:
             #if no profile found
             #
+            self.designer_background_mode = background_mode
             # reset also the special event copy held for the designer
             self.eventtimecopy = []
             self.eventtimecopy = []
@@ -19629,6 +19291,7 @@ class tgraphcanvas(QObject):
             obj = None
             if os.path.exists(filename):
                 with open(filename, encoding='utf-8') as f:
+                    import ast
                     obj=ast.literal_eval(f.read())
             if obj and 'timex' in obj and 'temp1' in obj and 'temp2' in obj:
                 self.timex = obj['timex']
@@ -19719,38 +19382,51 @@ class tgraphcanvas(QObject):
         self.redrawdesigner(force=True)
 
     #loads main points from a profile so that they can be edited
-    def initfromprofile(self, num_nodes: int = 0) -> bool:
+    def initfromprofile(self, num_nodes: int = 0, background_mode:bool = False) -> bool:
         """Initialize designer from existing profile by fitting a spline.
 
         Args:
             num_nodes: Number of spline nodes to fit. If 0, uses landmark-based method (old behavior).
+            background_mode: if set we assume working on the background profile
 
         Returns:
             True if successful, False otherwise.
         """
-        if self.timeindex[0] == -1 or self.timeindex[6] == 0:
-            QMessageBox.information(self.aw, QApplication.translate('Message','Designer Init'),
-                                    QApplication.translate('Message','Unable to start designer.\nProfile missing [CHARGE] or [DROP]'))
+        if ((background_mode and (self.timeindexB[0] == -1 or self.timeindexB[6] == 0)) or
+                not background_mode and (self.timeindex[0] == -1 or self.timeindex[6] == 0)):
+#            QMessageBox.information(self.aw, QApplication.translate('Message','Designer Init'),
+#                                    QApplication.translate('Message','Unable to start designer.\nProfile missing [CHARGE] or [DROP]'))
+            artisan_information(self.aw, self.aw,
+                QApplication.translate('Message','Unable to start designer.\nProfile missing [CHARGE] or [DROP]'),
+                QApplication.translate('Message','Designer Init'))
             self.disconnect_designer()
             return False
 
         #save events. They will be deleted on qmc.reset()
-        self.specialeventsStringscopy = self.specialeventsStrings[:]
-        self.specialeventsvaluecopy = self.specialeventsvalue[:]
-        self.specialeventstypecopy = self.specialeventstype[:]
+        self.specialeventsStringscopy = (self.backgroundEStrings[:] if background_mode else self.specialeventsStrings[:])
+        self.specialeventsvaluecopy = (self.backgroundEvalues[:] if background_mode else self.specialeventsvalue[:])
+        self.specialeventstypecopy = (self.backgroundEtypes[:] if background_mode else self.specialeventstype[:])
         self.eventtimecopy = []
-        for spe in self.specialevents:
-            #save relative time of events
-            self.eventtimecopy.append(self.timex[spe]-self.timex[self.timeindex[0]])
-        self.etypescopy = self.etypes[:]
+        if background_mode:
+            for spe in self.backgroundEvents:
+                #save relative time of events
+                self.eventtimecopy.append(self.timeB[spe]-self.timeB[self.timeindexB[0]])
+        else:
+            for spe in self.specialevents:
+                #save relative time of events
+                self.eventtimecopy.append(self.timex[spe]-self.timex[self.timeindex[0]])
+        self.etypescopy = (self.Betypes[:] if background_mode else self.etypes[:])
 
         # Save landmark times before any modifications
-        timeindexhold:list[float] = [self.timex[idx] if 0 <= idx < len(self.timex) else 0 for idx in self.timeindex]
+        timeindexhold:list[float] = (
+            [self.timeB[idx] if 0 <= idx < len(self.timeB) else 0 for idx in self.timeindexB]
+            if background_mode else
+            [self.timex[idx] if 0 <= idx < len(self.timex) else 0 for idx in self.timeindex])
 
         if num_nodes > 0:
             # NEW METHOD: Fit spline with specified number of nodes
             # Fit the spline to the existing profile data
-            fitted_times, fitted_temp1, fitted_temp2 = self.fit_spline_to_profile(num_nodes)
+            fitted_times, fitted_temp1, fitted_temp2 = self.fit_spline_to_profile(num_nodes, background_mode)
 
             if not fitted_times:
                 # Fitting failed, fall back to old method
@@ -19758,7 +19434,7 @@ class tgraphcanvas(QObject):
             else:
                 # we remember time axis limits to reconstruct after reset
                 startofx = self.startofx
-                endofx = self.endofx
+                endofx = (fitted_times[-1]+30 if background_mode else self.endofx)
 
                 res = self.reset()  #erase screen
                 if not res:
@@ -19779,28 +19455,43 @@ class tgraphcanvas(QObject):
         if num_nodes == 0:
             # OLD METHOD: Extract only landmark points (backwards compatibility)
             #find lowest point from profile to be converted
-            lpindex = self.aw.findTP()
-            if lpindex != -1 and lpindex not in self.timeindex:
+            lpindex = (self.aw.findTPbackground() if background_mode else self.aw.findTP())
+            if not background_mode and lpindex != -1 and lpindex not in self.timeindex:
                 lptime = self.timex[lpindex]
                 lptemp2 = self.temp2[lpindex]
                 # we only consider TP if its BT is at least 20 degrees lower than the CHARGE temperature
                 if self.temp2[self.timeindex[0]] < (lptemp2 + 20):
+                    lpindex = -1
+            if background_mode and lpindex != -1 and lpindex not in self.timeindexB:
+                lptime = self.timeB[lpindex]
+                lptemp2 = self.temp2B[lpindex]
+                # we only consider TP if its BT is at least 20 degrees lower than the CHARGE temperature
+                if self.temp2B[self.timeindexB[0]] < (lptemp2 + 20):
                     lpindex = -1
             else:
                 lpindex = -1
                 lptime = -1
                 lptemp2 = -1
 
-            timez,t1,t2 = [self.timex[self.timeindex[0]]],[self.temp1[self.timeindex[0]]],[self.temp2[self.timeindex[0]]]    #first CHARGE point
-            for i in range(1,len(self.timeindex)):
-                if self.timeindex[i]:                           # fill up empty lists with main points (FCs, etc). match from timeindex
-                    timez.append(self.timex[self.timeindex[i]])  #add time
-                    t1.append(self.temp1[self.timeindex[i]])    #add temp1
-                    t2.append(self.temp2[self.timeindex[i]])    #add temp2
+            timez = ([self.timeB[self.timeindexB[0]]] if background_mode else [self.timex[self.timeindex[0]]])
+            t1 = ([self.temp1B[self.timeindexB[0]]] if background_mode else [self.temp1[self.timeindex[0]]])
+            t2 = ([self.temp2B[self.timeindexB[0]]] if background_mode else [self.temp2[self.timeindex[0]]])
+            if background_mode:
+                for i in range(1,len(self.timeindexB)):
+                    if self.timeindexB[i]:                           # fill up empty lists with main points (FCs, etc). match from timeindex
+                        timez.append(self.timeB[self.timeindexB[i]])  #add time
+                        t1.append(self.temp1B[self.timeindexB[i]])    #add temp1
+                        t2.append(self.temp2B[self.timeindexB[i]])    #add temp2
+            else:
+                for i in range(1,len(self.timeindex)):
+                    if self.timeindex[i]:                           # fill up empty lists with main points (FCs, etc). match from timeindex
+                        timez.append(self.timex[self.timeindex[i]])  #add time
+                        t1.append(self.temp1[self.timeindex[i]])    #add temp1
+                        t2.append(self.temp2[self.timeindex[i]])    #add temp2
 
             # we remember time axis limits to reconstruct after reset (which might alter them such that they do not fit to the profile data any longer!)
             startofx = self.startofx
-            endofx = self.endofx
+            endofx = (timez[-1]+30 if background_mode else self.endofx)
 
             res = self.reset()  #erase screen
             if not res:
@@ -19832,15 +19523,12 @@ class tgraphcanvas(QObject):
         self.timealign(redraw=False)
 
         self.xaxistosm(redraw=False)
-#        # import UnivariateSpline needed to draw the curve in designer
-#        from scipy.interpolate import UnivariateSpline # @UnusedImport # pylint: disable=import-error
-#        global UnivariateSpline # pylint: disable=global-statement
         # init designer timez
         self.designer_timez = [float(w) for w in numpy.arange(self.timex[0],self.timex[-1],self.time_step_size)]
         # set initial RoR z-axis limits
         self.setDesignerDeltaAxisLimits(self.DeltaETflag and self.autodeltaxET, self.DeltaBTflag and self.autodeltaxBT)
 
-        self.redrawdesigner(force=True)                                   #redraw the designer screen
+        self.redrawdesigner(force=True) #redraw the designer screen
 
         return True
 
@@ -19882,15 +19570,15 @@ class tgraphcanvas(QObject):
                     self.delta_ax.set_ylim(self.zlimit_min,self.zlimit)
                 if self.zgrid != 0:
                     d = self.zlimit - self.zlimit_min
-                    steps = int(round(d/5))
+                    steps = round(d/5)
                     if steps > 50:
-                        steps = int(round(steps/10))*10
+                        steps = round(steps/10)*10
                     elif steps > 10:
-                        steps = int(round(steps/5))*5
+                        steps = round(steps/5)*5
                     elif steps > 5:
                         steps = 5
                     else:
-                        steps = int(round(steps/2))*2
+                        steps = round(steps/2)*2
                     auto_grid = max(2,steps)
                     if auto_grid != self.zgrid:
                         self.zgrid = auto_grid
@@ -20332,11 +20020,11 @@ class tgraphcanvas(QObject):
                 # initialize bitblit background
                 axfig = self.ax.get_figure()
                 if axfig is not None and hasattr(self.fig.canvas,'copy_from_bbox'):
-                    self.ax_background_designer = self.fig.canvas.copy_from_bbox(axfig.bbox)  # ty:ignore[call-non-callable]  # pyright: ignore[reportAttributeAccessIssue]
+                    self.ax_background_designer = self.fig.canvas.copy_from_bbox(axfig.bbox)  # ty:ignore[not-callable]  # pyright: ignore[reportAttributeAccessIssue]
 
             # restore background
             if hasattr(self.fig.canvas,'restore_region'):
-                self.fig.canvas.restore_region(self.ax_background_designer) # ty:ignore[call-non-callable] # pyright: ignore[reportAttributeAccessIssue]
+                self.fig.canvas.restore_region(self.ax_background_designer) # ty:ignore[not-callable] # pyright: ignore[reportAttributeAccessIssue]
 
 
             #create statistics bar
@@ -20485,13 +20173,19 @@ class tgraphcanvas(QObject):
 
             designermenu.addSeparator()
 
-            resetAction = QAction(QApplication.translate('Contextual Menu', 'Reset Designer'),self)
+            resetAction = QAction(QApplication.translate('Contextual Menu', 'Reset'),self)
             resetAction.triggered.connect(self.reset_designer)
             designermenu.addAction(resetAction)
 
             configAction = QAction(QApplication.translate('Contextual Menu', 'Config...'),self)
             configAction.triggered.connect(self.desconfig)
             designermenu.addAction(configAction)
+
+            designermenu.addSeparator()
+
+            exitAction = QAction(QApplication.translate('Contextual Menu', 'Exit'),self)
+            exitAction.triggered.connect(self.aw.exitTriggered)
+            designermenu.addAction(exitAction)
 
             designermenu.exec(QCursor.pos())
         except Exception as e: # pylint: disable=broad-except
@@ -20546,9 +20240,9 @@ class tgraphcanvas(QObject):
         finishphasetime = self.timex[self.timeindex[6]] - self.timex[self.timeindex[2]]
 
         if totaltime:
-            dryphaseP = int(round(dryphasetime*100./totaltime))
-            midphaseP = int(round(midphasetime*100./totaltime))
-            finishphaseP = int(round(finishphasetime*100./totaltime))
+            dryphaseP = round(dryphasetime*100./totaltime)
+            midphaseP = round(midphasetime*100./totaltime)
+            finishphaseP = round(finishphasetime*100./totaltime)
         else:
             return
 
@@ -20930,9 +20624,8 @@ class tgraphcanvas(QObject):
 
 
     #converts from a designer profile to a normal profile
-    def convert_designer(self) -> None:
+    def convert_designer(self, filename:str|None) -> None:
         try:
-            self.disconnect_designer()
 
             from scipy.interpolate import UnivariateSpline
             #pylint: disable=E0611
@@ -21000,24 +20693,37 @@ class tgraphcanvas(QObject):
             elif self.reproducedesigner == 4:
                 self.designer_create_ramp_command()
 
+            self.disconnect_designer()
+
+            if filename:
+                # save profile
+                self.aw.fileSave(filename, copy=True)
+                self.fileClean()
+                if self.designer_loaded_foreground_profile_file is not None:
+                    self.aw.loadFile(self.designer_loaded_foreground_profile_file)
+                else:
+                    self.reset(soundOn=False, fireResetAction=False)
+                self.aw.loadBackgroundSignal.emit(filename, False, True)
+
             self.redraw()
             self.aw.sendmessage(QApplication.translate('Message', 'New profile created'))
 
         except ValueError:
             _, _, exc_tb = sys.exc_info()
             self.adderror(QApplication.translate('Error Message', 'Value Error:') + ' createFromDesigner()',getattr(exc_tb, 'tb_lineno', '?'))
-            return
 
         except Exception as e: # pylint: disable=broad-except
             _log.exception(e)
             _, _, exc_tb = sys.exc_info()
             self.adderror((QApplication.translate('Error Message', 'Exception:') + ' createFromDesigner() {0}').format(str(e)),getattr(exc_tb, 'tb_lineno', '?'))
-            return
+
 
     #activates mouse events
     def connect_designer(self) -> None:
         if not self.designerflag:
             self.designerflag = True
+            self.designer_dashboard_was_active_on_open = self.aw.dashboard.dashboard_active()
+            self.aw.dashboard.hide_dashboard()
             self.aw.designerAction.setChecked(True)
             self.canvas.setCursor(Qt.CursorShape.PointingHandCursor)
             self.mousepress = False
@@ -21034,6 +20740,9 @@ class tgraphcanvas(QObject):
     def disconnect_designer(self) -> None:
         self.designerflag = False
         self.aw.designerAction.setChecked(False)
+        if self.designer_dashboard_was_active_on_open:
+            self.aw.dashboard.show_dashboard()
+        self.designer_dashboard_was_active_on_open = False
         for dc in self.designerconnections:
             if dc is not None:
                 self.fig.canvas.mpl_disconnect(dc)
@@ -21216,7 +20925,7 @@ class tgraphcanvas(QObject):
     @pyqtSlot()
     @pyqtSlot(bool)
     def addTocuppingnotes(self, _:bool = False) -> None:
-        descriptor = str(self.wheelnames[self.wheelx][self.wheelz])
+        descriptor = self.wheelnames[self.wheelx][self.wheelz]
         if self.cuppingnotes == '':
             self.cuppingnotes = descriptor
         else:
@@ -21227,7 +20936,7 @@ class tgraphcanvas(QObject):
     @pyqtSlot()
     @pyqtSlot(bool)
     def addToroastingnotes(self, _:bool = False) -> None:
-        descriptor =  str(self.wheelnames[self.wheelx][self.wheelz]) + ' '
+        descriptor =  self.wheelnames[self.wheelx][self.wheelz] + ' '
         if self.roastingnotes == '':
             self.roastingnotes = descriptor
         else:
@@ -21265,22 +20974,28 @@ class tgraphcanvas(QObject):
                 self.wheellocationz = ydata
 
         elif event.button == 3:
-            designermenu = QMenu(self.aw) # if we bind this to self, we inherit the background-color: transparent from self.fig
-            cuppingAction = QAction(QApplication.translate('Contextual Menu', 'Add to Cupping Notes'),self)
+            wheelmenu = QMenu(self.aw) # if we bind this to self, we inherit the background-color: transparent from self.fig
+            cuppingAction = QAction(QApplication.translate('Contextual Menu', 'Add to cupping notes'),self)
             cuppingAction.triggered.connect(self.addTocuppingnotes)
-            designermenu.addAction(cuppingAction)
+            wheelmenu.addAction(cuppingAction)
 
-            roastingAction = QAction(QApplication.translate('Contextual Menu', 'Add to Roasting Notes'),self)
+            roastingAction = QAction(QApplication.translate('Contextual Menu', 'Add to roasting notes'),self)
             roastingAction.triggered.connect(self.addToroastingnotes)
-            designermenu.addAction(roastingAction)
+            wheelmenu.addAction(roastingAction)
 
-            designermenu.addSeparator()
+            wheelmenu.addSeparator()
 
             editAction = QAction(QApplication.translate('Contextual Menu', 'Edit'),self)
             editAction.triggered.connect(self.editmode)
-            designermenu.addAction(editAction)
+            wheelmenu.addAction(editAction)
 
-            designermenu.exec(QCursor.pos())
+            wheelmenu.addSeparator()
+
+            exitAction = QAction(QApplication.translate('Contextual Menu', 'Exit'),self)
+            exitAction.triggered.connect(self.aw.exitTriggered)
+            wheelmenu.addAction(exitAction)
+
+            wheelmenu.exec(QCursor.pos())
 
     @pyqtSlot()
     @pyqtSlot(bool)
@@ -21458,8 +21173,8 @@ class tgraphcanvas(QObject):
             wlen = len(wc)
             for i in range(wlen):
                 color = QColor()
-                color.setHsv(int(round((360/wlen)*i*self.wheelcolorpattern)),255,255,255)
-                wc[i] = str(color.name())
+                color.setHsv(round((360/wlen)*i*self.wheelcolorpattern),255,255,255)
+                wc[i] = color.name()
 
     # sets parent and corrects segment lengths so that child fits inside parent (multiple children can be set to same parent)
     # input: z = index of parent in previous wheel    # wn = wheel number    # idx = index of element in wheel x
@@ -21625,7 +21340,7 @@ class SampleThread(QThread):
         self.aw = aw
 
         # NOTE: this should be smaller than self.min_delay (currently 0.1)
-        if str(platform.system()).startswith('Windows'):
+        if platform.system().startswith('Windows'):
             self.accurate_delay_cutoff = 3*10e-3 # was 10e-3 = 0.01
         else:
             self.accurate_delay_cutoff = 3*5e-3 # was 5e-3 = 0.005
@@ -21743,7 +21458,7 @@ class SampleThread(QThread):
         try:
             self.aw.qmc.flagsamplingthreadrunning = True
             if sys.platform.startswith('darwin'):
-                from Foundation import NSAutoreleasePool # type:ignore[attr-defined, import-untyped, unused-ignore] # @UnresolvedImport  # pylint: disable=import-error,no-name-in-module
+                from Foundation import NSAutoreleasePool # type:ignore[attr-defined, import-untyped, unused-ignore] # @UnresolvedImport  # pylint: disable=import-error,no-name-in-module # ty:ignore[missing-module-member]
                 pool = NSAutoreleasePool.alloc().init()  # @UndefinedVariable # pylint: disable=maybe-no-member # noqa: F841
             self.aw.qmc.afterTP = False
             if not self.aw.qmc.flagon:

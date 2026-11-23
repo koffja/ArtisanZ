@@ -1,6 +1,26 @@
 #
 # ABOUT
-# Cropster XLS Roast Profile importer for Artisan
+# Cropster XLS Roast Profile importer for artisan scope
+#
+# COPYRIGHT (C) 2010-2026 The artisan team represented by
+#   Marko Luther <marko.luther@gmx.net> (maintainer) and all contributors
+#
+# LICENSE
+# This program or module is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as
+# published by the Free Software Foundation, either version 3 of the
+# License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+#
+# MAINTAINER
+# Marko Luther, 2026
 
 import time as libtime
 import xlrd
@@ -103,7 +123,7 @@ def extractProfileCropsterXLS(file:str,
 
     # list of Artisan tags for strings associated to tuple of (fixed) column nr (or Null) and list of tag translations
     string_tag_labels_trans:list[tuple[str,int|None,list[str]]] = [
-        ('beans', 1, [
+        ('title', 1, [
             'Lot name',                 # EN
             'Chargenname',              # DE
             'Nombre del lote',          # ES
@@ -116,17 +136,30 @@ def extractProfileCropsterXLS(file:str,
             '\u6279\u6b21\u540d\u79f0', # CN Simplified
             '\u6279\u6b21\u540d\u7a31', # CN Traditional
             ]),
-        ('title', 2, [
-            'Profile',         # EN
-            'Profil',          # DE, FR
-            'Perfil',          # ES, pT
-            'Profilo',         # IT
-            '\u041f\u0440\u043e\u0444\u0438\u043b\u044c', # RU
-            '\ud504\ub85c\ud30c\uc77c',                   # KO
-            '\u30d7\u30ed\u30d5\u30a1\u30a4\u30eb',       # JP
-            '\u66f2\u7ebf\u6863\u6848',                   # CN Simplified
-            '\u66f2\u7dda\u6a94\u6848',                   # CN Traditional
+        ('beans', 1, [
+            'Green lots',               # EN
+            'Rohkaffeechargen',         # DE
+            'Lotes de café verde',      # ES
+            'Lots de café vert',        # FR
+            'Lotti di verde',           # IT
+            'Lotes verdes',             # PT
+            '\u041b\u043e\u0442\u044b\u0020\u0437\u0435\u043b\u0435\u043d\u043e\u0433\u043e\u0020\u043a\u043e\u0444\u0435', # RU
+            '\uc0dd\ub450\u0020\u004c\u006f\u0074', # KO
+            '\u751f\u8c46\u30ed\u30c3\u30c8', # JP
+            '\u751f\u8c46\u6279\u6b21', # CN Simplified
+            '\u751f\u8c46\u6279\u6b21', # CN Traditional
             ]),
+#        ('template', 2, [
+#            'Profile',         # EN
+#            'Profil',          # DE, FR
+#            'Perfil',          # ES, pT
+#            'Profilo',         # IT
+#            '\u041f\u0440\u043e\u0444\u0438\u043b\u044c', # RU
+#            '\ud504\ub85c\ud30c\uc77c',                   # KO
+#            '\u30d7\u30ed\u30d5\u30a1\u30a4\u30eb',       # JP
+#            '\u66f2\u7ebf\u6863\u6848',                   # CN Simplified
+#            '\u66f2\u7dda\u6a94\u6848',                   # CN Traditional
+#            ]),
         ('roastertype', 3,[
             'Machine',            # EN, FR
             'Maschine',           # DE
@@ -915,7 +948,7 @@ def extractProfileCropsterXLS(file:str,
                 roasttime:str|None = encodeLocal(date.time().toString())
                 if roasttime is not None:
                     res['roasttime'] = roasttime
-                res['roastepoch'] = int(date.toSecsSinceEpoch())
+                res['roastepoch'] = date.toSecsSinceEpoch()
                 res['roasttzoffset'] = libtime.timezone
         except Exception: # pylint: disable=broad-except
             pass
@@ -1053,7 +1086,7 @@ def extractProfileCropsterXLS(file:str,
                         else:
                             res['mode'] = 'C'
                         res['timex'] = [float(t.value) for t in time[1:]]
-                        res['temp2'] = [float(t.value) for t in temp[1:]]
+                        res['temp2'] = [float(t.value) if float(t.value)>-1 else -float(t.value) for t in temp[1:]]
                         res['temp1'] = [-1.0]*len(res['timex'])
                         charge_idx = 0
                         try:
@@ -1080,11 +1113,21 @@ def extractProfileCropsterXLS(file:str,
                                 res['mode'] = 'F'
                             else:
                                 res['mode'] = 'C'
-                            res['temp1'] = [float(t.value) for t in temp[1:]]
+                            # we invert negative readings (might stem from wrongly connected TCs)
+                            res['temp1'] = [float(t.value) if float(t.value)>-1 else -float(t.value) for t in temp[1:]]
+                            timex_ET = [float(t.value) for t in time[1:]]
+                            if 'timex' not in res or len(timex_ET) > len(res['timex']):
+                                # we take the longer ET timeline
+                                res['timex'] = timex_ET
+                            # ensure that timex and temp1 lists are equal length
                             if len(res['timex']) != len(res['temp1']):
-                                res['timex'] = [float(t.value) for t in time[1:]]
-                            if 'temp2' not in res or len(res['temp2']) != len(res['timex']):
+                                res['temp1'] = res['temp1'][:len(res['timex'])] + [-1]*(max(0,len(res['timex'])-len(res['temp1'])))
+                            # ensure that timex and temp2 lists are equal length
+                            if 'temp2' not in res:
                                 res['temp2'] = [-1.0]*len(res['timex'])
+                            if len(res['timex']) != len(res['temp2']):
+                                res['temp2'] = res['temp2'][:len(res['timex'])] + [-1]*(max(0,len(res['timex'])-len(res['temp2'])))
+
                             charge_idx = 0
                             try:
                                 charge_idx = res['timex'].index(0)
@@ -1096,8 +1139,6 @@ def extractProfileCropsterXLS(file:str,
                 break
     except Exception: # pylint: disable=broad-except
         pass
-
-#    ordered_sheet_names:Sequence[str|None]
 
     ordered_sheet_names:list[str] = sheet_names
 
@@ -1163,7 +1204,7 @@ def extractProfileCropsterXLS(file:str,
                                         specialeventstype.append(4)
                                     try:
                                         v = float(comment_value)
-                                        specialeventsvalue.append(eventsExternal2InternalValue(int(round(v))))
+                                        specialeventsvalue.append(eventsExternal2InternalValue(round(v)))
                                     except Exception: # pylint: disable=broad-except
                                         specialeventsvalue.append(0)
                                     if not ae and not ge and comment_type not in comment_trans:
@@ -1199,7 +1240,7 @@ def extractProfileCropsterXLS(file:str,
                                     time_epoc = float(timex.value)
                                     c = takeClosest(time_epoc,res['timex'])
                                     timex_idx = res['timex'].index(c)
-                                    value = int(round(float(control_curve.value)))
+                                    value = round(float(control_curve.value))
                                     if event_value is None or event_value != value:
                                         # value changed
                                         event_value = value
@@ -1340,11 +1381,11 @@ def extractProfileCropsterXLS(file:str,
     # extra device data can be shorter, make them all equal in length to main device
     if 'timex' in res and 'extradevices' in res and 'samplinginterval' in res:
         main_data_len = len(res['timex'])
-        sampling_interval = int(round(res['samplinginterval']))
+        sampling_interval = round(res['samplinginterval'])
         for i,_ in enumerate(res['extradevices']):
             if 'extratimex' in res and len(res['extratimex'])>i:
-                missing_timex = [float(tx) for tx in range(int(round(res['extratimex'][i][-1]))+sampling_interval,
-                        int(round(res['extratimex'][i][-1])) + (main_data_len - len(res['extratimex'][i]))+sampling_interval,
+                missing_timex = [float(tx) for tx in range(round(res['extratimex'][i][-1])+sampling_interval,
+                        round(res['extratimex'][i][-1]) + (main_data_len - len(res['extratimex'][i]))+sampling_interval,
                         sampling_interval)]
                 res['extratimex'][i].extend(missing_timex)
                 res['extratimex'][i] = res['extratimex'][i][:main_data_len] # ensure that the list is not too long

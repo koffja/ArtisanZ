@@ -1,11 +1,29 @@
 #
 # ABOUT
-# RoastLog Roast Profile importer for Artisan
+# RoastLog roast profile importer for artisan scope
+#
+# COPYRIGHT (C) 2010-2026 The artisan team represented by
+#   Marko Luther <marko.luther@gmx.net> (maintainer) and all contributors
+#
+# LICENSE
+# This program or module is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as
+# published by the Free Software Foundation, either version 3 of the
+# License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+#
+# MAINTAINER
+# Marko Luther, 2026
 
 import time as libtime
 import dateutil.parser
-import requests
-from requests_file import FileAdapter
 import re
 from lxml import html
 import logging
@@ -32,6 +50,8 @@ def extractProfileRoastLog(url:'QUrl',
         _eventsExternal2InternalValue:Callable[[int],float]) -> ProfileData|None:
     res:ProfileData = ProfileData() # the interpreted data set
     try:
+        import requests
+        from requests_file import FileAdapter
         s = requests.Session()
         s.mount('file://', FileAdapter())
         page = s.get(url.toString(), timeout=(4, 15), headers={'Accept-Encoding' : 'gzip'})
@@ -54,7 +74,7 @@ def extractProfileRoastLog(url:'QUrl',
         if 'Roasted on:' in tag_values:
             try:
                 dt = dateutil.parser.parse(tag_values['Roasted on:'])
-                dateQt = QDateTime.fromSecsSinceEpoch(int(round(dt.timestamp())))
+                dateQt = QDateTime.fromSecsSinceEpoch(round(dt.timestamp()))
                 if dateQt.isValid():
                     roastdate:str|None = encodeLocal(dateQt.date().toString())
                     if roastdate is not None:
@@ -65,7 +85,7 @@ def extractProfileRoastLog(url:'QUrl',
                     roasttime:str|None = encodeLocal(dateQt.time().toString())
                     if roasttime is not None:
                         res['roasttime'] = roasttime
-                    res['roastepoch'] = int(dateQt.toSecsSinceEpoch())
+                    res['roastepoch'] = dateQt.toSecsSinceEpoch()
                     res['roasttzoffset'] = libtime.timezone
             except Exception: # pylint: disable=broad-except
                 pass
@@ -85,7 +105,7 @@ def extractProfileRoastLog(url:'QUrl',
             res['roastertype'] = tag_values['Roaster:']
         if 'Roast level:' in tag_values:
             try:
-                c = int(round(float(tag_values['Roast level:'])))
+                c = round(float(tag_values['Roast level:']))
                 res['ground_color'] = c
             except Exception: # pylint: disable=broad-except
                 pass
@@ -235,9 +255,9 @@ def extractProfileRoastLog(url:'QUrl',
                 res['timeindex'] = timeindex
 
                 mode = 'F'
-                if timeindex[6] != 0 and len(temp1) > timeindex[6] and temp1[timeindex[6]] < 250:
+                if 0 < timeindex[6] < len(temp1) and temp1[timeindex[6]] < 250:
                     mode = 'C'
-                if timeindex[0] > -1 and len(temp1) > timeindex[0] and temp1[timeindex[0]] < 250:
+                if -1 < timeindex[0] < len(temp1) and temp1[timeindex[0]] < 250:
                     mode = 'C'
                 res['mode'] = mode
 

@@ -1,15 +1,17 @@
+from collections.abc import Sequence
+from decimal import Decimal
+from datetime import timedelta
 from pathlib import Path
 from json import load as json_load
 from typing import override, TypedDict, cast, Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from _pytest.python_api import ApproxScalar
     from _pytest.python import Metafunc
 
 from artisanlib.atypes import ProfileData
 from artisanlib.util import serialize, deserialize, csv_load, exportProfile2CSV
 
-from _pytest.python_api import ApproxBase, ApproxMapping, ApproxSequenceLike
+from _pytest.approx import Approx, ApproxScalar, ApproxMapping, ApproxSequenceLike
 import pytest
 
 #######
@@ -45,7 +47,18 @@ CSV_KEYS = [
 
 
 # the values to some keys are to be ignored, like the data which might be set to the import date
+
+values_not_exported = [
+    'hash',                # recomputed
+]
+
 values_to_ignore = [
+    'version',             # different between test and creation
+    'revision',            # different between test and creation
+    'artisan_os',          # different between test and creation
+    'artisan_os_version',  # different between test and creation
+    'artisan_os_arch',     # different between test and creation
+    'build',               # different between test and creation
     'roasttime',    # without seconds in CSV
     'roasttzoffset',
     'roastepoch',
@@ -64,12 +77,12 @@ values_to_ignore = [
 # see https://stackoverflow.com/questions/56046524/check-if-python-dictionaries-are-equal-allowing-small-difference-for-floats
 # by https://stackoverflow.com/users/8380999/iker
 
-class ApproxBaseReprMixin(ApproxBase):
+class ApproxBaseReprMixin(Approx[Any]):
 
     @override
     def __repr__(self) -> str:
 
-        def recur_repr_helper(obj:Any) -> dict[Any,Any]|tuple[Any,...]|list[Any]|ApproxScalar:
+        def recur_repr_helper(obj:Any) -> dict[Any,Any]|tuple[Any,...]|list[Any]|ApproxScalar[Any]:
             if isinstance(obj, dict):
                 return {k : recur_repr_helper(v) for k, v in obj.items()}
             if isinstance(obj, tuple):
@@ -80,8 +93,29 @@ class ApproxBaseReprMixin(ApproxBase):
 
         return f'approx({recur_repr_helper(self.expected)})'
 
+# overwrite init to prevent the trigger of "pytest.approx() does not support nested data structures:"
+# but ensure to __init__() the Approx
+class MyApproxSequenceLike(ApproxSequenceLike):
 
-class ApproxNestedSequenceLike(ApproxSequenceLike, ApproxBaseReprMixin):
+    def __init__(
+        self,
+        expected: Sequence[Any],
+        rel: float | Decimal | timedelta | None,
+        abs: float | Decimal | timedelta | None, # noqa: A002
+        nan_ok: bool,
+    ) -> None:
+        __tracebackhide__ = True
+
+        #: The expected value passed.
+        self.expected = expected
+        #: The relative tolerance.
+        self.rel = rel
+        #: The absolute tolerance.
+        self.abs = abs
+        #: Whether NaNs compare equal to NaN.
+        self.nan_ok = nan_ok
+
+class ApproxNestedSequenceLike(MyApproxSequenceLike, ApproxBaseReprMixin):
 
     @override
     def _yield_comparisons(self, actual:Any) -> Any:
@@ -95,10 +129,6 @@ class ApproxNestedSequenceLike(ApproxSequenceLike, ApproxBaseReprMixin):
                 yield from mapping._yield_comparisons(actual[k])
             else:
                 yield actual[k], self.expected[k]
-
-    @override
-    def _check_type(self) -> None:
-        pass
 
 
 
@@ -117,12 +147,9 @@ class ApproxNestedMapping(ApproxMapping, ApproxBaseReprMixin):
             else:
                 yield actual[k], self.expected[k]
 
-    @override
-    def _check_type(self) -> None:
-        pass
 
 
-def nested_approx(expected:Any, rel:float|None=None, absv:float|None=None, nan_ok:bool=False) -> ApproxBase:
+def nested_approx(expected:Any, rel:float|None=None, absv:float|None=None, nan_ok:bool=False) -> Approx[Any]:
     if isinstance(expected, dict):
         return ApproxNestedMapping(expected, rel, absv, nan_ok)
     if isinstance(expected, (tuple, list)):
@@ -178,13 +205,13 @@ class TestLoadCompare:
         with open(json_profile_path, encoding='utf-8') as infile:
             json_obj = json_load(infile)
             for key, value in alog_obj.items():
-                assert key in json_obj
-                if key in values_to_ignore:
-                    # even if the value is ignored, the key should be present
-                    assert key in json_obj
-                else:
-                    assert value == nested_approx(json_obj[key]) # approximation on nested data structures needed for rounding issues
-
+                if key not in values_not_exported:
+                    if key in values_to_ignore:
+                        # even if the value is ignored, the key should be present
+                        assert key in json_obj, f"{alog_file['filename']}: key {key} missing in json"
+                    else:
+                        # approximation on nested data structures needed for rounding issues
+                        assert value == nested_approx(json_obj[key]), f"{alog_file['filename']}: value {value} for key {key} different from json value {json_obj[key]}"
 
 
     def test_load_compare_alog_csv(self, alog_file:FileData) -> None:
@@ -201,12 +228,13 @@ class TestLoadCompare:
 
         with open(csv_profile_path, encoding='utf-8') as infile:
             csv_obj = csv_load(infile)
+
             for key in CSV_KEYS:
                 assert key in alog_obj
                 assert key in csv_obj
                 if key not in values_to_ignore:
-                    assert alog_obj[key] == nested_approx(csv_obj[key]) # type: ignore[literal-required] # approximation on nested data structures needed for rounding issues
-
+                    # approximation on nested data structures needed for rounding issues
+                    assert alog_obj[key] == nested_approx(csv_obj[key]), f"{alog_file['filename']}: value {alog_obj[key]} for key {key} different from csv value {csv_obj[key]}" # type: ignore[literal-required]
 
 
     def test_load_compare_json_csv(self, json_file:FileData) -> None:
@@ -228,8 +256,8 @@ class TestLoadCompare:
                     assert key in json_obj
                     assert key in csv_obj
                     if key not in values_to_ignore:
-                        assert json_obj[key] == nested_approx(csv_obj[key]) # type: ignore[literal-required] # approximation on nested data structures needed for rounding issues
-
+                        # approximation on nested data structures needed for rounding issues
+                        assert json_obj[key] == nested_approx(csv_obj[key]), f"{json_file['filename']}: value {json_obj[key]} for key {key} different from re-loaded CSV value {csv_obj[key]}" # type: ignore[literal-required]
 
 
 class TestLoadSaveLoad:
@@ -259,7 +287,8 @@ class TestLoadSaveLoad:
                 # even if the value is ignored, the key should be present
                 assert key in alog_obj_reloaded
             else:
-                assert value == nested_approx(alog_obj_reloaded[key]) # type: ignore[literal-required] # approximation on nested data structures needed for rounding issues
+                # approximation on nested data structures needed for rounding issues
+                assert value == nested_approx(alog_obj_reloaded[key]), f"{alog_file['filename']}: value {value} for key {key} different from re-loaded alog value {alog_obj_reloaded[key]}" # type: ignore[literal-required]
 
     # load alog/save csv/re-load csv/compare
     def test_load_save_load_csv(self, alog_file:FileData, tmp_path:Path) -> None:
@@ -268,6 +297,10 @@ class TestLoadSaveLoad:
         if not alog_profile_path.exists():
             pytest.skip('Test .alog profile file not found')
         alog_obj = deserialize(str(alog_profile_path))
+
+
+        if 'timex' in alog_obj and len(alog_obj['timex'])>1 and pytest.approx(alog_obj['timex'][1] - alog_obj['timex'][0]) != 1.0:
+            pytest.skip('sampling Rate != 1sec. CSV export is resampled to 1sec and thus cannot be compared.')
 
         # Temp file
         csv_temp_profile_path = (tmp_path / f"{alog_file['filename']}.csv")
@@ -284,4 +317,5 @@ class TestLoadSaveLoad:
                 assert key in alog_obj
                 assert key in csv_obj_reloaded
                 if key not in values_to_ignore:
-                    assert alog_obj[key] == nested_approx(csv_obj_reloaded[key]) # type: ignore[literal-required] # approximation on nested data structures needed for rounding issues
+                    # approximation on nested data structures needed for rounding issues
+                    assert alog_obj[key] == nested_approx(csv_obj_reloaded[key]), f"{alog_file['filename']}: value {alog_obj[key]} for key {key} different from csv value {csv_obj_reloaded[key]}" # type: ignore[literal-required]

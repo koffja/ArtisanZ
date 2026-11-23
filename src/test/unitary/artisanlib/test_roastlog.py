@@ -36,7 +36,7 @@ import pytest
 
 
 @pytest.fixture(scope='session', autouse=True)
-def ensure_roastlog_isolation() -> Generator[None, None, None]:
+def ensure_roastlog_isolation() -> Generator[None]:
     """
     Ensure roastlog module is properly isolated for tests at session level.
 
@@ -74,7 +74,7 @@ def ensure_roastlog_isolation() -> Generator[None, None, None]:
 
 
 @pytest.fixture(autouse=True)
-def reset_roastlog_state() -> Generator[None, None, None]:
+def reset_roastlog_state() -> Generator[None]:
     """Reset roastlog test state before each test to ensure test independence."""
     # Before each test, ensure requests and lxml modules are available
     # This is critical when other tests have mocked these modules
@@ -237,12 +237,12 @@ class TestRoastLogImplementationDetails:
         # Test that temperature mode detection exists
         assert "mode = 'F'" in source_content
         assert (
-            'if timeindex[6] != 0 and len(temp1) > timeindex[6] and temp1[timeindex[6]] < 250:'
+            'if 0 < timeindex[6] < len(temp1) and temp1[timeindex[6]] < 250:'
             in source_content
         )
         assert "mode = 'C'" in source_content
         assert (
-            'if timeindex[0] > -1 and len(temp1) > timeindex[0] and temp1[timeindex[0]] < 250:'
+            'if -1 < timeindex[0] < len(temp1) and temp1[timeindex[0]] < 250:'
             in source_content
         )
 

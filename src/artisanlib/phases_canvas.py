@@ -1,17 +1,27 @@
 #
 # ABOUT
-# Artisan Phases Canvas
-
+# artisan scope phases canvas
+#
+# COPYRIGHT (C) 2010-2026 The artisan team represented by
+#   Marko Luther <marko.luther@gmx.net> (maintainer) and all contributors
+#
 # LICENSE
-# This program or module is free software: you can redistribute it and/or
-# modify it under the terms of the GNU General Public License as published
-# by the Free Software Foundation, either version 2 of the License, or
-# version 3 of the License, or (at your option) any later version. It is
-# provided for educational purposes and is distributed in the hope that
-# it will be useful, but WITHOUT ANY WARRANTY; without even the implied
-# warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See
-# the GNU General Public License for more details.
-
+# This program or module is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as
+# published by the Free Software Foundation, either version 3 of the
+# License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+#
+# MAINTAINER
+# Marko Luther, 2026
+#
 # AUTHOR
 # Marko Luther, 2023
 
@@ -208,7 +218,9 @@ class tphasescanvas(QObject):
             self.aw.scroller.setVisible(True)
             # set canvas background color
             background_color = self.aw.qmc.palette['background']
-            self.canvas.setStyleSheet(f'background-color: {background_color[:7]}')
+#            self.canvas.setStyleSheet(f'background-color: {background_color[:7]}')
+#            self.canvas.setStyleSheet(f"background-color:{rgba_colorname2argb_colorname(self.aw.qmc.palette['canvas'])}")
+            self.canvas.fig.patch.set_facecolor(self.aw.qmc.palette['canvas'])
             # maximum total roast time of all given profiles
             max_total_time = max(p[1] for p in self.data)
             # set font
@@ -233,7 +245,7 @@ class tphasescanvas(QObject):
                 labels = []
                 if all(phases_times):
                     # all phases defined
-                    if int(round(total_time)) == int(round(sum(phases_times))):
+                    if round(total_time) == round(sum(phases_times)):
                         phases_percentages = [(phase_time/total_time) * 100. for phase_time in phases_times]
                         extended_phases_percentages = [self.m,self.g] + phases_percentages + [self.g,self.m*total_time/max_total_time]
                         widths = numpy.array(extended_phases_percentages)

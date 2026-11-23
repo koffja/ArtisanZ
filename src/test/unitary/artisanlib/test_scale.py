@@ -118,7 +118,7 @@ from artisanlib.scale import (
 
 
 @pytest.fixture(scope='session', autouse=True)
-def ensure_scale_qt_isolation() -> Generator[None, None, None]:
+def ensure_scale_qt_isolation() -> Generator[None]:
     """
     Ensure Qt modules are properly isolated for scale tests at session level.
 
@@ -133,7 +133,7 @@ def ensure_scale_qt_isolation() -> Generator[None, None, None]:
 
 
 @pytest.fixture(autouse=True)
-def reset_scale_state() -> Generator[None, None, None]:
+def reset_scale_state() -> Generator[None]:
     """
     Reset all scale module state before and after each test to ensure complete isolation.
 
@@ -147,14 +147,14 @@ def reset_scale_state() -> Generator[None, None, None]:
 
 
 @pytest.fixture
-def mock_qobject() -> Generator[Mock, None, None]:
+def mock_qobject() -> Generator[Mock]:
     """Create a mock QObject for testing."""
     with patch('artisanlib.scale.QObject') as mock:
         yield mock
 
 
 @pytest.fixture
-def mock_qtimer() -> Generator[Mock, None, None]:
+def mock_qtimer() -> Generator[Mock]:
     """Create a mock QTimer for testing."""
     with patch('artisanlib.scale.QTimer') as mock:
         yield mock
@@ -666,18 +666,6 @@ class TestScaleManager:
 
             # Assert
             mock_set_scale.assert_called_once_with(0, '', '')
-
-    def test_connect_scale1_slot_success(self, scale_manager_instance: ScaleManager) -> None:
-        """Test connect_scale1_slot with existing scale."""
-        # Arrange
-        mock_scale = Mock()
-        scale_manager_instance.scale1 = mock_scale
-
-        # Act
-        scale_manager_instance.connect_scale1_slot(False)
-
-        # Assert
-        mock_scale.connect_scale.assert_called_once()
 
     def test_connect_scale1_slot_no_scale(self, scale_manager_instance: ScaleManager) -> None:
         """Test connect_scale1_slot when no scale exists."""

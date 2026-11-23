@@ -167,7 +167,7 @@ def register_connection_module() -> None:
 
 
 @pytest.fixture(autouse=True)
-def isolated_test_environment() -> Generator[None, None, None]:
+def isolated_test_environment() -> Generator[None]:
     """Provide completely isolated test environment for each test."""
     # Use patch.dict to ensure complete isolation from other test files
     with patch.dict(
@@ -219,7 +219,7 @@ def isolated_test_environment() -> Generator[None, None, None]:
 
 
 @pytest.fixture(scope='session', autouse=True)
-def ensure_connection_isolation() -> Generator[None, None, None]:
+def ensure_connection_isolation() -> Generator[None]:
     """
     Ensure modules are properly isolated for connection tests at session level.
 
@@ -254,7 +254,7 @@ def ensure_connection_isolation() -> Generator[None, None, None]:
 
 
 @pytest.fixture(scope='module', autouse=True)
-def cleanup_connection_mocks() -> Generator[None, None, None]:
+def cleanup_connection_mocks() -> Generator[None]:
     """
     Clean up connection test mocks at module level to prevent cross-file contamination.
 
@@ -322,7 +322,7 @@ def mock_app_window() -> Mock:
 
 
 @pytest.fixture(autouse=True)
-def reset_connection_state() -> Generator[None, None, None]:
+def reset_connection_state() -> Generator[None]:
     """Reset connection module state before and after each test to ensure complete isolation."""
     register_connection_module()
     # Store original values
@@ -654,7 +654,7 @@ class TestHeaderGeneration:
 
             # Assert
             assert 'user-agent' in headers
-            assert 'Artisan/2.8.0' in headers['user-agent']
+            assert 'artisan/2.8.0' in headers['user-agent']
             assert 'macOS' in headers['user-agent']
             assert 'Accept-Charset' in headers
             assert headers['Accept-Charset'] == 'utf-8'
@@ -803,7 +803,7 @@ class TestSendData:
         with patch(
             'plus.connection.getHeadersAndData',
             return_value=({'Content-Type': 'application/json'}, b'{"test":"data"}'),
-        ), patch('plus.connection.requests.post', return_value=mock_response) as mock_post, patch(
+        ), patch('requests.post', return_value=mock_response) as mock_post, patch(
             'plus.connection.config'
         ) as mock_config:
 
@@ -830,7 +830,7 @@ class TestSendData:
         with patch(
             'plus.connection.getHeadersAndData',
             return_value=({'Content-Type': 'application/json'}, b'{"test":"data"}'),
-        ), patch('plus.connection.requests.put', return_value=mock_response) as mock_put, patch(
+        ), patch('requests.put', return_value=mock_response) as mock_put, patch(
             'plus.connection.config'
         ) as mock_config:
 
@@ -861,7 +861,7 @@ class TestSendData:
             'plus.connection.getHeadersAndData',
             return_value=({'Content-Type': 'application/json'}, b'{"test":"data"}'),
         ), patch(
-            'plus.connection.requests.post', side_effect=[mock_401_response, mock_response]
+            'requests.post', side_effect=[mock_401_response, mock_response]
         ) as mock_post, patch(
             'plus.connection.authentify', return_value=True
         ) as mock_auth, patch(
@@ -895,7 +895,7 @@ class TestSendData:
             'plus.connection.getHeadersAndData',
             return_value=({'Content-Type': 'application/json'}, b'{"test":"data"}'),
         ), patch(
-            'plus.connection.requests.post', return_value=mock_401_response
+            'requests.post', return_value=mock_401_response
         ) as mock_post, patch(
             'plus.connection.authentify', return_value=False
         ) as mock_auth, patch(
@@ -929,7 +929,7 @@ class TestSendData:
             'plus.connection.getHeadersAndData',
             return_value=({'Content-Type': 'application/json'}, b'{"test":"data"}'),
         ), patch(
-            'plus.connection.requests.post', return_value=mock_401_response
+            'requests.post', return_value=mock_401_response
         ) as mock_post, patch(
             'plus.connection.authentify'
         ) as mock_auth, patch(

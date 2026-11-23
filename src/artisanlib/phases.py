@@ -1,31 +1,44 @@
 #
 # ABOUT
-# Artisan Phases Dialog
-
+# artisan scope phases dialog
+#
+# COPYRIGHT (C) 2010-2026 The artisan team represented by
+#   Marko Luther <marko.luther@gmx.net> (maintainer) and all contributors
+#
 # LICENSE
-# This program or module is free software: you can redistribute it and/or
-# modify it under the terms of the GNU General Public License as published
-# by the Free Software Foundation, either version 2 of the License, or
-# version 3 of the License, or (at your option) any later version. It is
-# provided for educational purposes and is distributed in the hope that
-# it will be useful, but WITHOUT ANY WARRANTY; without even the implied
-# warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See
-# the GNU General Public License for more details.
-
+# This program or module is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as
+# published by the Free Software Foundation, either version 3 of the
+# License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+#
+# MAINTAINER
+# Marko Luther, 2026
+#
 # AUTHOR
 # Marko Luther, 2023
 
 from typing import TYPE_CHECKING
-from artisanlib.dialogs import ArtisanDialog
-from artisanlib.main import UI_MODE
-
-from PyQt6.QtCore import Qt, pyqtSlot, QSettings
-from PyQt6.QtWidgets import (QApplication, QLabel, QDialogButtonBox, QGridLayout,
-    QComboBox, QHBoxLayout, QVBoxLayout, QCheckBox, QLayout, QSpinBox, QSizePolicy)
-
 if TYPE_CHECKING:
     from artisanlib.main import ApplicationWindow # noqa: F401 # pylint: disable=unused-import
     from PyQt6.QtWidgets import QWidget, QPushButton # pylint: disable=unused-import
+
+from PyQt6.QtCore import Qt, pyqtSlot, QSettings
+from PyQt6.QtGui import QIcon
+from PyQt6.QtWidgets import (QApplication, QLabel, QDialogButtonBox, QGridLayout,
+    QComboBox, QHBoxLayout, QVBoxLayout, QCheckBox, QLayout, QSpinBox, QSizePolicy)
+
+from artisanlib.dialogs import ArtisanDialog
+from artisanlib.main import UI_MODE
+from artisanlib.util import getStyleIconPath
+from artisanlib.styles import spin_box_style, artisan_minor_push_button_style
 
 class phasesGraphDlg(ArtisanDialog):
     def __init__(self, parent:'QWidget', aw:'ApplicationWindow') -> None:
@@ -34,12 +47,12 @@ class phasesGraphDlg(ArtisanDialog):
         self.setModal(True)
         # remember initial values for Cancel action
         self.phases = list(self.aw.qmc.phases)
-        self.org_phasesbuttonflag = bool(self.aw.qmc.phasesbuttonflag)
-        self.org_fromBackgroundflag = bool(self.aw.qmc.phasesfromBackgroundflag)
-        self.org_watermarksflag = bool(self.aw.qmc.watermarksflag)
-        self.org_phasesLCDflag = bool(self.aw.qmc.phasesLCDflag)
-        self.org_autoDRYflag = bool(self.aw.qmc.autoDRYflag)
-        self.org_autoFCsFlag = bool(self.aw.qmc.autoFCsFlag)
+        self.org_phasesbuttonflag = self.aw.qmc.phasesbuttonflag
+        self.org_fromBackgroundflag = self.aw.qmc.phasesfromBackgroundflag
+        self.org_watermarksflag = self.aw.qmc.watermarksflag
+        self.org_phasesLCDflag = self.aw.qmc.phasesLCDflag
+        self.org_autoDRYflag = self.aw.qmc.autoDRYflag
+        self.org_autoFCsFlag = self.aw.qmc.autoFCsFlag
         self.org_phasesLCDmode_l = list(self.aw.qmc.phasesLCDmode_l)
         self.org_phasesLCDmode_all = list(self.aw.qmc.phasesLCDmode_all)
         #
@@ -49,21 +62,27 @@ class phasesGraphDlg(ArtisanDialog):
         minf = QLabel(QApplication.translate('Label', 'min','abbrev of minimum'))
         maxf = QLabel(QApplication.translate('Label', 'max'))
         self.startdry = QSpinBox()
+        self.startdry.setStyleSheet(spin_box_style(self.aw.app.darkmode))
         self.startdry.setAlignment(Qt.AlignmentFlag.AlignRight)
         self.startdry.setMinimumWidth(80)
         self.enddry = QSpinBox()
+        self.enddry.setStyleSheet(spin_box_style(self.aw.app.darkmode))
         self.enddry.setAlignment(Qt.AlignmentFlag.AlignRight)
         self.enddry.setMinimumWidth(80)
         self.startmid = QSpinBox()
+        self.startmid.setStyleSheet(spin_box_style(self.aw.app.darkmode))
         self.startmid.setAlignment(Qt.AlignmentFlag.AlignRight)
         self.startmid.setMinimumWidth(80)
         self.endmid = QSpinBox()
+        self.endmid.setStyleSheet(spin_box_style(self.aw.app.darkmode))
         self.endmid.setAlignment(Qt.AlignmentFlag.AlignRight)
         self.endmid.setMinimumWidth(80)
         self.startfinish = QSpinBox()
+        self.startfinish.setStyleSheet(spin_box_style(self.aw.app.darkmode))
         self.startfinish.setAlignment(Qt.AlignmentFlag.AlignRight)
         self.startfinish.setMinimumWidth(80)
         self.endfinish = QSpinBox()
+        self.endfinish.setStyleSheet(spin_box_style(self.aw.app.darkmode))
         self.endfinish.setAlignment(Qt.AlignmentFlag.AlignRight)
         self.endfinish.setMinimumWidth(80)
         self._phase_temperature_spinboxes = (
@@ -109,19 +128,19 @@ class phasesGraphDlg(ArtisanDialog):
         self.pushbuttonflag = QCheckBox(QApplication.translate('CheckBox','Auto Adjusted'))
         self.pushbuttonflag.setToolTip(QApplication.translate(
             'Tooltip', 'Turn off Auto Adjusted to edit all phase temperatures manually'))
-        self.pushbuttonflag.setChecked(bool(self.aw.qmc.phasesbuttonflag))
+        self.pushbuttonflag.setChecked(self.aw.qmc.phasesbuttonflag)
         self.pushbuttonflag.stateChanged.connect(self.pushbuttonflagChanged)
         self.fromBackgroundflag = QCheckBox(QApplication.translate('CheckBox','From Background'))
-        self.fromBackgroundflag.setChecked(bool(self.aw.qmc.phasesfromBackgroundflag))
+        self.fromBackgroundflag.setChecked(self.aw.qmc.phasesfromBackgroundflag)
         self.fromBackgroundflag.stateChanged.connect(self.fromBackgroundflagChanged)
         self.watermarksflag = QCheckBox(QApplication.translate('CheckBox','Watermarks'))
-        self.watermarksflag.setChecked(bool(self.aw.qmc.watermarksflag))
+        self.watermarksflag.setChecked(self.aw.qmc.watermarksflag)
         self.phasesLCDflag = QCheckBox(QApplication.translate('CheckBox','Phases LCDs'))
-        self.phasesLCDflag.setChecked(bool(self.aw.qmc.phasesLCDflag))
+        self.phasesLCDflag.setChecked(self.aw.qmc.phasesLCDflag)
         self.autoDRYflag = QCheckBox(QApplication.translate('CheckBox','Auto DRY'))
-        self.autoDRYflag.setChecked(bool(self.aw.qmc.autoDRYflag))
+        self.autoDRYflag.setChecked(self.aw.qmc.autoDRYflag)
         self.autoFCsFlag = QCheckBox(QApplication.translate('CheckBox','Auto FCs'))
-        self.autoFCsFlag.setChecked(bool(self.aw.qmc.autoFCsFlag))
+        self.autoFCsFlag.setChecked(self.aw.qmc.autoFCsFlag)
         self.watermarksflag.stateChanged.connect(self.watermarksflagChanged)
         self.phasesLCDflag.stateChanged.connect(self.phasesLCDsflagChanged)
         self.autoDRYflag.stateChanged.connect(self.autoDRYflagChanged)
@@ -135,6 +154,9 @@ class phasesGraphDlg(ArtisanDialog):
             setDefaultButton.setFocusPolicy(Qt.FocusPolicy.NoFocus)
             setDefaultButton.clicked.connect(self.setdefault)
             self.setButtonTranslations(setDefaultButton,'Restore Defaults',QApplication.translate('Button','Restore Defaults'))
+            setDefaultButton.setStyleSheet(artisan_minor_push_button_style(self.aw.app.darkmode))
+            setDefaultButton.setIcon(QIcon(getStyleIconPath(
+                'undo-03-stroke-rounded-dark.svg' if self.aw.app.darkmode else 'undo-03-stroke-rounded-white.svg')))
 
         phaseLayout = QGridLayout()
         phaseLayout.addWidget(minf,0,1,Qt.AlignmentFlag.AlignHCenter|Qt.AlignmentFlag.AlignBottom)
@@ -175,11 +197,11 @@ class phasesGraphDlg(ArtisanDialog):
         phaseLayout.addWidget(self.lcdmodeComboBox_fin,3,3)
 
         self.lcdmodeComboBox_dry.setCurrentIndex(self.aw.qmc.phasesLCDmode_l[0])
-        self.lcdmodeComboBox_dry.setEnabled(not bool(self.aw.qmc.phasesLCDmode_all[0]))
+        self.lcdmodeComboBox_dry.setEnabled(not self.aw.qmc.phasesLCDmode_all[0])
         self.lcdmodeComboBox_mid.setCurrentIndex(self.aw.qmc.phasesLCDmode_l[1])
-        self.lcdmodeComboBox_mid.setEnabled(not bool(self.aw.qmc.phasesLCDmode_all[1]))
+        self.lcdmodeComboBox_mid.setEnabled(not self.aw.qmc.phasesLCDmode_all[1])
         self.lcdmodeComboBox_fin.setCurrentIndex(self.aw.qmc.phasesLCDmode_l[2])
-        self.lcdmodeComboBox_fin.setEnabled(not bool(self.aw.qmc.phasesLCDmode_all[2]))
+        self.lcdmodeComboBox_fin.setEnabled(not self.aw.qmc.phasesLCDmode_all[2])
 
         self.lcdmodeFlag_all_fin = QCheckBox()
         self.lcdmodeFlag_all_fin.setToolTip(QApplication.translate('Tooltip','Display all information (time, percentage and temperature) of the last phase across all 3 phases LCDs in parallel'))
@@ -241,7 +263,7 @@ class phasesGraphDlg(ArtisanDialog):
     @pyqtSlot(int)
     def lcdmodeFlagFinChanged(self, value:int) -> None:
         self.aw.qmc.phasesLCDmode_all[2] = bool(value)
-        self.lcdmodeComboBox_fin.setEnabled(not bool(self.aw.qmc.phasesLCDmode_all[2]))
+        self.lcdmodeComboBox_fin.setEnabled(not self.aw.qmc.phasesLCDmode_all[2])
 
     @pyqtSlot(int)
     def lcdmodeComboBox_dryChanged(self, _:int) -> None:
@@ -266,17 +288,21 @@ class phasesGraphDlg(ArtisanDialog):
         if self.aw.qmc.phasesfromBackgroundflag and self.aw.qmc.backgroundprofile is not None:
             # adjust phases by DryEnd and FCs events from background profile
             if self.aw.qmc.timeindexB[1]:
-                self.aw.qmc.phases[1] = int(round(self.aw.qmc.temp2B[self.aw.qmc.timeindexB[1]]))
+                self.aw.qmc.phases[1] = round(self.aw.qmc.temp2B[self.aw.qmc.timeindexB[1]])
             if self.aw.qmc.timeindexB[2]:
-                self.aw.qmc.phases[2] = int(round(self.aw.qmc.temp2B[self.aw.qmc.timeindexB[2]]))
+                self.aw.qmc.phases[2] = round(self.aw.qmc.temp2B[self.aw.qmc.timeindexB[2]])
 
     def events2phases(self) -> None:
         if self.aw.qmc.phasesbuttonflag:
             # adjust phases by DryEnd and FCs events
             if self.aw.qmc.timeindex[1]:
-                self.aw.qmc.phases[1] = int(round(self.aw.qmc.temp2[self.aw.qmc.timeindex[1]]))
+                self.aw.qmc.phases[1] = round(self.aw.qmc.temp2[self.aw.qmc.timeindex[1]])
+            self.enddry.setDisabled(True)
+            self.startmid.setDisabled(True)
             if self.aw.qmc.timeindex[2]:
-                self.aw.qmc.phases[2] = int(round(self.aw.qmc.temp2[self.aw.qmc.timeindex[2]]))
+                self.aw.qmc.phases[2] = round(self.aw.qmc.temp2[self.aw.qmc.timeindex[2]])
+            self.endmid.setDisabled(True)
+            self.startfinish.setDisabled(True)
         for spin_box in self._auto_adjusted_phase_spinboxes:
             spin_box.setEnabled(not bool(self.aw.qmc.phasesbuttonflag))
 
@@ -353,12 +379,12 @@ class phasesGraphDlg(ArtisanDialog):
     @pyqtSlot()
     def cancel(self) -> None:
         self.aw.qmc.phases = list(self.phases)
-        self.aw.qmc.phasesbuttonflag = bool(self.org_phasesbuttonflag)
-        self.aw.qmc.phasesfromBackgroundflag = bool(self.org_fromBackgroundflag)
-        self.aw.qmc.watermarksflag = bool(self.org_watermarksflag)
-        self.aw.qmc.phasesLCDflag = bool(self.org_phasesLCDflag)
-        self.aw.qmc.autoDRYflag = bool(self.org_autoDRYflag)
-        self.aw.qmc.autoFCsFlag = bool(self.org_autoFCsFlag)
+        self.aw.qmc.phasesbuttonflag = self.org_phasesbuttonflag
+        self.aw.qmc.phasesfromBackgroundflag = self.org_fromBackgroundflag
+        self.aw.qmc.watermarksflag = self.org_watermarksflag
+        self.aw.qmc.phasesLCDflag = self.org_phasesLCDflag
+        self.aw.qmc.autoDRYflag = self.org_autoDRYflag
+        self.aw.qmc.autoFCsFlag = self.org_autoFCsFlag
         self.aw.qmc.phasesLCDmode_l = list(self.org_phasesLCDmode_l)
         self.aw.qmc.phasesLCDmode_all = list(self.org_phasesLCDmode_all)
         self.aw.qmc.redraw(recomputeAllDeltas=False)
@@ -369,13 +395,13 @@ class phasesGraphDlg(ArtisanDialog):
         self.reject()
 
     def getphases(self) -> None:
-        self.startdry.setValue(int(round(self.aw.qmc.phases[0])))
+        self.startdry.setValue(round(self.aw.qmc.phases[0]))
         self.startdry.repaint()
-        self.enddry.setValue(int(round(self.aw.qmc.phases[1])))
+        self.enddry.setValue(round(self.aw.qmc.phases[1]))
         self.enddry.repaint()
-        self.endmid.setValue(int(round(self.aw.qmc.phases[2])))
+        self.endmid.setValue(round(self.aw.qmc.phases[2]))
         self.endmid.repaint()
-        self.endfinish.setValue(int(round(self.aw.qmc.phases[3])))
+        self.endfinish.setValue(round(self.aw.qmc.phases[3]))
         self.endfinish.repaint()
 
     @pyqtSlot(bool)

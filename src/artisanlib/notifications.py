@@ -1,17 +1,27 @@
 #
 # ABOUT
-# Artisan Notification System
-
+# artisan scope notification aystem
+#
+# COPYRIGHT (C) 2010-2026 The artisan team represented by
+#   Marko Luther <marko.luther@gmx.net> (maintainer) and all contributors
+#
 # LICENSE
-# This program or module is free software: you can redistribute it and/or
-# modify it under the terms of the GNU General Public License as published
-# by the Free Software Foundation, either version 2 of the License, or
-# version 3 of the License, or (at your option) any later version. It is
-# provided for educational purposes and is distributed in the hope that
-# it will be useful, but WITHOUT ANY WARRANTY; without even the implied
-# warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See
-# the GNU General Public License for more details.
-
+# This program or module is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as
+# published by the Free Software Foundation, either version 3 of the
+# License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+#
+# MAINTAINER
+# Marko Luther, 2026
+#
 # AUTHOR
 # Marko Luther, 2023
 
@@ -101,12 +111,12 @@ class Notification:
             return self._title
         if seconds_to < 7*24*60*60:
             # created within the past 7 days
-            dt = QDateTime.fromSecsSinceEpoch(int(round(self._created)))
+            dt = QDateTime.fromSecsSinceEpoch(round(self._created))
             day_name = QLocale().standaloneDayName(dt.date().dayOfWeek(), QLocale.FormatType.LongFormat)
             return f'{self._title} ({day_name})'
         # created more than 7 days ago
         ll = QLocale()
-        dt = QDateTime.fromSecsSinceEpoch(int(round(self._created)))
+        dt = QDateTime.fromSecsSinceEpoch(round(self._created))
         short_date = ll.toString(dt.date(), ll.dateFormat(QLocale.FormatType.NarrowFormat))
         return f'{self._title} ({short_date})'
 
@@ -181,21 +191,23 @@ class NotificationManager(QObject):
     # returns the plus icon as QIcon
     @staticmethod
     def notificationPlusIcon() -> QIcon:
-        basedir = os.path.join(getResourcePath(),'Icons')
-        if sys.platform.startswith('darwin'):
-            p = os.path.join(basedir, 'plus-notification.png')
-        else:
-            p = os.path.join(basedir, 'plus-notification.svg')
-        return QIcon(p)
+        return NotificationManager.notificationArtisanIcon()
+#        basedir = os.path.join(getResourcePath(),'Icons')
+#        if sys.platform.startswith('darwin'):
+#            p = os.path.join(basedir, 'plus-notification.png')
+#        else:
+#            p = os.path.join(basedir, 'plus-notification.svg')
+#        return QIcon(p)
 
     # returns the Artisan icon as QIcon
     @staticmethod
     def notificationArtisanIcon() -> QIcon:
         basedir = os.path.join(getResourcePath(),'Icons')
-        if sys.platform.startswith('darwin'):
-            p = os.path.join(basedir, 'artisan-notification.png')
-        else:
-            p = os.path.join(basedir, 'artisan-notification.svg')
+#        if sys.platform.startswith('darwin'):
+#            p = os.path.join(basedir, 'artisan-notification.png')
+#        else:
+#            p = os.path.join(basedir, 'artisan-notification.svg')
+        p = os.path.join(basedir, 'artisan-notification.svg')
         return QIcon(p)
 
     @pyqtSlot()
