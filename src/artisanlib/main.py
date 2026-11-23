@@ -5546,7 +5546,7 @@ class ApplicationWindow(QMainWindow):
                     tooltip = translatedServiceMessage('Disconnect from the artisan platform', context='Tooltip')
             else:
                 plus_icon = 'plus-off'
-                tooltip = translatedServiceMessage('Sign in to your artisan account', context='Plus')
+                tooltip = translatedServiceMessage('Connect artisan.plus', context='Tooltip')
             plus_icon = 'cotrix'
             plus_icon += '.svg'
             if subscription_icon is not None:

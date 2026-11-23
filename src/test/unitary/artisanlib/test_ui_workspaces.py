@@ -43,6 +43,17 @@ class FakeToolbar:
         self.actions.append('remove')
 
 
+class FakeDashboard:
+    def __init__(self) -> None:
+        self.updates = 0
+
+    def update_dashboard(self) -> None:
+        self.updates += 1
+
+    def dashboard_active(self) -> bool:
+        return False
+
+
 class FakeWorkspaceStatusModel:
     def __init__(self) -> None:
         self.modes: list[object] = []
@@ -131,6 +142,7 @@ class FakeApplicationWindow:
         self.deviceSetupModeAction = FakeAction()
         self.expertModeAction = FakeAction()
         self.ntb = FakeToolbar()
+        self.dashboard = FakeDashboard()
         self.workspaceStatusModel: FakeWorkspaceStatusModel | None = None
         self.menus: list[object] = []
         self.announcements = 0
@@ -218,6 +230,7 @@ class FakeFileMenuApplicationWindow:
 class FakeConfigMenuApplicationWindow:
     def __init__(self) -> None:
         self.machineMenu = 'machine'
+        self.machineNameAction = 'machine-name'
         self.deviceAction = 'device'
         self.commportAction = 'comm-port'
         self.calibrateDelayAction = 'calibrate-delay'
@@ -925,6 +938,7 @@ def test_application_window_create_config_menu_preserves_current_policy_visibili
     expected_items = {
         main.UI_MODE.EXPERT: [
             'machine',
+            'machine-name',
             'device',
             'comm-port',
             'separator',
@@ -952,6 +966,7 @@ def test_application_window_create_config_menu_preserves_current_policy_visibili
         ],
         main.UI_MODE.DEFAULT: [
             'machine',
+            'machine-name',
             'separator',
             'events',
             'alarm',

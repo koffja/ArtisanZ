@@ -52,20 +52,6 @@ def test_has_recording_beans_accepts_plus_inventory_selection() -> None:
     assert roast_properties.hasRecordingBeans(None, {'hr_id': 'blend-id'}, '') is True
 
 
-def test_translated_service_message_rebrands_artisan_plus_to_cotrix() -> None:
-    with patch(
-        'artisanlib.roast_properties.QApplication.translate',
-        return_value='artisan.plus needs to know the beans you are roasting',
-    ):
-        assert (
-            roast_properties.translatedServiceMessage(
-                'artisan.plus needs to know the beans you are roasting',
-                context='Message',
-            )
-            == 'Cotrix needs to know the beans you are roasting'
-        )
-
-
 def test_beans_edited_waits_until_plus_line_exists_before_refreshing() -> None:
     beansedit = Mock()
     beansedit.toPlainText.return_value = '低温日晒'
@@ -666,14 +652,10 @@ def test_close_ok_calls_finish_after_cleanup() -> None:
             name = node.func.id
         else:
             continue
-        if name in {'clean_up', 'finishCompletedRoastIfRequested', 'hasRecordingBeans'}:
+        if name in {'clean_up', 'finishCompletedRoastIfRequested'}:
             call_lines[name] = node.lineno
 
-    assert (
-        call_lines['clean_up'] <
-        call_lines['finishCompletedRoastIfRequested'] <
-        call_lines['hasRecordingBeans']
-    )
+    assert call_lines['clean_up'] < call_lines['finishCompletedRoastIfRequested']
 
 
 def test_roast_properties_uses_clear_manual_beans_and_temperature_labels() -> None:

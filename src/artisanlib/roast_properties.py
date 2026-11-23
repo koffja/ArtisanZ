@@ -995,7 +995,7 @@ class editGraphDlg(ArtisanResizeablDialog):
         titlelabel = QLabel('<b>' + QApplication.translate('Label', 'Roast Title') + '</b>')
         titlelabel.setToolTip(QApplication.translate('Tooltip', 'Short name shown on the roast profile and lists'))
         self.titleedit = RoastsComboBox(self)
-        self.titleedit.setToolTip(QApplication.translate('Tooltip','Enter the roast title or set properties by choosing from a recent roast'))
+        self.titleedit.setToolTip(QApplication.translate('Tooltip', 'Short name shown on the roast profile and lists'))
         self.titleedit.init(self.aw.recentRoastsMenuList, self.aw.qmc.title) # we need to initialize the popup and lineedit
         self.titleedit.setMinimumWidth(100)
         self.titleedit.setSizePolicy(QSizePolicy.Policy.MinimumExpanding,QSizePolicy.Policy.Fixed)

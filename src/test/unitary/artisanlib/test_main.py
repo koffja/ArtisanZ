@@ -3376,7 +3376,6 @@ def test_update_plus_status_uses_cotrix_brand_and_hides_empty_subscription(
         editgraphdialog=True,
         qmc=SimpleNamespace(adderror=Mock()),
     )
-    monkeypatch.setattr(main, 'svgsupport', True)
     monkeypatch.setattr(
         main,
         'translatedServiceMessage',
