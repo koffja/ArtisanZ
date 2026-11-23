@@ -107,19 +107,6 @@ def test_recent_roast_enabled_refreshes_plus_line_after_title_change() -> None:
     update_plus_selected_line.assert_called_once_with()
 
 
-def test_should_not_queue_upload_when_properties_opened_to_start_recording() -> None:
-    assert roast_properties.shouldQueueRoastPropertiesUpload(
-        flagstart=True,
-        safesaveflag=True,
-        charge_index=0,
-        drop_index=60,
-        plus_account='coffja@qq.com',
-        plus_readonly=False,
-        simulator=False,
-        start_recording_on_exit=True,
-    ) is False
-
-
 def test_should_not_queue_upload_for_readonly_plus_account() -> None:
     assert roast_properties.shouldQueueRoastPropertiesUpload(
         flagstart=True,
@@ -129,7 +116,6 @@ def test_should_not_queue_upload_for_readonly_plus_account() -> None:
         plus_account='coffja@qq.com',
         plus_readonly=True,
         simulator=False,
-        start_recording_on_exit=False,
     ) is False
 
 
@@ -142,7 +128,6 @@ def test_should_queue_upload_for_completed_roast_property_updates() -> None:
         plus_account='coffja@qq.com',
         plus_readonly=False,
         simulator=False,
-        start_recording_on_exit=False,
     ) is True
 
 
@@ -213,7 +198,6 @@ def test_confirmed_completed_roast_upload_queues_once_with_plus_side_effects() -
     with patch('artisanlib.roast_properties.plus.queue.addRoast', return_value=True) as mock_add_roast:
         queued = roast_properties.queueConfirmedCompletedRoastUpload(
             aw,
-            start_recording_on_exit=False,
         )
 
     assert queued is True
@@ -228,7 +212,6 @@ def test_confirmed_completed_roast_upload_reports_not_queued_when_queue_rejects_
     with patch('artisanlib.roast_properties.plus.queue.addRoast', return_value=False) as mock_add_roast:
         queued = roast_properties.queueConfirmedCompletedRoastUpload(
             aw,
-            start_recording_on_exit=False,
         )
 
     assert queued is False
@@ -250,7 +233,6 @@ def test_confirmed_completed_roast_upload_reports_not_queued_when_queue_fails() 
     with patch('artisanlib.roast_properties.plus.queue.addRoast', side_effect=RuntimeError('queue failed')):
         queued = roast_properties.queueConfirmedCompletedRoastUpload(
             aw,
-            start_recording_on_exit=False,
         )
 
     assert queued is False
@@ -266,29 +248,24 @@ def test_confirmed_completed_roast_upload_reports_not_queued_when_queue_fails() 
 
 
 @pytest.mark.parametrize(
-    ('aw_overrides', 'qmc_overrides', 'start_recording_on_exit'),
+    ('aw_overrides', 'qmc_overrides'),
     [
-        ({'simulator': object()}, {}, False),
-        ({'plus_account': None}, {}, False),
-        ({'plus_readonly': True}, {}, False),
-        ({}, {'timeindex': [-1, 0, 0, 0, 0, 0, 60]}, False),
-        ({}, {'timeindex': [0, 0, 0, 0, 0, 0, 0]}, False),
-        ({}, {}, True),
+        ({'simulator': object()}, {}),
+        ({'plus_account': None}, {}),
+        ({'plus_readonly': True}, {}),
+        ({}, {'timeindex': [-1, 0, 0, 0, 0, 0, 60]}),
+        ({}, {'timeindex': [0, 0, 0, 0, 0, 0, 0]}),
     ],
 )
 def test_confirmed_completed_roast_upload_skips_when_gate_fails(
         aw_overrides: dict[str, object],
-        qmc_overrides: dict[str, object],
-        start_recording_on_exit: bool) -> None:
+        qmc_overrides: dict[str, object]) -> None:
     aw = _completed_roast_app_window(**aw_overrides)
     for key, value in qmc_overrides.items():
         setattr(aw.qmc, key, value)
 
     with patch('artisanlib.roast_properties.plus.queue.addRoast') as mock_add_roast:
-        queued = roast_properties.queueConfirmedCompletedRoastUpload(
-            aw,
-            start_recording_on_exit=start_recording_on_exit,
-        )
+        queued = roast_properties.queueConfirmedCompletedRoastUpload(aw)
 
     assert queued is False
     aw.schedule_window.register_completed_roast.emit.assert_not_called()
@@ -493,7 +470,6 @@ def test_configure_completion_buttons_replaces_continue_button_without_duplicate
             plus_readonly=False,
             simulator=None,
         ),
-        start_recording_on_exit=False,
         dialogbuttons=button_box,
         completion_action=roast_properties.COMPLETION_ACTION_SAVE_ONLY,
         save_continue_cooling_button=None,

@@ -190,11 +190,9 @@ def shouldQueueRoastPropertiesUpload(
         drop_index: int,
         plus_account: str|None,
         plus_readonly: bool,
-        simulator: bool,
-        start_recording_on_exit: bool) -> bool:
+        simulator: bool) -> bool:
     return (
-        not start_recording_on_exit
-        and flagstart
+        flagstart
         and safesaveflag
         and charge_index > -1
         and drop_index > 0
@@ -205,9 +203,7 @@ def shouldQueueRoastPropertiesUpload(
 
 
 def queueConfirmedCompletedRoastUpload(
-        aw:'ApplicationWindow',
-        *,
-        start_recording_on_exit: bool) -> bool:
+        aw:'ApplicationWindow') -> bool:
     if not shouldQueueRoastPropertiesUpload(
             flagstart=aw.qmc.flagstart,
             safesaveflag=aw.qmc.safesaveflag,
@@ -215,8 +211,7 @@ def queueConfirmedCompletedRoastUpload(
             drop_index=aw.qmc.timeindex[6],
             plus_account=aw.plus_account,
             plus_readonly=bool(aw.plus_readonly),
-            simulator=bool(aw.simulator),
-            start_recording_on_exit=start_recording_on_exit):
+            simulator=bool(aw.simulator)):
         return False
 
     if aw.schedule_window is not None:
@@ -6108,7 +6103,6 @@ class editGraphDlg(ArtisanResizeablDialog):
         # if recording, dirty and CHARGE and DROP set we send changes to artisan.plus if it is running and we are not in simmulator mode
         upload_queued = queueConfirmedCompletedRoastUpload(
             self.aw,
-            start_recording_on_exit=self.start_recording_on_exit,
         )
         if (isCompletedRoast(
                 charge_index=self.aw.qmc.timeindex[0],
@@ -6157,7 +6151,6 @@ class editGraphDlg(ArtisanResizeablDialog):
             plus_account=self.aw.plus_account,
             plus_readonly=bool(self.aw.plus_readonly),
             simulator=bool(self.aw.simulator),
-            start_recording_on_exit=self.start_recording_on_exit,
         )
         texts = roastPropertiesButtonTexts(
             offer_finish=offer_finish,
