@@ -53,7 +53,10 @@ except Exception:
 SUPPORTED_LANGUAGES = ['ar', 'bg', 'cs', 'da', 'de','el','en','es','fa','fi','fr','gd', 'he','hu','id','it','ja','ko','lv', 'nl','no','pl','pt_BR','pt','sk', 'sv','th','tr','uk','vi','zh_CN','zh_TW']
 
 DATA_FILES = [
-        (r'Assets.car', '.'),
+        # NOTE: Assets.car (legacy adaptive "liquid glass" icon) removed because
+        # it could not be regenerated without full Xcode (actool). The Cotrix
+        # artisan.icns below is now the active macOS app icon. See
+        # docs/cotrix-icons.md for how to rebuild Assets.car on an Xcode machine.
         (r'artisanProfile.icns', '.'),
         (r'artisanAlarms.icns', '.'),
         (r'artisanPalettes.icns', '.'),
@@ -201,7 +204,7 @@ with open('Info.plist', 'rb') as infile:
                     'NSHumanReadableCopyright': LICENSE,
                     'NSHighResolutionCapable': True,
 #                    'UIDesignRequiresCompatibility': True, # run in compatibility mode, keeping the existing look and metrics of pre v26 macOS releases
-                    'CFBundleIconName': 'artisan-liquid-glass'
+#                    'CFBundleIconName': 'artisan-liquid-glass'  # dropped with Assets.car; artisan.icns is now the active icon
                 })
 
 bundle_obj = exe

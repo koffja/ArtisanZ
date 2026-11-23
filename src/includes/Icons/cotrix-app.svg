@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- Cotrix application icon (full-bleed macOS/Windows/Linux app icon variant).
+       NOTE: This is a DEDICATED app-icon source, separate from cotrix.svg which
+       remains the 96x96 toolbar brand mark used by gui_theme.py.
+       The tile here fills the full canvas edge-to-edge so the icon is not
+       rendered undersized against neighbouring macOS app icons. -->
+  <rect x="0" y="0" width="1024" height="1024" rx="228" ry="228" fill="#F6FAF8" stroke="#AFC5BF" stroke-width="18"/>
+  <!-- Cotrix "C" mark: original 96-canvas path geometry scaled ~10.67x and recentered, stroke thickened for app-icon scale -->
+  <path d="M661 338c-45-36-97-54-157-54-140 0-253 105-253 234s113 234 253 234c62 0 115-19 160-56" fill="none" stroke="#3E7179" stroke-width="86" stroke-linecap="round"/>
+  <path d="M459 497c81-60 169-60 261 0" fill="none" stroke="#B46B5E" stroke-width="68" stroke-linecap="round"/>
+  <path d="M459 583c81 60 169 60 261 0" fill="none" stroke="#6E8C7A" stroke-width="68" stroke-linecap="round"/>
+</svg>
