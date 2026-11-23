@@ -1,0 +1,279 @@
+[General]
+AmbientTempSource=0
+Delay=1000
+ETfunction=
+Oversampling=false
+PaletteMigrated_v4=true
+dropDuplicates=true
+dropDuplicatesLimit=0.1
+roastertype_setup=Shaojia Direct Fire 2kg
+
+[Device]
+id=29
+
+[ExtraComm]
+extrabaudrate=9600, 9600
+extrabytesize=8, 8
+extracomport=COM1, COM1
+extraparity=N, N
+extrastopbits=1, 1
+extratimeout=0.5, 0.5
+
+[ExtraDev]
+extraCurveVisibility1=true, true, true, true, true, true, true, true, true, true
+extraCurveVisibility2=true, true, true, true, true, true, true, true, true, true
+extraDelta1=false, false, false, false, false, false, false, false, false, false
+extraDelta2=false, false, false, false, false, false, false, false, false, false
+extraFill1=0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+extraFill2=0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+extraLCDvisibility1=true, true, false, false, false, false, false, false, false, false
+extraLCDvisibility2=true, false, false, false, false, false, false, false, false, false
+extradevicecolor1=#A87574, #6B7E8B
+extradevicecolor2=#ad0427, #2086bb
+extradevices=33, 55
+extramathexpression1=,
+extramathexpression2=,
+extraname1=火力, 风门位置
+extraname2=风门, 进风温
+
+[SerialPort]
+baudrate=9600
+bytesize=8
+comport=COM4
+parity=N
+stopbits=1
+timeout=0.4
+
+[Modbus]
+IP_retries=1
+IP_timeout=0.5
+PID_OFF_action=
+PID_ON_action=
+PID_SV_register=0
+PID_d_register=0
+PID_i_register=0
+PID_p_register=0
+PID_device_ID=0
+PIDmultiplier=0
+SVmultiplier=0
+SVwriteFloat=false
+SVwriteLong=false
+baudrate=115200
+bytesize=8
+comport=COM5
+fetch_max_blocks=false
+host=192.168.10.100
+optimizer=true
+parity=N
+port=1053
+serial_readRetries=1
+stopbits=1
+timeout=1
+type=3
+wordorderLittle=true
+modbus_serial_connect_delay=0.5
+disconnect_on_error=true
+acceptable_errors=3
+fail_on_cache_miss=true
+
+# Channel 1 -> 主设备 BT 通道 (豆温, HR[0])
+# 注: ArtisanZ 中 input1 -> BT, input2 -> ET (canvas.py:21626 sample_main_device)
+input1BCDsAsInt=false
+input1FloatsAsInt=false
+input1Signed=false
+input1bcd=false
+input1code=3
+input1div=0
+input1float=false
+input1mode=C
+input1register=0
+input1deviceId=1
+
+# Channel 2 -> 主设备 ET 通道 (排风温, HR[2])
+input2BCDsAsInt=false
+input2FloatsAsInt=false
+input2Signed=false
+input2bcd=false
+input2code=3
+input2div=0
+input2float=false
+input2mode=C
+input2register=2
+input2deviceId=1
+
+# Channel 3 -> 扩展设备33 曲线1 (火力, HR[6])
+# ArtisanZ 通道分配: 主设备占 ch1+ch2, 设备33=ch3+ch4, 设备55=ch5+ch6 (见 help/modbus_help.py)
+input3BCDsAsInt=false
+input3FloatsAsInt=false
+input3Signed=false
+input3bcd=false
+input3code=3
+input3div=0
+input3float=false
+input3mode=
+input3register=6
+input3deviceId=1
+
+# Channel 4 -> 扩展设备33 曲线2 (风门设定, HR[7])
+input4BCDsAsInt=false
+input4FloatsAsInt=false
+input4Signed=false
+input4bcd=false
+input4code=3
+input4div=0
+input4float=false
+input4mode=
+input4register=7
+input4deviceId=1
+
+# Channel 5 -> 扩展设备55 曲线1 (风门当前位置, HR[8])
+input5BCDsAsInt=false
+input5FloatsAsInt=false
+input5Signed=false
+input5bcd=false
+input5code=3
+input5div=0
+input5float=false
+input5mode=
+input5register=8
+input5deviceId=1
+
+# Channel 6 -> 扩展设备55 曲线2 (进风温, HR[4])
+input6BCDsAsInt=false
+input6FloatsAsInt=false
+input6Signed=false
+input6bcd=false
+input6code=3
+input6div=0
+input6float=false
+input6mode=C
+input6register=4
+input6deviceId=1
+
+# Channel 7 -> 未使用 (设备109 曲线1, 留空)
+input7BCDsAsInt=false
+input7FloatsAsInt=false
+input7Signed=false
+input7bcd=false
+input7code=3
+input7div=0
+input7float=false
+input7mode=
+input7register=0
+input7deviceId=0
+
+# Channel 8 -> 未使用 (设备109 曲线2, 留空)
+input8BCDsAsInt=false
+input8FloatsAsInt=false
+input8Signed=false
+input8bcd=false
+input8code=3
+input8div=0
+input8float=false
+input8mode=
+input8register=0
+input8deviceId=0
+
+# Channel 9, 10 -> 未使用
+input9BCDsAsInt=false
+input9FloatsAsInt=false
+input9Signed=false
+input9bcd=false
+input9code=3
+input9div=0
+input9float=false
+input9mode=
+input9register=0
+input9deviceId=0
+input10BCDsAsInt=false
+input10FloatsAsInt=false
+input10Signed=false
+input10bcd=false
+input10code=3
+input10div=0
+input10float=false
+input10mode=
+input10register=0
+input10deviceId=0
+
+[DefaultButtons]
+buttonactions=0, 0, 0, 0, 0, 0, 0, 0
+buttonactionstrings=, , , , , , , 
+buttonvisibility=true, true, true, true, true, false, true, false
+extrabuttonactions=0, 0, 0
+extrabuttonactionstrings=, , 
+xextrabuttonactions=0, 0
+xextrabuttonactionstrings=, 
+
+[Sliders]
+ModeTempSliders=C
+eventsliderBernoulli=0, 0, 0, 0
+eventslidercoarse=0, 0, 0, 0
+eventslidersflags=0, 1, 1
+eventslidertemp=0, 0, 0, 0
+eventsliderunits=, , , 
+slideractions=2, 2, 0, 0
+slidercommands="writeSingle(1,6,{})", "writeSingle(1,7,{})", , 
+sliderfactors=1, 1, 1, 1
+slidermax=100, 100, 100, 100
+slidermin=0, 0, 0, 0
+slideroffsets=0, 0, 0, 0
+slidervisibilities=1, 1, 0, 0
+
+[events]
+# 自定义滑块标签: slider0=火力(Burner->火力), slider1=风门(Damper->风门)
+# 用 ArtisanZ 默认 key (Burner/Damper) 触发翻译机制, 非空字符串也走 translate (main.py 改动)
+etypes=Burner, Damper, --, --
+default_etypes_set=0, 0, 0, 0, 0
+# 滑块颜色 (在 events 段加载, 见 main.py:18903 / Kaleido Network.aset 参考)
+# slider0=火力(莫兰迪红灰), slider1=风门(莫兰迪蓝灰), slider2/3=未用(灰)
+EvalueColor=#A87574, #6B7E8B, #808080, #808080
+EvalueTextColor=#F5F1ED, #F5F1ED, #F5F1ED, #F5F1ED
+
+[ExtraEventButtons]
+buttonlistmaxlen=14
+buttonpalette_buttonsize=1, 1, 1, 1, 1, 1, 1, 1, 1, 1
+buttonpalette_label=Default
+buttonpalette_mark_last_button_pressed=true, true, true, true, true, true, true, true, true, true
+buttonpalette_shortcuts=true
+buttonpalette_slider_alternative_layout=false, false, false, false, false, false, false, false, false, false
+buttonpalette_tooltips=false, false, false, false, false, false, false, false, false, false
+buttonpalettemaxlen=14, 14, 14, 14, 14, 14, 14, 14, 14, 14
+buttonsize=1
+# 莫兰迪配色 (低饱和度, 灰调柔和)
+#   火力组 (红灰系): 火力+/- 用深浅区分
+#   风门组 (蓝灰系): 风门+/- 用深浅区分
+#   开关组 (中性色): 主机/冷却/搅拌/点火
+extraeventbuttoncolor=#8B6B6B, #A68585, #6B7E8B, #8A9CA8, #7A7567, #6B8B7A, #8B7E8B, #8B6B5C, #808080, #808080
+extraeventbuttontextcolor=#F5F1ED, #F5F1ED, #F5F1ED, #F5F1ED, #F5F1ED, #F5F1ED, #F5F1ED, #F5F1ED, #F5F1ED, #F5F1ED
+# 按钮分两类:
+#   1-4 是 ±10 触发型 (HR[21-24]): 写 1 触发一次动作. 不加 button() 避免视觉锁定
+#      (button() 会 toggle 状态, 导致每两次点击只有一次"看起来生效"). 用 Qt 原生点击反馈.
+#   5-8 是开关 toggle 型 (HR[11,13,15,17]): 用 1-$ 取反当前状态 + button() 翻转状态
+extraeventsactions=4, 4, 4, 4, 4, 4, 4, 4, 4, 4
+extraeventsactionstrings="writeSingle(1,21,1)", "writeSingle(1,22,1)", "writeSingle(1,23,1)", "writeSingle(1,24,1)", "writeSingle(1,11,1-$);button()", "writeSingle(1,13,1-$);button()", "writeSingle(1,15,1-$);button()", "writeSingle(1,17,1-$);button()", , 
+extraeventsbuttonsflags=1, 1, 1
+extraeventsdescriptions=火力+10, 火力-10, 风门+10, 风门-10, 主机开关, 冷却开关, 搅拌开关, 点火开关, , 
+extraeventslabels=火力\n+10, 火力\n-10, 风门\n+10, 风门\n-10, 主机, 冷却, 搅拌, 点火, , 
+extraeventstypes=4, 4, 4, 4, 4, 4, 4, 4, 4, 4
+extraeventsvalues=1, 1, 1, 1, 1, 1, 1, 1, 0, 0
+extraeventsvisibility=1, 1, 1, 1, 1, 1, 1, 1, 0, 0
+# toggle 按钮自己管理状态 (button()), 关闭 marklastbuttonpressed 避免视觉冲突
+marklastbuttonpressed=false
+showextrabuttontooltips=true
+
+[Quantifiers]
+clusterEventsFlag=false
+# 滑块自动追踪烘焙机读回值 (显示同步)
+#   slider0(火力) 追踪 ch3(input3=HR[6]火力)
+#   slider1(风门) 追踪 ch4(input4=HR[7]风门设定)
+# source 索引体系: [ET=0, BT=1, dev33曲线1=2, dev33曲线2=3, dev55曲线1=4, dev55曲线2=5]
+quantifieractive=1, 1, 0, 0
+quantifiercoarse=0, 0, 0, 0
+quantifiermax=100, 100, 100, 100
+quantifiermin=0, 0, 0, 0
+quantifiersource=2, 3, 0, 0
+# eventquantifieraction=0: 滑块只同步显示, 不回传写命令 (避免死循环: source 读的寄存器 == slider 写的寄存器)
+eventquantifieraction=0, 0, 0, 0
+# eventquantifierSV=0: PV 模式, 手动拖滑块后 45 秒内不追踪 (给烘焙机响应时间)
+eventquantifierSV=0, 0, 0, 0
