@@ -776,6 +776,9 @@ class TestConnectFunction:
             'plus.controller.connect_semaphore', mock_qsemaphore
         ), patch('plus.controller.config') as mock_config, patch(
             'keyring.get_password', side_effect=Exception('Keyring error')
+        ), patch(
+            # the login dialog creates widgets and needs a QApplication; keep the test hermetic
+            'plus.login.plus_login', return_value=(None, None, False, False)
         ):
 
             mock_config.app_window = mock_app_window

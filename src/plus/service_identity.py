@@ -16,6 +16,26 @@ KEYRING_SERVICE: Final[str] = SERVICE_ID
 COTRIX_ROASTS_PATH: Final[str] = '/app/#/pages/cotrix/roasts'
 
 
+# Wordings that all refer to the service, each with the text that replaces it in
+# translated strings. Upstream reworded its strings in v5 ("artisan platform",
+# "artisan account"); the Chinese entries are the renderings upstream's
+# artisan_zh_CN.ts uses for the same terms. Articles are part of the needle so
+# the English result stays grammatical ("with the artisan platform" -> "with Cotrix").
+def brand_substitutions() -> tuple[tuple[str, str], ...]:
+    name = DISPLAY_NAME
+    return (
+        ('An artisan account', f'A {name} account'),
+        ('an artisan account', f'a {name} account'),
+        ('the artisan platform', name),
+        ('artisan.plus', name),
+        ('artisan platform', name),
+        ('artisan account', f'{name} account'),
+        ('工匠平台', name),
+        ('手工艺平台', name),
+        ('工匠账户', f'{name}账户'),
+    )
+
+
 def service_id() -> str:
     return SERVICE_ID
 

@@ -45,6 +45,7 @@ from artisanlib.util import getResourcePath
 from artisanlib.dialogs import ArtisanDialog
 from artisanlib.widgets import StyledQLineEdit
 from plus import config
+from plus.util import translatedServiceMessage
 
 
 _log: Final[logging.Logger] = logging.getLogger(__name__)
@@ -77,7 +78,7 @@ class Login(ArtisanDialog):
         self.register_icon.setMaximumSize(15,15)
 
         self.linkRegister = QLabel(
-            f'<small>{QApplication.translate('Plus','An artisan account unlocks more features.')} <a href="{config.pricing_url}">{QApplication.translate('Plus', 'Subscribe')}</a></smalls>'
+            f'<small>{translatedServiceMessage('An artisan account unlocks more features.', context='Plus')} <a href="{config.pricing_url}">{QApplication.translate('Plus', 'Subscribe')}</a></smalls>'
         )
         self.linkRegister.setOpenExternalLinks(True)
         self.linkRegister.setStyleSheet(f"""
@@ -91,7 +92,7 @@ class Login(ArtisanDialog):
         )
         self.linkResetPassword.setOpenExternalLinks(True)
 
-        sign_in_label = QLabel(f'<small>{QApplication.translate('Plus', 'Sign in to your artisan account')}</small>')
+        sign_in_label = QLabel(f'<small>{translatedServiceMessage('Sign in to your artisan account', context='Plus')}</small>')
         sign_in_label.setStyleSheet(f"""
             QLabel {{
                 color: {('#DDDDDD' if aw.app.darkmode else '#333333')};

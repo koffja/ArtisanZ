@@ -50,16 +50,18 @@ _log: Final[logging.Logger] = logging.getLogger(__name__)
 
 
 def translatedServiceMessage(source: str, context: str = 'Plus') -> str:
-    """Translate ``source`` under ``context``, then runtime-replace the literal
-    ``'artisan.plus'`` with the configured service display name (Cotrix).
+    """Translate ``source`` under ``context``, then runtime-replace every wording that
+    refers to the service (``service_identity.brand_substitutions()``) with the
+    configured service display name (Cotrix).
 
-    All user-facing strings that mention 'artisan.plus' MUST route through
-    this function. The pre-commit hook ``no-bare-artisan-plus-literal``
-    enforces this.
+    All user-facing strings that mention the service MUST route through this
+    function, whatever wording they use. The pre-commit hook
+    ``no-bare-artisan-plus-literal`` enforces this.
     """
-    return QApplication.translate(context, source).replace(
-        'artisan.plus', service_identity.display_name()
-    )
+    message = QApplication.translate(context, source)
+    for needle, replacement in service_identity.brand_substitutions():
+        message = message.replace(needle, replacement)
+    return message
 
 
 # Files

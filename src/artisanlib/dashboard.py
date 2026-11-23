@@ -59,7 +59,7 @@ import plus.stock
 import plus.blend
 import plus.connection
 import plus.controller as plus_controller
-from plus.util import plusLink, coffeeLink, storeLink, roastLink
+from plus.util import plusLink, coffeeLink, storeLink, roastLink, translatedServiceMessage
 
 
 _log: Final[logging.Logger] = logging.getLogger(__name__)
@@ -330,7 +330,7 @@ class Dashboard(QWidget):
         self.ui.minus_button.setToolTip(QApplication.translate('Tooltip', 'Remove roast properties from list of recent roasts'))
 
         self.ui.inventory_group.setToolTip(QApplication.translate('Tooltip', 'Green beans inventory'))
-        self.ui.login_pushButton.setToolTip(QApplication.translate('Plus', 'Sign in to your artisan account'))
+        self.ui.login_pushButton.setToolTip(translatedServiceMessage('Sign in to your artisan account', context='Plus'))
         self.ui.selected_line_label.setToolTip(QApplication.translate('Plus', 'Links to selected beans, blend and space on the platform'))
         self.ui.beans_comboBox.setToolTip(QApplication.translate('Tooltip', 'Select beans from your inventory'))
         self.ui.beans_label.setToolTip(QApplication.translate('Tooltip', 'Select beans from your inventory'))
@@ -372,7 +372,7 @@ class Dashboard(QWidget):
         self.ui.documentation_pushButton.setToolTip(QApplication.translate('Tooltip','Explore the documentation'))
         self.ui.forum_pushButton.setToolTip(QApplication.translate('Tooltip','Ask questions, share tips, and connect with the community'))
         self.ui.issue_pushButton.setToolTip(QApplication.translate('Tooltip','Report a bug or request a feature'))
-        self.ui.platform_pushButton.setToolTip(QApplication.translate('Tooltip','Browse to the artisan platform'))
+        self.ui.platform_pushButton.setToolTip(translatedServiceMessage('Browse to the artisan platform', context='Tooltip'))
 
         # SPONSOR
         self.ui.sponsor_label.setText(QApplication.translate('Label', 'RELEASE SPONSOR'))

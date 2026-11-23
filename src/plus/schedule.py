@@ -2481,7 +2481,7 @@ class ScheduleWindow(ArtisanResizeablDialog): # pyright:ignore[reportGeneralType
         disconnected_widget = QPushButton(QApplication.translate('Button','LOGIN TO UNLOCK'))
         disconnected_widget.setMinimumSize(QSize(0, 28))
         disconnected_widget.setMaximumSize(QSize(16777215, 28))
-        disconnected_widget.setToolTip(QApplication.translate('Plus', 'Sign in to your artisan account'))
+        disconnected_widget.setToolTip(plus.util.translatedServiceMessage('Sign in to your artisan account', context='Plus'))
         disconnected_widget.setStyleSheet(artisan_push_button_style())
         disconnected_widget.setIconSize(QSize(18,18))
         disconnected_widget.setIcon(QIcon(getStyleIconPath('user-circle-stroke-rounded-dark.svg')))

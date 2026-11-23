@@ -40,6 +40,7 @@ from PyQt6.QtWidgets import (QApplication, QHBoxLayout, QVBoxLayout, QCheckBox, 
 from artisanlib.dialogs import ArtisanDialog, artisan_warning
 from artisanlib.widgets import MyQDoubleSpinBox
 from artisanlib.styles import spin_box_style
+from plus.util import translatedServiceMessage
 
 
 class SamplingDlg(ArtisanDialog):
@@ -65,7 +66,7 @@ class SamplingDlg(ArtisanDialog):
         self.automatiUploadFlag.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.automatiUploadFlag.setChecked(self.aw.plus_automatic_profile_upload)
         self.automatiUploadFlag.setEnabled(self.aw.plus_account is not None and self.aw.plus_subscription == 'MAX')
-        self.automatiUploadFlag.setToolTip(QApplication.translate('Tooltip', 'Upload completed roast profiles to the artisan platform'))
+        self.automatiUploadFlag.setToolTip(translatedServiceMessage('Upload completed roast profiles to the artisan platform', context='Tooltip'))
 
         self.interval = MyQDoubleSpinBox()
         self.interval.setStyleSheet(spin_box_style(self.aw.app.darkmode))

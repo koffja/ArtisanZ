@@ -84,7 +84,8 @@ from artisanlib.styles import push_button_style
 from artisanlib.device_registry import is_special_device, is_non_temp_device, is_non_temp_device_chan, is_phidget_device, is_binary_device
 
 # import artisan.plus modules
-from plus.util import roastLink
+from plus.util import roastLink, translatedServiceMessage
+from plus import service_identity
 from plus.queue import addRoast, sendLockSchedule
 from plus.sync import clearSyncRecordHash
 from plus.controller import is_synced, is_connected
@@ -15683,7 +15684,7 @@ class tgraphcanvas(QObject):
                 self.aw.dashboard.show_dashboard()
                 self.aw.qmc.plus_beans_reminder_on_start = False # prevent this warning to be shown again for this recording
                 artisan_confirmation_dialog(self.aw, self.aw,
-                    QApplication.translate('Message', 'artisan platform needs to know the beans you are roasting'), '',
+                    translatedServiceMessage('artisan platform needs to know the beans you are roasting', context='Message'), '',
                     True)
                 return
 
@@ -16499,9 +16500,9 @@ class tgraphcanvas(QObject):
     @pyqtSlot()
     def uploadProfile(self) -> None:
         def on_upload_succeeded() -> None:
-            self.aw.sendmessageSignal.emit(QApplication.translate('Message','Uploaded to {} platform').format('artisan'), True, None)
+            self.aw.sendmessageSignal.emit(translatedServiceMessage('Uploaded to {} platform', context='Message').format(service_identity.display_name()), True, None)
         def on_upload_failure() -> None:
-            self.aw.sendmessageSignal.emit(QApplication.translate('Message','Upload to {} platform failed').format('artisan'), True, None)
+            self.aw.sendmessageSignal.emit(translatedServiceMessage('Upload to {} platform failed', context='Message').format(service_identity.display_name()), True, None)
 
         if (self.aw.plus_subscription == 'MAX' and
                 self.aw.qmc.roastUUID and

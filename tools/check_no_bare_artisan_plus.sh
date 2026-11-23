@@ -47,11 +47,11 @@ rg -n -B 1 --no-heading \
     -g '!src/uic/**' \
     -g '!src/proto/**' \
     -g '!**/__pycache__/**' \
-    "['\"]([^\"']*artisan\.plus[^\"']*)['\"]" \
+    "['\"]([^\"']*(artisan\.plus|artisan platform|artisan account)[^\"']*)['\"]" \
     "$REPO_ROOT/src/plus/" \
     "$REPO_ROOT/src/artisanlib/" \
     "$REPO_ROOT/src/help/" \
     2>/dev/null \
 | python3 "$FILTER"
 
-echo "[ok] no bare 'artisan.plus' literals in plus/ or artisanlib/ or help/"
+echo "[ok] no bare service-name literals ('artisan.plus', 'artisan platform', 'artisan account') in plus/ or artisanlib/ or help/"

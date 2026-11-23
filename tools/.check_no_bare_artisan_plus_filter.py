@@ -63,13 +63,19 @@ for line in lines:
     # Hardcoded __release_sponsor_* assignments in artisanlib/__init__.py.
     if "__release_sponsor_" in content:
         continue
+    if path.endswith("plus/service_identity.py"):
+        # the designated home of service-name literals (BRAND_NEEDLES)
+        continue
+    if re.match(r"^\S+:\d+:\s*_log\.", line):
+        # log output is not user-facing
+        continue
     # Pure comment line: the actual code line starts with #.
     if re.match(r"^\S+:\d+:\s*#", line):
         continue
     keep.append(line)
 
 if keep:
-    sys.stderr.write("ERROR: Found bare 'artisan.plus' literal(s) that bypass translatedServiceMessage:\n")
+    sys.stderr.write("ERROR: Found bare service-name literal(s) that bypass translatedServiceMessage:\n")
     for v in keep:
         sys.stderr.write(v + "\n")
     sys.stderr.write("\n")
