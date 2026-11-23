@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import os
-from typing import Any
+import re
+from typing import Any, Final
 
 _DENSE_DIALOG_ROLES = {'devices', 'roast_properties'}
 
@@ -923,3 +924,177 @@ def modern_application_stylesheet(theme: ModernTheme | None = None) -> str:
             border-color: {t.focus};
         }}
     """
+
+
+# ---------------------------------------------------------------------------
+# Morandi palette for upstream's button styles
+#
+# Upstream generates its button styles in styles.py (lately with gradient
+# backgrounds). The palettes below recolour the generated stylesheet, so
+# upstream's functions stay untouched and keep merging cleanly.
+# ---------------------------------------------------------------------------
+
+# Keyed by the pseudo-state block of styles.push_button_style(): the same upstream
+# colour is the pressed colour of one button and the hovered colour of another.
+_MAIN_BUTTON_PALETTE: Final[dict[str, dict[str, str]]] = {
+    '': {  # QPushButton {}
+        '#4c97c3': '#4E7180',  # RESET, PID
+        '#3979ae': '#4E7180',  # OFF, STOP
+        '#147bb3': '#4E7180',  # OFF, STOP in simulator mode (text colour)
+        '#cc0f50': '#A76557',  # ON, PIDactive
+    },
+    ':pressed': {
+        '#116d98': '#3E5A66',  # OFF
+        '#116999': '#3E5A66',  # STOP
+        '#1985ba': '#3E5A66',  # RESET, PID
+        '#c70d49': '#865146',  # ON, PIDactive
+    },
+    ':hover:!pressed': {
+        '#1985ba': '#5E889A',  # OFF, STOP
+        '#43a7cf': '#5E889A',  # RESET, PID
+        '#d4336a': '#BE7D6C',  # ON, PIDactive
+    },
+}
+
+# The SV +/- buttons are painted with createGradient(); each gradient is replaced
+# by the flat Morandi colour of the same state.
+_SV_PLUS_BUTTON_PALETTE: Final[dict[str, str]] = {
+    '#db5785': '#C18A6B',
+    '#d4336a': '#9A6E55',
+    '#e480a2': '#D1A082',
+}
+_SV_MINUS_BUTTON_PALETTE: Final[dict[str, str]] = {
+    '#64b7d8': '#90A1A8',
+    '#43a7cf': '#738185',
+    '#85cae1': '#A6B5BB',
+}
+
+_PSEUDO_STATE_RE: Final = re.compile(r'^\s*QPushButton(?P<state>[^{]*)\{')
+
+
+def _recolor(stylesheet: str, substitutions: dict[str, str]) -> str:
+    for upstream, morandi in substitutions.items():
+        stylesheet = re.sub(re.escape(upstream), morandi, stylesheet, flags=re.IGNORECASE)
+    return stylesheet
+
+
+def apply_morandi_main_button_palette(stylesheet: str) -> str:
+    """Recolour the result of ``styles.push_button_style()`` block by pseudo-state."""
+    state = ''
+    lines: list[str] = []
+    for line in stylesheet.split('\n'):
+        match = _PSEUDO_STATE_RE.match(line)
+        if match is not None:
+            state = match.group('state').strip()
+        lines.append(_recolor(line, _MAIN_BUTTON_PALETTE.get(state, {})))
+    return '\n'.join(lines)
+
+
+def _apply_morandi_sv_button_palette(stylesheet: str, substitutions: dict[str, str]) -> str:
+    from artisanlib.util import createGradient  # local import keeps gui_theme free of package imports
+
+    for upstream, morandi in substitutions.items():
+        stylesheet = stylesheet.replace(createGradient(upstream), morandi)
+    return stylesheet
+
+
+def apply_morandi_sv_plus_button_palette(stylesheet: str) -> str:
+    """Recolour the result of ``styles.artisan_sv_plus_push_button_style()``."""
+    return _apply_morandi_sv_button_palette(stylesheet, _SV_PLUS_BUTTON_PALETTE)
+
+
+def apply_morandi_sv_minus_button_palette(stylesheet: str) -> str:
+    """Recolour the result of ``styles.artisan_sv_minus_push_button_style()``."""
+    return _apply_morandi_sv_button_palette(stylesheet, _SV_MINUS_BUTTON_PALETTE)
+
+
+def artisan_event_button_style(min_width:int, min_height:int, padding:int, default_font_size:int, selected_font_size:int) -> str:
+    """Event-button stylesheet in the Morandi palette.
+
+    ArtisanZ's counterpart of ``styles.artisan_event_button_style()``: the same
+    selectors and parameters, with flat colours instead of upstream's gradients.
+    """
+    return f"""
+            EventPushButton {{
+                min-width: {min_width}px;
+                min-height: {min_height}px;
+                font-size: {default_font_size}pt;
+                font-weight: bold;
+                padding: {padding}px {padding}px;
+                border: 1px solid #CDD7D8;
+                border-radius: 8px;
+                color: white;
+            }}
+
+            EventPushButton[Selected=true] {{
+                font-size: {selected_font_size}pt;
+                background-color: #B4685C;
+            }}
+            EventPushButton[Selected=true]:flat {{
+                color: #8A4D43;
+                background-color: #F0D7CE;
+            }}
+            EventPushButton[Selected=true]:flat:!pressed:hover {{
+                color: #6F372F;
+                background-color: #E8C8BE;
+            }}
+            EventPushButton[Selected=true]:flat:pressed {{
+                color: #EEEEEE;
+                background-color: #B4685C;
+            }}
+            EventPushButton[Selected=true]:!flat:pressed {{
+                color: white;
+                background-color: #8E4C43;
+            }}
+            EventPushButton[Selected=true]:!pressed:hover {{
+                color: white;
+                background-color: #C47A6F;
+            }}
+
+            MajorEventPushButton[Selected=false]:flat {{
+                color: #376B7A;
+                background-color: #E3ECEE;
+            }}
+            MajorEventPushButton[Selected=false]:flat:!pressed:hover {{
+                color: #244E59;
+                background-color: #D5E2E5;
+            }}
+            MajorEventPushButton[Selected=false]:flat:pressed {{
+                color: #FFFFFF;
+                background-color: #6E848B;
+            }}
+            MajorEventPushButton[Selected=false]:!flat:pressed {{
+                color: #EEEEEE;
+                background-color: #244E59;
+            }}
+            MajorEventPushButton[Selected=false]:!pressed:hover {{
+                background-color: #467D8C;
+            }}
+
+            MinorEventPushButton[Selected=false]:flat {{
+                color: #6F875E;
+                background-color: #EEF3EA;
+            }}
+            MinorEventPushButton[Selected=false]:flat:!pressed:hover {{
+                color: #546C44;
+                background-color: #E1EAD9;
+            }}
+            MinorEventPushButton[Selected=false]:flat:pressed {{
+                color: #FFFFFF;
+                background-color: #7B8D6F;
+            }}
+            MinorEventPushButton[Selected=false]:!flat:pressed {{
+                color: #EEEEEE;
+                background-color: #5D704F;
+            }}
+            MinorEventPushButton[Selected=false]:!pressed:hover {{
+                background-color: #839872;
+            }}
+
+            AuxEventPushButton[Selected=false]:pressed {{
+                background-color: #8E4C43;
+            }}
+            AuxEventPushButton[Selected=false]:!pressed:hover {{
+                background-color: #C47A6F;
+            }}
+"""

@@ -40,6 +40,7 @@ from artisanlib.gui_theme import (
     lcd_label_stylesheet,
     lcd_value_stylesheet,
     modern_application_stylesheet,
+    artisan_event_button_style,
     modern_toolbar_icon_path,
 )
 from artisanlib.performance import export_gui_perf_metrics
@@ -688,7 +689,7 @@ from artisanlib.s7port import s7port
 from artisanlib.wsport import wsport
 from artisanlib.mqttport import mqttport
 from artisanlib.modbusport import modbusport
-from artisanlib.styles import (artisan_slider_style, artisan_slider_frame_style, artisan_event_button_style, qlcd_style,
+from artisanlib.styles import (artisan_slider_style, artisan_slider_frame_style, qlcd_style,
     push_button_style, artisan_sv_plus_push_button_style, artisan_sv_minus_push_button_style, events_editor_style,
     scroller_style)
 from artisanlib.dialogs import (HelpDlg, ArtisanInputDialog, ArtisanComboBoxDialog, ArtisanPortsDialog, ArtisanSliderLCDinputDlg,

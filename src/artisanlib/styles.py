@@ -26,6 +26,11 @@ import os
 import functools
 from pathlib import Path
 from artisanlib.util import createGradient, getResourcePath
+from artisanlib.gui_theme import (
+    apply_morandi_main_button_palette,
+    apply_morandi_sv_minus_button_palette,
+    apply_morandi_sv_plus_button_palette,
+)
 
 
 # button styles
@@ -339,7 +344,7 @@ def push_button_style(simulator:bool, button:str, min_height:int, min_width:int,
         background_color_disabled = 'lightgrey'
         background_color_pressed = '#c70d49'
         background_color_hovered = '#d4336a'
-    return f"""
+    return apply_morandi_main_button_palette(f"""
         QPushButton {{
             min-height: {min_height}px;
             min-width: {min_width}px;
@@ -367,11 +372,11 @@ def push_button_style(simulator:bool, button:str, min_height:int, min_width:int,
             color: {color_hovered};
             background-color: {background_color_hovered};
         }}
-    """
+    """)
 
 @functools.lru_cache
 def artisan_sv_plus_push_button_style(min_width:int, font_size:int, border_radius:int) -> str:
-    return f"""
+    return apply_morandi_sv_plus_button_palette(f"""
     QPushButton {{
         min-width: {min_width}px;
         border-style: solid;
@@ -391,11 +396,11 @@ def artisan_sv_plus_push_button_style(min_width:int, font_size:int, border_radiu
         color: white;
         background-color: {createGradient('#e480a2')};
     }}
-"""
+""")
 
 @functools.lru_cache
 def artisan_sv_minus_push_button_style(min_width:int, font_size:int, border_radius:int) -> str:
-    return f"""
+    return apply_morandi_sv_minus_button_palette(f"""
     QPushButton {{
         min-width: {min_width}px;
         border-style: solid;
@@ -415,7 +420,7 @@ def artisan_sv_minus_push_button_style(min_width:int, font_size:int, border_radi
         color:white;
         background-color: {createGradient('#85cae1')};
     }}
-"""
+""")
 
 
 
