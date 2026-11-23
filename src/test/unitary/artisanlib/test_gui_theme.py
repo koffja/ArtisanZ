@@ -284,6 +284,9 @@ def test_apply_modern_dialog_polish_preserves_nested_row_margins(
 def test_axes_time_step_combo_expands_for_flat_theme(qapp: QApplication) -> None:
     from artisanlib.axis import WindowsDlg
 
+    # upstream's ArtisanDialog reads app.darkmode; the application sets it at startup
+    qapp.darkmode = False
+
     qmc = SimpleNamespace(
         time_grid=True,
         temp_grid=True,
