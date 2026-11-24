@@ -316,6 +316,14 @@ Qt_modules = [
     'QtDBus',
     'QtPdf',
     'QtSvgWidgets',
+    # ArtisanZ: the QML workspace dock needs the QtQuick frameworks
+    'QtQuick',
+    'QtQuickWidgets',
+    'QtQml',
+    'QtQmlModels',
+    'QtQmlMeta',
+    'QtQmlWorkerScript',
+    'QtOpenGL',
 ]
 Qt_frameworks = [module + '.framework' for module in Qt_modules]
 

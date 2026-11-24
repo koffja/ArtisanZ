@@ -39,7 +39,7 @@ python -c "import PyInstaller; print(f'PyInstaller version: {PyInstaller.__versi
 if errorlevel 1 (
     echo ERROR: PyInstaller not found
     echo Installing PyInstaller...
-    pip install pyinstaller==6.17.0
+    pip install pyinstaller==6.22.3
 )
 
 echo.
