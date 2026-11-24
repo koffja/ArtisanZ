@@ -48,6 +48,7 @@ git merge master
 - Core UI/application code is PyQt6-heavy and lives mostly in `src/artisanlib/`; `src/artisanlib/main.py` is very large and imports ArtisanZ charge-target classes near the top.
 - Tool configuration is in `src/pyproject.toml`; runtime/dev deps are `src/requirements.txt` and `src/requirements-dev.txt`.
 - Generated/derived outputs include `src/uic/*.py`, `src/translations/*.qm`, help outputs, `src/build/`, and `src/dist/`.
+- License: upstream Artisan is AGPLv3 since v5 (merged on 2026-11-24). `LICENSE` and the per-file headers follow upstream; ArtisanZ is a derivative of it.
 
 ## ArtisanZ Custom Risk Areas
 
@@ -55,13 +56,17 @@ Be especially careful during edits and upstream merges:
 
 - Charge target feature: `src/artisanlib/charge_manager.py`, `src/artisanlib/charge_dialog.py`, `src/test/unitary/artisanlib/test_charge_manager.py`
 - Integration points: `src/artisanlib/main.py`, `src/artisanlib/canvas.py`
+- Button palette: `src/artisanlib/gui_theme.py` recolours the styles upstream generates in `src/artisanlib/styles.py` (wrappers on `push_button_style()` and the SV +/- styles); the event-button template is `gui_theme.artisan_event_button_style()`
+- Workspace policy: `src/artisanlib/ui_workspaces.py` (`WorkspacePolicy.show_dashboard` keeps upstream's dashboard an EXPERT-workspace feature), with gates in `main.py` (`workspace_allows_dashboard`, `workspace_allows_dashboard_toggle`) and `dashboard.py`
+- Cotrix brand swap: `plus/service_identity.brand_substitutions()` and `plus/util.translatedServiceMessage()`; the pre-commit hook `tools/check_no_bare_artisan_plus.sh` flags bare service names
+- Worker sampling path: `sample_processing` in `canvas.py` runs ArtisanZ's worker chain and constructs the PID lazily in `_continue_thermal_result()`, where upstream does so in its own `sample_processing`
 - Simplified Chinese customization: `src/translations/artisan_zh_CN.ts`, `src/translations/artisan_zh_CN.qm`
 - Windows portable build: `build-win-portable.bat`, `PORTABLE_BUILD_GUIDE.md`, `artisan打包win说明.txt`
 - Planning/history docs: `CHARGE_TARGET_SUMMARY.md`, `charge_target_plan.md`, `PROJECT_GOVERNANCE.md`
 
 ## Setup and Local Run
 
-Use Python 3.12+; CI currently installs Python 3.14. From `src/`:
+Use Python 3.13+ (`src/pyproject.toml` sets `requires-python = '>=3.13'`); CI currently installs Python 3.14. From `src/`:
 
 ```bash
 python3 -m venv .venv
@@ -87,7 +92,7 @@ General checks from executable config/docs:
 
 ```bash
 cd src
-python3 -m pytest                    # pyproject: testpaths = ["test"], addopts = "-ra -v"
+python3 -m pytest --continue-on-collection-errors   # pyproject: testpaths = ["test"], addopts = "-ra -v"
 python3 -m ruff check .              # CI ruff checks ./src
 python3 -m mypy                      # configured by src/pyproject.toml
 python3 -m pyright
@@ -96,11 +101,15 @@ python3 -m codespell                 # skips *.ts/build/dist/htmlcov/spec per py
 pre-commit run --all-files           # hooks exclude uic/translations/includes/test data
 ```
 
+The flag is needed because `test/unitary/tools/peak_p1_proxy/` imports the repo-root `tools` package, which is not importable from `src/`: those five files error at collection and abort the whole run without it.
+
 Run the smallest relevant subset first, then broader checks if the change touches shared code. `src/conftest.py` registers platform markers (`darwin`, `linux`, `win32`) and imports `numpy`/`scipy.optimize` globally for pytest.
 
 ## Translations and Generated Files
 
 - Translation sources are listed in `src/artisan.pro`; `artisan_zh_CN.ts` is custom-sensitive.
+- Only `artisan_zh_CN.ts` / `.qm` are maintained on ArtisanZ. The other 31 languages are upstream's files byte for byte: do not run the full `pylupdate6pro.py` or the translation step of `build-derived.sh` on ArtisanZ. They rewrite all 32 `.ts` files, and every later upstream sync then conflicts on them.
+- Regenerate zh_CN only, from `src/`: `pylupdate6 artisanlib help plus --ts translations/artisan_zh_CN.ts`, then `lrelease translations/artisan_zh_CN.ts` (`lrelease` is in the venv under `qt6_applications/Qt/bin/`).
 - macOS/Linux derived files:
 
 ```bash
@@ -108,7 +117,7 @@ cd src
 ./build-derived.sh linux   # or macos
 ```
 
-- Windows derived files require `QT_PATH`, `PYTHON_PATH`, and usually `PYUIC=pyuic6.exe`:
+- Windows derived files require `PYTHONPATH`, `PYUIC` (default `pyuic6.exe`) and `LRELEASE_PATH`; the shell script reads `QT_SRC_PATH`, `QTTOOLS` or `QT_SRC_PATH_QTTOOLS`, `PYUIC`, `PYTHON_PATH` and `PYLUPDATE`:
 
 ```cmd
 cd src
