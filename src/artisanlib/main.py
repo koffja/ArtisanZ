@@ -20408,6 +20408,10 @@ class ApplicationWindow(QMainWindow):
         return res
 
     def load_dark_theme(self) -> None:
+        if _modern_ui_enabled():
+            # ArtisanZ keeps its own palette when the app starts in dark mode instead of
+            # upstream's Catppuccin Macchiato; the dark themes stay selectable in the menu
+            return
         try:
             self.loadThemeSignal.emit(str(Path(getResourcePath()).joinpath('Themes').joinpath('Catppuccin').joinpath('Macchiato.athm')), 'Catppuccin Macchiato')
         except Exception as e:

@@ -4094,3 +4094,22 @@ class TestFileUtilities:
 
         # Assert
         assert result == 'clean_filename.txt'
+
+
+def test_dark_mode_first_start_keeps_the_artisanz_palette(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Upstream loads Catppuccin Macchiato on a first start in dark mode; ArtisanZ keeps its palette."""
+    from artisanlib import main
+
+    window = SimpleNamespace(loadThemeSignal=Mock())
+    monkeypatch.delenv('ARTISANZ_LEGACY_UI', raising=False)
+
+    main.ApplicationWindow.load_dark_theme(window)
+
+    window.loadThemeSignal.emit.assert_not_called()
+
+    monkeypatch.setenv('ARTISANZ_LEGACY_UI', '1')
+
+    main.ApplicationWindow.load_dark_theme(window)
+
+    window.loadThemeSignal.emit.assert_called_once()
+    assert 'Catppuccin' in window.loadThemeSignal.emit.call_args.args[0]
