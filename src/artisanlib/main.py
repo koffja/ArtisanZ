@@ -1451,7 +1451,8 @@ class VMToolbar(NavigationToolbar): # pylint: disable=abstract-method
     @pyqtSlot()
     def dashboard(self) -> None:
         try:
-            self.aw.dashboard.toggle_dashboard()
+            if workspace_allows_dashboard(self.aw):
+                self.aw.dashboard.toggle_dashboard()
         except Exception as e: # pylint: disable=broad-except
             _log.exception(e)
 
@@ -1608,6 +1609,23 @@ def workspace_policy_for_window_state(window:object, ui_mode:UI_MODE) -> Workspa
 def workspace_allows_legacy_shortcuts(window:object) -> bool:
     ui_mode = getattr(window, 'ui_mode', UI_MODE.DEFAULT)
     return not workspace_policy_for_window_state(window, ui_mode).compact_chrome
+
+
+def workspace_allows_dashboard(window:object) -> bool:
+    """Upstream's dashboard is an expert-workspace feature on ArtisanZ."""
+    ui_mode = getattr(window, 'ui_mode', UI_MODE.DEFAULT)
+    return workspace_policy_for_window_state(window, ui_mode).show_dashboard
+
+
+def workspace_allows_dashboard_toggle(window:object) -> bool:
+    """The keyboard enters the dashboard only where the workspace offers it, but always leaves it.
+
+    An Artisan Command can still show the dashboard anywhere; its user must not get stuck on it.
+    """
+    if workspace_allows_dashboard(window):
+        return True
+    dashboard_active = getattr(getattr(window, 'dashboard', None), 'dashboard_active', None)
+    return callable(dashboard_active) and bool(dashboard_active())
 
 
 def workspace_uses_compact_controls(window:object) -> bool:
@@ -4639,6 +4657,22 @@ class ApplicationWindow(QMainWindow):
             self.ntb.add_toolbar_lines_configuration()
         else:
             self.ntb.remove_toolbar_lines_configuration()
+        # upstream's dashboard is an expert-workspace feature on ArtisanZ
+        if policy.show_dashboard and not (self.qmc.designerflag or self.comparator is not None):
+            self.dashboard.enable_dashboard_toggle_toolbutton()
+        else:
+            if self.dashboard.dashboard_active():
+                self.dashboard.hide_dashboard()
+            self.dashboard.disable_dashboard_toggle_toolbutton()
+
+    def applyWorkspaceToolbarPolicy(self) -> None:
+        """Re-apply ArtisanZ's toolbar policies.
+
+        Upstream re-shows the graph tools when the dashboard closes; the renderer
+        policy runs first (it shows every tool), the workspace policy second.
+        """
+        self.ntb._apply_renderer_surface_toolbar_policy()  # pylint: disable=protected-access
+        self.set_toolbar(self.ui_mode)
 
 
     @pyqtSlot()
@@ -13179,9 +13213,9 @@ class ApplicationWindow(QMainWindow):
                                 self.qmc.EventRecord()
                         elif self.qmc.flagon:
                             self.qmc.toggleRecorderSignal.emit()
-                    elif shift_modifier:
+                    elif shift_modifier and workspace_allows_dashboard_toggle(self):
                         self.dashboard.toggle_dashboard()
-                    elif meta_modifier:
+                    elif meta_modifier and workspace_allows_legacy_shortcuts(self):
                         self.qmc.ToggleMonitor()
                 elif k in {Qt.Key.Key_Return,Qt.Key.Key_Enter}: # k in {16777220, 16777221}: #ENTER (turns ON/OFF keyboard moves; COMMAND+ENTER starts record, SHIFT+ENTER turns Artisan OFF)
                     if self.quickEventShortCut and len(self.quickEventShortCut[1])>0 and (no_modifier or keypad_modifier):
@@ -13292,7 +13326,8 @@ class ApplicationWindow(QMainWindow):
                         self.wheeleditorAction.setChecked(self.qmc.wheelflag)
                     else:
                         # toggle dashboard/graph view
-                        self.dashboard.toggle_dashboard()
+                        if workspace_allows_dashboard_toggle(self):
+                            self.dashboard.toggle_dashboard()
 
                     self.releaseminieditor()
 

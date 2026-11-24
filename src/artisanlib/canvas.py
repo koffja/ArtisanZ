@@ -9606,7 +9606,9 @@ class tgraphcanvas(QObject):
         self.aw.updatePlusStatus()
 
         if showDashboard: # False on restart with lastLoadedProfile
-            self.aw.dashboard.show_dashboard()
+            from artisanlib.main import workspace_allows_dashboard  # local import: main imports canvas
+            if workspace_allows_dashboard(self.aw):
+                self.aw.dashboard.show_dashboard()
 
         self.aw.announce_current_ui_mode()
 

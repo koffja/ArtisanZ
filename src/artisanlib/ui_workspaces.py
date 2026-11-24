@@ -41,6 +41,7 @@ class WorkspacePolicy:
     show_analysis_tools: bool
     show_device_setup_tools: bool
     compact_chrome: bool
+    show_dashboard: bool
 
 
 _ALL_AREAS: tuple[WorkspaceArea, ...] = tuple(WorkspaceArea)
@@ -130,6 +131,7 @@ _WORKSPACE_POLICIES: dict[WorkspaceMode, WorkspacePolicy] = {
         show_analysis_tools=False,
         show_device_setup_tools=False,
         compact_chrome=False,
+        show_dashboard=False,
     ),
     WorkspaceMode.QC_ANALYSIS: WorkspacePolicy(
         mode=WorkspaceMode.QC_ANALYSIS,
@@ -140,6 +142,7 @@ _WORKSPACE_POLICIES: dict[WorkspaceMode, WorkspacePolicy] = {
         show_analysis_tools=True,
         show_device_setup_tools=False,
         compact_chrome=False,
+        show_dashboard=False,
     ),
     WorkspaceMode.DEVICE_SETUP: WorkspacePolicy(
         mode=WorkspaceMode.DEVICE_SETUP,
@@ -150,6 +153,7 @@ _WORKSPACE_POLICIES: dict[WorkspaceMode, WorkspacePolicy] = {
         show_analysis_tools=False,
         show_device_setup_tools=True,
         compact_chrome=False,
+        show_dashboard=False,
     ),
     WorkspaceMode.PRODUCTION: WorkspacePolicy(
         mode=WorkspaceMode.PRODUCTION,
@@ -160,6 +164,7 @@ _WORKSPACE_POLICIES: dict[WorkspaceMode, WorkspacePolicy] = {
         show_analysis_tools=False,
         show_device_setup_tools=False,
         compact_chrome=True,
+        show_dashboard=False,
     ),
     WorkspaceMode.EXPERT: WorkspacePolicy(
         mode=WorkspaceMode.EXPERT,
@@ -170,6 +175,7 @@ _WORKSPACE_POLICIES: dict[WorkspaceMode, WorkspacePolicy] = {
         show_analysis_tools=True,
         show_device_setup_tools=True,
         compact_chrome=False,
+        show_dashboard=True,
     ),
 }
 

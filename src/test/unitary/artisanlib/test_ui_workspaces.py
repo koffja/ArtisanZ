@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import dataclasses
 import importlib
+from types import SimpleNamespace
 from typing import Any, ClassVar
 
 import pytest
@@ -46,12 +47,29 @@ class FakeToolbar:
 class FakeDashboard:
     def __init__(self) -> None:
         self.updates = 0
+        self.active = False
+        self.toggle_tool_enabled: list[bool] = []
 
     def update_dashboard(self) -> None:
         self.updates += 1
 
     def dashboard_active(self) -> bool:
-        return False
+        return self.active
+
+    def enable_dashboard_toggle_toolbutton(self) -> None:
+        self.toggle_tool_enabled.append(True)
+
+    def disable_dashboard_toggle_toolbutton(self) -> None:
+        self.toggle_tool_enabled.append(False)
+
+    def show_dashboard(self) -> None:
+        self.active = True
+
+    def hide_dashboard(self) -> None:
+        self.active = False
+
+    def toggle_dashboard(self) -> None:
+        self.active = not self.active
 
 
 class FakeWorkspaceStatusModel:
@@ -143,6 +161,8 @@ class FakeApplicationWindow:
         self.expertModeAction = FakeAction()
         self.ntb = FakeToolbar()
         self.dashboard = FakeDashboard()
+        self.qmc = SimpleNamespace(designerflag=False)
+        self.comparator = None
         self.workspaceStatusModel: FakeWorkspaceStatusModel | None = None
         self.menus: list[object] = []
         self.announcements = 0
@@ -1619,3 +1639,128 @@ def test_workspace_policy_exports_in_all() -> None:
 
     assert 'WorkspacePolicy' in workspaces.__all__
     assert 'workspace_policy' in workspaces.__all__
+
+
+def test_dashboard_is_only_available_in_the_expert_workspace() -> None:
+    workspaces = workspace_module()
+
+    available = {mode: workspaces.workspace_policy(mode).show_dashboard for mode in workspaces.WorkspaceMode}
+
+    assert available == {
+        workspaces.WorkspaceMode.ROAST_CONTROL: False,
+        workspaces.WorkspaceMode.QC_ANALYSIS: False,
+        workspaces.WorkspaceMode.DEVICE_SETUP: False,
+        workspaces.WorkspaceMode.PRODUCTION: False,
+        workspaces.WorkspaceMode.EXPERT: True,
+    }
+
+
+@pytest.mark.parametrize(
+    ('ui_mode_name', 'dashboard_offered'),
+    [('DEFAULT', False), ('PRODUCTION', False), ('EXPERT', True)],
+)
+def test_application_window_set_toolbar_offers_the_dashboard_only_to_experts(
+    ui_mode_name: str, dashboard_offered: bool
+) -> None:
+    main = main_module()
+    window = FakeApplicationWindow()
+    window.dashboard.active = True
+
+    main.ApplicationWindow.set_toolbar(window, getattr(main.UI_MODE, ui_mode_name))
+
+    assert window.dashboard.toggle_tool_enabled[-1] is dashboard_offered
+    # a workspace without the dashboard never leaves it on screen
+    assert window.dashboard.active is dashboard_offered
+
+
+def test_application_window_set_toolbar_keeps_the_dashboard_toggle_off_in_the_designer() -> None:
+    main = main_module()
+    window = FakeApplicationWindow()
+    window.qmc.designerflag = True
+
+    main.ApplicationWindow.set_toolbar(window, main.UI_MODE.EXPERT)
+
+    assert window.dashboard.toggle_tool_enabled[-1] is False
+
+
+@pytest.mark.parametrize(
+    ('ui_mode_name', 'allowed'),
+    [('EXPERT', True), ('DEFAULT', False), ('PRODUCTION', False)],
+)
+def test_workspace_allows_dashboard_follows_the_ui_mode(ui_mode_name: str, allowed: bool) -> None:
+    main = main_module()
+
+    assert main.workspace_allows_dashboard(SimpleNamespace(ui_mode=getattr(main.UI_MODE, ui_mode_name))) is allowed
+
+
+@pytest.mark.parametrize(
+    ('ui_mode_name', 'toggles'),
+    [('EXPERT', True), ('DEFAULT', False)],
+)
+def test_application_window_dashboard_slot_toggles_only_where_the_dashboard_is_available(
+    ui_mode_name: str, toggles: bool
+) -> None:
+    """The toolbar method behind the Dashboard tool."""
+    main = main_module()
+    window = FakeApplicationWindow()
+    window.ui_mode = getattr(main.UI_MODE, ui_mode_name)
+    window.workspace_mode = main.workspace_for_ui_mode_value(int(window.ui_mode))
+    window.workspace_policy = main.workspace_policy_for_mode(window.workspace_mode)
+
+    # the toolbar dispatches a tool to its own method of the callback's name
+    main.VMToolbar.dashboard(SimpleNamespace(aw=window))
+
+    assert window.dashboard.active is toggles
+
+
+@pytest.mark.parametrize(
+    ('ui_mode_name', 'dashboard_active', 'allowed'),
+    [('EXPERT', False, True), ('DEFAULT', False, False), ('PRODUCTION', False, False),
+     ('DEFAULT', True, True), ('PRODUCTION', True, True)],
+)
+def test_workspace_allows_dashboard_toggle_enters_only_where_offered_and_always_leaves(
+    ui_mode_name: str, dashboard_active: bool, allowed: bool
+) -> None:
+    """An Artisan Command can show the dashboard in any workspace; the user must be able to leave it."""
+    main = main_module()
+
+    window = SimpleNamespace(
+        ui_mode=getattr(main.UI_MODE, ui_mode_name),
+        dashboard=SimpleNamespace(dashboard_active=lambda: dashboard_active),
+    )
+
+    assert main.workspace_allows_dashboard_toggle(window) is allowed
+
+
+def test_dashboard_and_monitor_shortcuts_pass_through_the_workspace_gates() -> None:
+    """Upstream v5 shortcuts: SHIFT-SPACE and ESC toggle the dashboard, META-SPACE the monitor."""
+    import ast
+    from pathlib import Path
+
+    tree = ast.parse(Path(main_module().__file__).read_text(encoding='utf-8'))  # type: ignore[arg-type]
+    parents = {child: node for node in ast.walk(tree) for child in ast.iter_child_nodes(node)}
+    key_press = next(
+        node for node in ast.walk(tree)
+        if isinstance(node, ast.FunctionDef) and node.name == 'keyPressEvent'
+    )
+
+    def enclosing_tests(call: ast.Call) -> str:
+        tests: list[str] = []
+        node: ast.AST | None = parents.get(call)
+        while node is not None and node is not key_press:
+            if isinstance(node, ast.If):
+                tests.append(ast.unparse(node.test))
+            node = parents.get(node)
+        return ' '.join(tests)
+
+    calls = [
+        node for node in ast.walk(key_press)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+    ]
+    dashboard_toggles = [node for node in calls if node.func.attr == 'toggle_dashboard']
+    monitor_toggles = [node for node in calls if node.func.attr == 'ToggleMonitor']
+
+    assert len(dashboard_toggles) == 2
+    assert all('workspace_allows_dashboard_toggle' in enclosing_tests(node) for node in dashboard_toggles)
+    assert len(monitor_toggles) == 1
+    assert 'workspace_allows_legacy_shortcuts' in enclosing_tests(monitor_toggles[0])

@@ -412,6 +412,10 @@ class Dashboard(QWidget):
             if graph_tool is not None:
                 graph_tool.setVisible(True)
         self.aw.ntb.locLabel.setText('')
+        # ArtisanZ: its renderer and workspace policies also decide which tools are visible
+        apply_workspace_policy = getattr(self.aw, 'applyWorkspaceToolbarPolicy', None)
+        if callable(apply_workspace_policy):
+            apply_workspace_policy()
 
     def enable_dashboard_toggle_toolbutton(self) -> None:
         if self.aw.ntb.dashboard_tool is not None:
