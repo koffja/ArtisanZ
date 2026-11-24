@@ -13324,10 +13324,9 @@ class ApplicationWindow(QMainWindow):
                         #if wheel graph ON
                         self.graphwheel()
                         self.wheeleditorAction.setChecked(self.qmc.wheelflag)
-                    else:
+                    elif workspace_allows_dashboard_toggle(self):
                         # toggle dashboard/graph view
-                        if workspace_allows_dashboard_toggle(self):
-                            self.dashboard.toggle_dashboard()
+                        self.dashboard.toggle_dashboard()
 
                     self.releaseminieditor()
 

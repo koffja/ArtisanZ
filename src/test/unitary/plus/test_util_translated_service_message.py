@@ -102,7 +102,7 @@ def test_controller_reexports_same_function_as_util(qapp: object) -> None:
     ],
 )
 def test_replaces_upstream_v5_wording_with_display_name(
-    qapp: object, source: str, translated: str, expected: str
+    source: str, translated: str, expected: str
 ) -> None:
     """Upstream v5 says "artisan platform" / "artisan account"; every rendering becomes Cotrix."""
     from plus.util import translatedServiceMessage
@@ -130,7 +130,7 @@ def _routed_service_sources() -> set[str]:
     return sources
 
 
-def test_zh_cn_renderings_of_routed_strings_are_all_covered_by_the_needles(qapp: object) -> None:
+def test_zh_cn_renderings_of_routed_strings_are_all_covered_by_the_needles() -> None:
     """A routed string whose zh_CN translation mentions the service must be swapped.
 
     Upstream is free to pick a new Chinese rendering of the service name. This test
