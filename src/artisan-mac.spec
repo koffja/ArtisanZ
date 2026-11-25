@@ -324,6 +324,9 @@ Qt_modules = [
     'QtQmlMeta',
     'QtQmlWorkerScript',
     'QtOpenGL',
+    # ArtisanZ: pyqtgraph imports this binding at module level; without the framework the PyQtGraph
+    # plot target fails to load and the canvas falls back to Matplotlib in the packaged app
+    'QtOpenGLWidgets',
 ]
 Qt_frameworks = [module + '.framework' for module in Qt_modules]
 
@@ -378,7 +381,9 @@ for root, dirs, _ in os.walk('./artisan.app/Contents/Frameworks/PyQt6/Qt6/plugin
 # ArtisanZ: the workspace status dock shows inline QML ("import QtQuick"), so the two QML
 # modules that import needs stay in the bundle; the rest of the QML runtime is dropped
 qml_modules = {
-    'QtQml': None,  # kept whole: the QtQuick module pulls in its Models and WorkerScript parts
+    # QtQml/qmldir pulls in Models and WorkerScript; StateMachine is left out because its
+    # QtStateMachine frameworks are not in Qt_modules and the plugin would not load
+    'QtQml': {'qmldir', 'plugins.qmltypes', 'libqmlplugin.dylib', 'Models', 'WorkerScript'},
     'QtQuick': {'qmldir', 'plugins.qmltypes', 'libqtquick2plugin.dylib'},
 }
 for qml_dir in ('./artisan.app/Contents/Frameworks/PyQt6/Qt6/qml', './artisan.app/Contents/Resources/PyQt6/Qt6/qml'):
@@ -389,7 +394,7 @@ for qml_dir in ('./artisan.app/Contents/Frameworks/PyQt6/Qt6/qml', './artisan.ap
         if module not in qml_modules:
             print(f'rm -rf {module_dir}')
             subprocess.check_call(f'rm -rf {module_dir}', shell = True)
-        elif qml_modules[module] is not None:
+        else:
             for item in sorted(os.listdir(module_dir)):
                 if item not in qml_modules[module]:
                     subprocess.check_call(f'rm -rf {module_dir}/{item}', shell = True)

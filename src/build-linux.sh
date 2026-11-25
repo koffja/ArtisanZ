@@ -174,9 +174,9 @@ cp -R includes/Icons/* dist/Icons
 
 # remove unused Qt modules
 
-# ArtisanZ: the QtQuick/Qml libraries stay for the QML workspace dock
+# ArtisanZ: the QtQuick/Qml libraries stay for the QML workspace dock and QtOpenGLWidgets for pyqtgraph
 keep_qt_modules="libQt6Concurrent libQt6Core libQt6DBus libQt6Gui libQt6Network
- libQt6OpenGL libQt6PrintSupport libQt6Qml libQt6QmlModels libQt6QmlMeta libQt6Quick libQt6QuickWidgets libQt6QmlWorkerScript
+ libQt6OpenGL libQt6OpenGLWidgets libQt6PrintSupport libQt6Qml libQt6QmlModels libQt6QmlMeta libQt6Quick libQt6QuickWidgets libQt6QmlWorkerScript
  libQt6Svg libQt6WaylandClient libQt6WaylandEglClientHwIntegration
  libQt6Widgets libQt6WlShellIntegration libQt6XcbQpa libQt6SvgWidgets"
 
