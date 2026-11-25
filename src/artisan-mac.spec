@@ -45,7 +45,7 @@ block_cipher = None
 
 # current version
 VERSION = artisanlib.__version__
-LICENSE = 'GNU General Public License (GPL)'
+LICENSE = 'GNU Affero General Public License (AGPLv3)'
 
 try:
     PYTHON_V = os.environ["PYTHON_V"]
@@ -375,7 +375,24 @@ for root, dirs, _ in os.walk('./artisan.app/Contents/Frameworks/PyQt6/Qt6/plugin
                         print(f'rm -rf {file_path}')
                         subprocess.check_call(f'rm -rf {file_path}',shell = True)
 
-subprocess.check_call(r'rm -rf ./artisan.app/Contents/Frameworks/PyQt6/Qt6/qml',shell = True)
+# ArtisanZ: the workspace status dock shows inline QML ("import QtQuick"), so the two QML
+# modules that import needs stay in the bundle; the rest of the QML runtime is dropped
+qml_modules = {
+    'QtQml': None,  # kept whole: the QtQuick module pulls in its Models and WorkerScript parts
+    'QtQuick': {'qmldir', 'plugins.qmltypes', 'libqtquick2plugin.dylib'},
+}
+for qml_dir in ('./artisan.app/Contents/Frameworks/PyQt6/Qt6/qml', './artisan.app/Contents/Resources/PyQt6/Qt6/qml'):
+    if not os.path.isdir(qml_dir):
+        continue
+    for module in sorted(os.listdir(qml_dir)):
+        module_dir = os.path.join(qml_dir, module)
+        if module not in qml_modules:
+            print(f'rm -rf {module_dir}')
+            subprocess.check_call(f'rm -rf {module_dir}', shell = True)
+        elif qml_modules[module] is not None:
+            for item in sorted(os.listdir(module_dir)):
+                if item not in qml_modules[module]:
+                    subprocess.check_call(f'rm -rf {module_dir}/{item}', shell = True)
 
 
 
@@ -388,7 +405,6 @@ for qt_dir in [
         'PyQt6/lupdate',
         'PyQt6/uic',
 #        'PyQt6/Qt6/translations', # qt translations are kept and loaded from their standard dir
-        'PyQt6/Qt6/qml',
         'PyQt6/Qt6/qsci',
     ]:
     try:
