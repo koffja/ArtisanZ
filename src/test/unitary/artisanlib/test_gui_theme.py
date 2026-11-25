@@ -281,9 +281,14 @@ def test_apply_modern_dialog_polish_preserves_nested_row_margins(
     assert row_layout.spacing() == 3
 
 
-def test_axes_time_step_combo_expands_for_flat_theme(qapp: QApplication) -> None:
-    from artisanlib.axis import WindowsDlg
+def test_axes_time_step_combo_expands_for_flat_theme(
+        qapp: QApplication,
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    from artisanlib import axis
 
+    # the dialog saves its position on close; keep that out of the developer's real preferences
+    settings = SimpleNamespace(contains=lambda *_args: False, setValue=lambda *_args: None)
+    monkeypatch.setattr(axis, 'QSettings', lambda: settings)
     # upstream's ArtisanDialog reads app.darkmode; the application sets it at startup
     qapp.darkmode = False
 
@@ -344,7 +349,7 @@ def test_axes_time_step_combo_expands_for_flat_theme(qapp: QApplication) -> None
         app=qapp,
         sendmessage=lambda *_args: None,
     )
-    dialog = WindowsDlg(None, aw)
+    dialog = axis.WindowsDlg(None, aw)
     original_stylesheet = qapp.styleSheet()
     qapp.setStyleSheet(modern_application_stylesheet())
     try:

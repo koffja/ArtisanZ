@@ -3308,10 +3308,11 @@ class TestNoteUtilities:
 class TestSettingsUtilities:
     """Test settings utility static methods."""
 
-    def test_clearWindowGeometry_basic(self) -> None:
+    def test_clearWindowGeometry_basic(self, tmp_path: Path) -> None:
         """Test clearWindowGeometry removes geometry settings."""
         # Arrange
-        settings = QSettings()
+        # QSettings() without arguments would be the developer's real preferences
+        settings = QSettings(str(tmp_path / 'settings.ini'), QSettings.Format.IniFormat)
         settings.setValue('MainWindowState', 'test_value')
         settings.setValue('Geometry', 'test_geometry')
         settings.setValue('SomeOtherSetting', 'keep_this')
@@ -3324,10 +3325,11 @@ class TestSettingsUtilities:
         assert not settings.contains('Geometry')
         assert settings.contains('SomeOtherSetting')  # Should keep non-geometry settings
 
-    def test_settingsSetValue_read_defaults_mode(self) -> None:
+    def test_settingsSetValue_read_defaults_mode(self, tmp_path: Path) -> None:
         """Test settingsSetValue in read defaults mode."""
         # Arrange
-        settings = QSettings()
+        # QSettings() without arguments would be the developer's real preferences
+        settings = QSettings(str(tmp_path / 'settings.ini'), QSettings.Format.IniFormat)
         default_settings: dict[str, Any] = {}
         settings.beginGroup('test_group')
 
@@ -3343,10 +3345,11 @@ class TestSettingsUtilities:
         # Cleanup
         settings.endGroup()
 
-    def test_settingsSetValue_write_mode(self) -> None:
+    def test_settingsSetValue_write_mode(self, tmp_path: Path) -> None:
         """Test settingsSetValue in write mode."""
         # Arrange
-        settings = QSettings()
+        # QSettings() without arguments would be the developer's real preferences
+        settings = QSettings(str(tmp_path / 'settings.ini'), QSettings.Format.IniFormat)
         default_settings = {'test_group/test_key': 'default_value'}
         settings.beginGroup('test_group')
 
