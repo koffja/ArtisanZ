@@ -28763,7 +28763,7 @@ class ApplicationWindow(QMainWindow):
                     if overlay.add_from_file(fp):
                         added += 1
                 if added > 0:
-                    self.sendmessage(QApplication.translate('Message', f'Loaded {added} comparison roast(s)'))
+                    self.sendmessage(QApplication.translate('Message', 'Loaded {count} comparison roast(s)').format(count=added))
                     self.qmc.redraw(recomputeAllDeltas=False)
                 dlg.accept()
 
@@ -28786,7 +28786,7 @@ class ApplicationWindow(QMainWindow):
             if overlay.add_from_file(filepath):
                 added += 1
         if added > 0:
-            self.sendmessage(QApplication.translate('Message', f'Loaded {added} more comparison roast(s)'))
+            self.sendmessage(QApplication.translate('Message', 'Loaded {count} more comparison roast(s)').format(count=added))
             self.qmc.redraw(recomputeAllDeltas=False)
 
     def clearComparisonCurves(self) -> None:
